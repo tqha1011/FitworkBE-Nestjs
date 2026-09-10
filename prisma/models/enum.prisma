@@ -2,3 +2,8 @@ enum UserType {
   COMPANY
   APPLICANT
 }
+
+enum FileType {
+  PDF
+  DOCX
+}
