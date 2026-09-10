@@ -22,6 +22,7 @@ async function bootstrap() {
     .setDescription('API documentation for DevNotes application')
     .setVersion('1.0')
     .addTag('auth', 'Authentication related endpoints')
+    .addTag('users', 'User management endpoints')
     .addBearerAuth()
     .build();
   const document = SwaggerModule.createDocument(app, options);
