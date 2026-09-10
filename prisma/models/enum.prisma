@@ -7,3 +7,15 @@ enum FileType {
   PDF
   DOCX
 }
+
+enum JobStatus {
+  OPEN
+  CLOSED
+}
+
+enum JobApplicantStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  COMPLETED
+}
