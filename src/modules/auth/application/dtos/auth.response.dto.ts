@@ -1,3 +1,8 @@
-export type AuthResponseDto = {
+export type RegisterResponseDto = {
   publicId: string;
+};
+
+export type LoginResponseDto = {
+  accessToken: string;
+  expiresIn: number;
 };
