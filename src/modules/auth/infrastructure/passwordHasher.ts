@@ -5,7 +5,7 @@ import { IPasswordHasher } from '../domain/repositories/auth.repo.interface';
 
 @Injectable()
 export class PasswordHasher implements IPasswordHasher {
-  async GenerateHashPassword(password: string): Promise<Result<string, Error>> {
+  async generateHashPassword(password: string): Promise<Result<string, Error>> {
     try {
       const passwordHash = await bcrypt.hash(password, 10);
       return ok(passwordHash);
@@ -13,7 +13,7 @@ export class PasswordHasher implements IPasswordHasher {
       return err(new Error(`Error generating password hash. Error: ${error}`));
     }
   }
-  async VerifyPassword(
+  async verifyPassword(
     password: string,
     hashedPassword: string,
   ): Promise<Result<boolean, Error>> {

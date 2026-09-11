@@ -34,7 +34,7 @@ export class AuthController {
   async register(
     @Body() dto: RegisterRequestDto,
   ): Promise<RegisterResponseDto> {
-    const result = await this.authService.Register(dto);
+    const result = await this.authService.registerAsync(dto);
     return result.match(
       (value) => value,
       (error) => {
@@ -50,7 +50,7 @@ export class AuthController {
     @Body() dto: LoginRequestDto,
     @Res({ passthrough: true }) res: Response,
   ): Promise<LoginResponseDto> {
-    const result = await this.authService.Login(dto.email, dto.password);
+    const result = await this.authService.loginAsync(dto.email, dto.password);
     return result.match(
       (tokens) => {
         this.setRefreshTokenCookie(
@@ -83,7 +83,7 @@ export class AuthController {
       throw new UnauthorizedException('Missing refresh token');
     }
 
-    const result = await this.authService.RefreshTokens(rawRefreshToken);
+    const result = await this.authService.refreshTokensAsync(rawRefreshToken);
     return result.match(
       (tokens) => {
         this.setRefreshTokenCookie(
@@ -111,7 +111,7 @@ export class AuthController {
   ): Promise<void> {
     const rawRefreshToken = this.extractRefreshTokenCookie(req);
     if (rawRefreshToken) {
-      const result = await this.authService.Logout(rawRefreshToken);
+      const result = await this.authService.logoutAsync(rawRefreshToken);
       if (result.isErr()) {
         throw toHttpException(result.error);
       }

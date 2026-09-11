@@ -10,7 +10,7 @@ import {
 export class RefreshTokenRepository implements IRefreshTokenRepository {
   constructor(private readonly prismaService: PrismaService) {}
 
-  async AddRefreshToken(refreshToken: {
+  async addRefreshToken(refreshToken: {
     userId: number;
     tokenHash: string;
     expiresAt: Date;
@@ -30,7 +30,7 @@ export class RefreshTokenRepository implements IRefreshTokenRepository {
     }
   }
 
-  async GetRefreshTokenByHash(
+  async getRefreshTokenByHash(
     tokenHash: string,
   ): Promise<Result<RefreshTokenRecord | null, Error>> {
     try {
@@ -49,7 +49,7 @@ export class RefreshTokenRepository implements IRefreshTokenRepository {
     }
   }
 
-  async RevokeRefreshToken(publicId: string): Promise<Result<void, Error>> {
+  async revokeRefreshToken(publicId: string): Promise<Result<void, Error>> {
     try {
       await this.prismaService.refreshToken.update({
         where: { publicId },
@@ -61,7 +61,7 @@ export class RefreshTokenRepository implements IRefreshTokenRepository {
     }
   }
 
-  async RevokeAllRefreshTokensForUser(
+  async revokeAllRefreshTokensForUser(
     userId: number,
   ): Promise<Result<void, Error>> {
     try {

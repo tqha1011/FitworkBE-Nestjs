@@ -1,22 +1,22 @@
 import { Result } from 'neverthrow';
-import { SystemRole } from 'src/shared/domain/enum';
+import { CommonUserRole } from 'src/shared/domain/enum';
 
 export abstract class IPasswordHasher {
-  abstract GenerateHashPassword(
+  abstract generateHashPassword(
     password: string,
   ): Promise<Result<string, Error>>;
 
-  abstract VerifyPassword(
+  abstract verifyPassword(
     password: string,
     hashedPassword: string,
   ): Promise<Result<boolean, Error>>;
 }
 
 export abstract class ITokenProvider {
-  abstract GenerateAccessToken(
+  abstract generateAccessToken(
     userPublicId: string,
     email: string,
-    role: SystemRole,
+    role: CommonUserRole,
   ): Promise<Result<string, Error>>;
 }
 
@@ -28,7 +28,7 @@ export type RefreshTokenRecord = {
 };
 
 export abstract class IRefreshTokenRepository {
-  abstract AddRefreshToken(refreshToken: {
+  abstract addRefreshToken(refreshToken: {
     userId: number;
     tokenHash: string;
     expiresAt: Date;
@@ -39,13 +39,13 @@ export abstract class IRefreshTokenRepository {
    * so the caller can tell "already revoked" (replay/theft signal) apart
    * from "never existed" (bad token).
    */
-  abstract GetRefreshTokenByHash(
+  abstract getRefreshTokenByHash(
     tokenHash: string,
   ): Promise<Result<RefreshTokenRecord | null, Error>>;
 
-  abstract RevokeRefreshToken(publicId: string): Promise<Result<void, Error>>;
+  abstract revokeRefreshToken(publicId: string): Promise<Result<void, Error>>;
 
-  abstract RevokeAllRefreshTokensForUser(
+  abstract revokeAllRefreshTokensForUser(
     userId: number,
   ): Promise<Result<void, Error>>;
 }

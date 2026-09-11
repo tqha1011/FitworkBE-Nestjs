@@ -2,3 +2,8 @@ export enum SystemRole {
   Admin = 'admin',
   User = 'user',
 }
+
+export enum CommonUserRole {
+  ROLE_APPLICANT = 'ROLE_APPLICANT',
+  ROLE_COMPANY = 'ROLE_COMPANY',
+}

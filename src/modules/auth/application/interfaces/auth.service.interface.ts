@@ -10,7 +10,7 @@ export type AuthTokens = {
 };
 
 export abstract class IAuthService {
-  abstract Register(data: {
+  abstract registerAsync(data: {
     email: string;
     username: string;
     fullName: string;
@@ -18,14 +18,16 @@ export abstract class IAuthService {
     userType: UserType;
   }): Promise<Result<{ publicId: string }, AppError>>;
 
-  abstract Login(
+  abstract loginAsync(
     email: string,
     password: string,
   ): Promise<Result<AuthTokens, AppError>>;
 
-  abstract RefreshTokens(
+  abstract refreshTokensAsync(
     rawRefreshToken: string,
   ): Promise<Result<AuthTokens, AppError>>;
 
-  abstract Logout(rawRefreshToken: string): Promise<Result<void, AppError>>;
+  abstract logoutAsync(
+    rawRefreshToken: string,
+  ): Promise<Result<void, AppError>>;
 }
