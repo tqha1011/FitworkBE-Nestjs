@@ -18,6 +18,10 @@ model Job {
   categoryId    Int
   jobApplicants JobApplicant[]
   jobSkills      JobSkill[]
+
+  @@index([postedBy])
+  @@index([arrangementId])
+  @@index([categoryId])
 }
 
 model JobApplicant {
@@ -32,6 +36,10 @@ model JobApplicant {
   status        JobApplicantStatus @default(PENDING)
   appliedAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  @@index([jobId])
+  @@index([applicantId])
+  @@index([resumeId])
 }
 
 model Skill {

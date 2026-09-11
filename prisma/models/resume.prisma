@@ -9,4 +9,6 @@ model Resume {
   updatedAt     DateTime @updatedAt
   user         User     @relation(fields: [userId], references: [id])
   userId       Int
+
+  @@index([userId])
 }
