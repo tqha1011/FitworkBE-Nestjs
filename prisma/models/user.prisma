@@ -1,49 +1,54 @@
 model User {
-  id             Int      @id @default(autoincrement())
-  publicId       String   @unique @default(uuid())
-  email          String   @unique
-  username       String
-  fullName       String
-  passwordHashed String
-  phoneNumber    String?
-  userType       UserType
-  isActive       Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  resumes       Resume[]
-  refreshTokens RefreshToken[]
-  jobApplications JobApplication[]
+  id               Int               @id @default(autoincrement())
+  publicId         String            @unique @default(uuid()) @map("public_id")
+  email            String            @unique
+  username         String
+  fullName         String            @map("full_name")
+  passwordHashed   String            @map("password_hashed")
+  phoneNumber      String?           @map("phone_number")
+  userType         UserType          @map("user_type")
+  isActive         Boolean           @default(true) @map("is_active")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+  resumes          Resume[]
+  refreshTokens    RefreshToken[]
+  jobApplicants    JobApplicant[]
+  postedJobs       Job[]
+  applicantProfile ApplicantProfile?
+  companyProfile   CompanyProfile?
+
+  @@map("user")
 }
 
 model ApplicantProfile {
-  id            Int      @id @default(autoincrement())
-  publicId      String   @unique @default(uuid())
-  description   String?
-  avatarUrl     String?
-  location      String?
-  user         User     @relation(fields: [userId], references: [id])
-  userId        Int
-  skills        String
-  experienceYears    Int
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id              Int      @id @default(autoincrement())
+  publicId        String   @unique @default(uuid()) @map("public_id")
+  description     String?
+  avatarUrl       String?  @map("avatar_url")
+  location        String?
+  user            User     @relation(fields: [userId], references: [id])
+  userId          Int      @unique @map("user_id")
+  skills          String
+  experienceYears Int      @map("experience_years")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
-  @@index([userId])
+  @@map("applicant_profile")
 }
 
 model CompanyProfile {
-  id            Int      @id @default(autoincrement())
-  publicId      String   @unique @default(uuid())
-  companyName          String
-  description   String?
-  avatarUrl     String?
-  location      String?
-  website      String?
-  industry      String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  user         User     @relation(fields: [userId], references: [id])
-  userId        Int
+  id          Int      @id @default(autoincrement())
+  publicId    String   @unique @default(uuid()) @map("public_id")
+  companyName String   @map("company_name")
+  description String?
+  avatarUrl   String?  @map("avatar_url")
+  location    String?
+  website     String?
+  industry    String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  user        User     @relation(fields: [userId], references: [id])
+  userId      Int      @unique @map("user_id")
 
-  @@index([userId])
+  @@map("company_profile")
 }

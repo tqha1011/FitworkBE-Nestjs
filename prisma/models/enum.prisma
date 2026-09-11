@@ -1,16 +1,22 @@
 enum UserType {
   COMPANY
   APPLICANT
+
+  @@map("user_type")
 }
 
 enum FileType {
   PDF
   DOCX
+
+  @@map("file_type")
 }
 
 enum JobStatus {
   OPEN
   CLOSED
+
+  @@map("job_status")
 }
 
 enum JobApplicantStatus {
@@ -18,4 +24,6 @@ enum JobApplicantStatus {
   ACCEPTED
   REJECTED
   COMPLETED
+
+  @@map("job_applicant_status")
 }

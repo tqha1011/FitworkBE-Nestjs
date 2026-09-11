@@ -1,78 +1,91 @@
 model Job {
-  id            Int      @id @default(autoincrement())
-  publicId      String  @unique @default(uuid())
+  id            Int            @id @default(autoincrement())
+  publicId      String         @unique @default(uuid()) @map("public_id")
   title         String
   description   String
   requirements  String
   location      String
   status        JobStatus
-  dueAt         DateTime
+  dueAt         DateTime       @map("due_at")
   budget        Decimal
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  user          User     @relation(fields: [postedBy], references: [id])
-  postedBy      Int
-  arrangement   Arrangement @relation(fields: [arrangementId], references: [id])
-  arrangementId Int
-  category      Category @relation(fields: [categoryId], references: [id])
-  categoryId    Int
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+  user          User           @relation(fields: [postedBy], references: [id])
+  postedBy      Int            @map("posted_by")
+  arrangement   Arrangement    @relation(fields: [arrangementId], references: [id])
+  arrangementId Int            @map("arrangement_id")
+  category      Category       @relation(fields: [categoryId], references: [id])
+  categoryId    Int            @map("category_id")
   jobApplicants JobApplicant[]
-  jobSkills      JobSkill[]
+  jobSkills     JobSkill[]
 
   @@index([postedBy])
   @@index([arrangementId])
   @@index([categoryId])
+  @@index([status])
+  @@map("job")
 }
 
 model JobApplicant {
-  id            Int      @id @default(autoincrement())
-  publicId      String  @unique @default(uuid())
-  job          Job     @relation(fields: [jobId], references: [id])
-  jobId        Int
-  applicant     User     @relation(fields: [applicantId], references: [id])
-  applicantId  Int
-  resume        Resume @relation(fields: [resumeId], references: [id])
-  resumeId      Int
-  status        JobApplicantStatus @default(PENDING)
-  appliedAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id          Int                @id @default(autoincrement())
+  publicId    String             @unique @default(uuid()) @map("public_id")
+  job         Job                @relation(fields: [jobId], references: [id])
+  jobId       Int                @map("job_id")
+  applicant   User               @relation(fields: [applicantId], references: [id])
+  applicantId Int                @map("applicant_id")
+  resume      Resume             @relation(fields: [resumeId], references: [id])
+  resumeId    Int                @map("resume_id")
+  status      JobApplicantStatus @default(PENDING)
+  appliedAt   DateTime           @default(now()) @map("applied_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
 
   @@index([jobId])
   @@index([applicantId])
   @@index([resumeId])
+  @@map("job_applicant")
 }
 
 model Skill {
-  id            Int      @id @default(autoincrement())
-  publicId      String  @unique @default(uuid())
-  name          String
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  jobSkills      JobSkill[]
+  id        Int        @id @default(autoincrement())
+  publicId  String     @unique @default(uuid()) @map("public_id")
+  name      String
+  createdAt DateTime   @default(now()) @map("created_at")
+  updatedAt DateTime   @updatedAt @map("updated_at")
+  jobSkills JobSkill[]
+
+  @@map("skill")
 }
 
 model JobSkill {
-  jobId        Int
-  skillId      Int
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  job          Job     @relation(fields: [jobId], references: [id])
-  skill        Skill  @relation(fields: [skillId], references: [id])
+  jobId     Int      @map("job_id")
+  skillId   Int      @map("skill_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  job       Job      @relation(fields: [jobId], references: [id])
+  skill     Skill    @relation(fields: [skillId], references: [id])
 
-  @@primaryKey([jobId, skillId])
+  @@id([jobId, skillId])
+  @@index([skillId])
+  @@map("job_skill")
 }
 
 model Arrangement {
-  id            Int      @id @default(autoincrement())
-  name          String
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id        Int      @id @default(autoincrement())
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  jobs      Job[]
+
+  @@map("arrangement")
 }
 
 model Category {
-  id            Int      @id @default(autoincrement())
-  publicId      String  @unique @default(uuid())
-  name          String
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id        Int      @id @default(autoincrement())
+  publicId  String   @unique @default(uuid()) @map("public_id")
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  jobs      Job[]
+
+  @@map("category")
 }
