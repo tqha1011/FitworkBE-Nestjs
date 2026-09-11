@@ -10,8 +10,14 @@ model Job {
   budget        Decimal
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
-  postedBy      User     @relation(fields: [postedBy], references: [id])
+  user          User     @relation(fields: [postedBy], references: [id])
   postedBy      Int
+  arrangement   Arrangement @relation(fields: [arrangementId], references: [id])
+  arrangementId Int
+  category      Category @relation(fields: [categoryId], references: [id])
+  categoryId    Int
+  jobApplicants JobApplicant[]
+    jobSkills      JobSkill[]
 }
 
 model JobApplicant {
@@ -26,4 +32,39 @@ model JobApplicant {
   status        JobApplicantStatus @default(PENDING)
   appliedAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+}
+
+model Skill {
+  id            Int      @id @default(autoincrement())
+  publicId      String  @unique @default(uuid())
+  name          String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  jobSkills      JobSkill[]
+}
+
+model JobSkill {
+  jobId        Int
+  skillId      Int
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  job          Job     @relation(fields: [jobId], references: [id])
+  skill        Skill  @relation(fields: [skillId], references: [id])
+
+  @@primaryKey([jobId, skillId])
+}
+
+model Arrangement {
+  id            Int      @id @default(autoincrement())
+  name          String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Category {
+  id            Int      @id @default(autoincrement())
+  publicId      String  @unique @default(uuid())
+  name          String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
