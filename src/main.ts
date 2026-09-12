@@ -20,8 +20,8 @@ async function bootstrap() {
 
   app.useGlobalFilters(new AllExceptionsFilter());
   const options = new DocumentBuilder()
-    .setTitle('DevNotes API')
-    .setDescription('API documentation for DevNotes application')
+    .setTitle('Fitwork API')
+    .setDescription('API documentation for Fitwork application')
     .setVersion('1.0')
     .addTag('auth', 'Authentication related endpoints')
     .addTag('users', 'User management endpoints')
