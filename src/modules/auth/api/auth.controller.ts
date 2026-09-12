@@ -25,7 +25,7 @@ const REFRESH_TOKEN_COOKIE = 'refresh_token';
 const REFRESH_TOKEN_COOKIE_PATH = '/auth/refresh';
 
 @ApiTags('auth')
-@Controller('auth')
+@Controller('/api/auth')
 export class AuthController {
   constructor(private readonly authService: IAuthService) {}
 

@@ -12,3 +12,15 @@ export enum CommonJobStatus {
   OPEN = 'OPEN',
   CLOSED = 'CLOSED',
 }
+
+export enum CommonJobApplicantStatus {
+  PENDING = 'PENDING',
+  ACCEPTED = 'ACCEPTED',
+  REJECTED = 'REJECTED',
+  COMPLETED = 'COMPLETED',
+}
+
+export enum CommonCurrency {
+  VND = 'VND',
+  USD = 'USD',
+}

@@ -1,10 +1,11 @@
 import { randomUUID } from 'crypto';
-import { CommonJobStatus } from 'src/shared/domain/enum';
+import { CommonCurrency, CommonJobStatus } from 'src/shared/domain/enum';
 import {
   JobDomainError,
   JobDomainErrorValidation,
 } from '../errors/job-domain.error';
 import { Result, ok, err } from 'neverthrow';
+import { convertToBaseCurrency } from 'src/shared/common/exchange-rate';
 
 export type JobGetParams = {
   readonly id: number;
@@ -15,6 +16,8 @@ export type JobGetParams = {
   readonly location: string;
   readonly status: CommonJobStatus;
   readonly budget: number;
+  readonly currency: CommonCurrency;
+  readonly budgetInBaseCurrency: number;
   readonly postedBy: number;
   readonly categoryId: number;
   readonly arrangementId: number;
@@ -25,7 +28,7 @@ export type JobGetParams = {
 
 export type JobCreateParams = Omit<
   JobGetParams,
-  'id' | 'publicId' | 'createdAt' | 'updatedAt'
+  'id' | 'publicId' | 'createdAt' | 'updatedAt' | 'budgetInBaseCurrency'
 >;
 export class Job {
   private constructor(private readonly params: JobGetParams) {}
@@ -43,6 +46,10 @@ export class Job {
         ...params,
         id: 0,
         publicId: randomUUID(),
+        budgetInBaseCurrency: convertToBaseCurrency(
+          params.budget,
+          params.currency,
+        ),
         createdAt: new Date(),
         updatedAt: new Date(),
       }),
@@ -81,6 +88,18 @@ export class Job {
         ),
       );
     }
+
+    if (
+      params.currency &&
+      !Object.values(CommonCurrency).includes(params.currency)
+    ) {
+      return err(
+        new JobDomainErrorValidation(
+          JobDomainError.InvalidCurrency,
+          'currency must be one of the following: VND, USD',
+        ),
+      );
+    }
     return ok(undefined);
   }
   get id(): number {
@@ -93,6 +112,14 @@ export class Job {
 
   get budget(): number {
     return this.params.budget;
+  }
+
+  get currency(): CommonCurrency {
+    return this.params.currency;
+  }
+
+  get budgetInBaseCurrency(): number {
+    return this.params.budgetInBaseCurrency;
   }
 
   get postedBy(): number {
