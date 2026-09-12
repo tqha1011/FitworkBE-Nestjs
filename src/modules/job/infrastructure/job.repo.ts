@@ -201,7 +201,6 @@ export class JobRepository implements IJobRepository, IJobQueryRepository {
     try {
       await this.prismaService.job.create({
         data: {
-          id: job.id,
           publicId: job.publicId,
           title: job.title,
           description: job.description,
