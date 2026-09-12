@@ -5,11 +5,109 @@ import { ok } from 'neverthrow';
 import { Job } from '../domain/entities/job.entity';
 import { IJobQueryRepository } from '../application/interfaces/job.query-repo.interface';
 import { PageResult } from 'src/shared/common/pagination';
-import { JobItemResponseDto } from '../application/dtos/job.response.dto';
+import {
+  JobDetailResponseDto,
+  JobItemResponseDto,
+} from '../application/dtos/job.response.dto';
 import { JobApplicantStatus, JobStatus } from 'generated/prisma/enums';
+import { mapStatusToDomain, mapStatusToPrisma } from './job.mapper';
 
 export class JobRepository implements IJobRepository, IJobQueryRepository {
   constructor(private readonly prismaService: PrismaService) {}
+  async getJobDetails(
+    jobPublicId: string,
+  ): Promise<Result<JobDetailResponseDto | null, Error>> {
+    try {
+      const job = await this.prismaService.job.findUnique({
+        where: {
+          publicId: jobPublicId,
+        },
+        select: {
+          publicId: true,
+          title: true,
+          description: true,
+          requirements: true,
+          location: true,
+          budget: true,
+          status: true,
+          dueAt: true,
+          user: {
+            select: {
+              companyProfile: {
+                select: {
+                  publicId: true,
+                  companyName: true,
+                  createdAt: true,
+                },
+              },
+            },
+          },
+          _count: {
+            select: {
+              jobApplicants: {
+                where: {
+                  status: {
+                    in: [
+                      JobApplicantStatus.PENDING,
+                      JobApplicantStatus.ACCEPTED,
+                    ],
+                  },
+                },
+              },
+            },
+          },
+          jobSkills: {
+            select: {
+              skill: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+          },
+          category: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          arrangement: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      });
+      if (!job) return ok(null);
+      if (!job.user.companyProfile) {
+        return err(new Error('Job poster company profile not found'));
+      }
+      const jobDetailResponse: JobDetailResponseDto = {
+        publicId: job.publicId,
+        title: job.title,
+        description: job.description,
+        location: job.location,
+        requirements: job.requirements,
+        budget: job.budget.toNumber(),
+        status: mapStatusToDomain(job.status),
+        skills: job.jobSkills.map((jobSkill) => jobSkill.skill),
+        category: job.category,
+        arrangement: job.arrangement,
+        postedBy: {
+          publicId: job.user.companyProfile.publicId,
+          name: job.user.companyProfile.companyName,
+          participatedSince: job.user.companyProfile.createdAt,
+        },
+        dueAt: job.dueAt,
+        totalApplicants: job._count.jobApplicants,
+      };
+      return ok(jobDetailResponse);
+    } catch (error) {
+      return err(new Error(`Failed to get job details ${error}`));
+    }
+  }
   async getListJobs(
     pageNumber: number,
     pageSize: number,
@@ -109,7 +207,7 @@ export class JobRepository implements IJobRepository, IJobQueryRepository {
           description: job.description,
           requirements: job.requirements,
           location: job.location,
-          status: job.status,
+          status: mapStatusToPrisma(job.status),
           dueAt: job.dueAt,
           budget: job.budget,
           createdAt: job.createdAt,
