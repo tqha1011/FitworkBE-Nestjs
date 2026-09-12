@@ -10,6 +10,7 @@ export type JobGetParams = {
   readonly id: number;
   readonly publicId: string;
   readonly title: string;
+  readonly description: string;
   readonly requirements: string;
   readonly location: string;
   readonly status: CommonJobStatus;
@@ -81,5 +82,59 @@ export class Job {
       );
     }
     return ok(undefined);
+  }
+  get id(): number {
+    return this.params.id;
+  }
+
+  get status(): CommonJobStatus {
+    return this.params.status;
+  }
+
+  get budget(): number {
+    return this.params.budget;
+  }
+
+  get postedBy(): number {
+    return this.params.postedBy;
+  }
+
+  get categoryId(): number {
+    return this.params.categoryId;
+  }
+
+  get arrangementId(): number {
+    return this.params.arrangementId;
+  }
+
+  get dueAt(): Date {
+    return this.params.dueAt;
+  }
+
+  get createdAt(): Date {
+    return this.params.createdAt;
+  }
+
+  get updatedAt(): Date {
+    return this.params.updatedAt;
+  }
+  get publicId(): string {
+    return this.params.publicId;
+  }
+
+  get title(): string {
+    return this.params.title;
+  }
+
+  get requirements(): string {
+    return this.params.requirements;
+  }
+
+  get location(): string {
+    return this.params.location;
+  }
+
+  get description(): string {
+    return this.params.description;
   }
 }
