@@ -5,11 +5,13 @@ import 'reflect-metadata';
 import { ValidationPipe } from '@nestjs/common/pipes/validation.pipe';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './shared/common/exceptions.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  app.use(cookieParser());
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -18,8 +20,8 @@ async function bootstrap() {
 
   app.useGlobalFilters(new AllExceptionsFilter());
   const options = new DocumentBuilder()
-    .setTitle('DevNotes API')
-    .setDescription('API documentation for DevNotes application')
+    .setTitle('Fitwork API')
+    .setDescription('API documentation for Fitwork application')
     .setVersion('1.0')
     .addTag('auth', 'Authentication related endpoints')
     .addTag('users', 'User management endpoints')

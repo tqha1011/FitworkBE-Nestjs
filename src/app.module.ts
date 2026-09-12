@@ -9,6 +9,7 @@ import { ConfigModule } from '@nestjs/config';
 import { APP_PIPE } from '@nestjs/core';
 import { UsersModule } from './modules/users/users.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { JobModule } from './modules/job/job.module';
 import { LoggerMiddleware } from './shared/common/logger.middleware';
 import { PrismaModule } from './shared/infrastructure/database/prisma.module';
 
@@ -21,6 +22,7 @@ import { PrismaModule } from './shared/infrastructure/database/prisma.module';
     ConfigModule,
     UsersModule,
     AuthModule,
+    JobModule,
   ],
   providers: [
     {

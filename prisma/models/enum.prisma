@@ -27,3 +27,10 @@ enum JobApplicantStatus {
 
   @@map("job_applicant_status")
 }
+
+enum UserRole {
+  ROLE_COMPANY
+  ROLE_APPLICANT
+
+  @@map("user_role")
+}
