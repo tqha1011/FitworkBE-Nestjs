@@ -1,5 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsEnum, IsString, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsEnum,
+  IsString,
+  IsStrongPassword,
+  MinLength,
+} from 'class-validator';
 import { UserType } from 'generated/prisma/enums';
 
 export class RegisterRequestDto {
@@ -20,6 +26,7 @@ export class RegisterRequestDto {
   @ApiProperty()
   @IsString()
   @MinLength(8)
+  @IsStrongPassword()
   password!: string;
 
   @ApiProperty({ enum: UserType })
