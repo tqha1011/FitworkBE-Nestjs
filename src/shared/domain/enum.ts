@@ -19,3 +19,8 @@ export enum CommonJobApplicantStatus {
   REJECTED = 'REJECTED',
   COMPLETED = 'COMPLETED',
 }
+
+export enum CommonCurrency {
+  VND = 'VND',
+  USD = 'USD',
+}

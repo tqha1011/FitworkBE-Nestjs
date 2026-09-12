@@ -37,4 +37,8 @@ export abstract class IUserRepository {
   abstract getUserRole(
     userPublicId: string,
   ): Promise<Result<CommonUserRole, Error>>;
+
+  abstract resolvePublicIdToId(
+    publicId: string,
+  ): Promise<Result<number | null, Error>>;
 }

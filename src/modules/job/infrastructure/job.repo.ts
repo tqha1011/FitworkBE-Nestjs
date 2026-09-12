@@ -14,7 +14,12 @@ import {
 } from '../application/dtos/job.response.dto';
 import { JobApplicantStatus, JobStatus } from 'generated/prisma/enums';
 import { Prisma } from 'generated/prisma/client';
-import { mapStatusToDomain, mapStatusToPrisma } from './job.mapper';
+import {
+  mapCurrencyToDomain,
+  mapCurrencyToPrisma,
+  mapStatusToDomain,
+  mapStatusToPrisma,
+} from './job.mapper';
 
 export class JobRepository implements IJobRepository, IJobQueryRepository {
   constructor(private readonly prismaService: PrismaService) {}
@@ -33,6 +38,7 @@ export class JobRepository implements IJobRepository, IJobQueryRepository {
           requirements: true,
           location: true,
           budget: true,
+          currency: true,
           status: true,
           dueAt: true,
           user: {
@@ -95,6 +101,7 @@ export class JobRepository implements IJobRepository, IJobQueryRepository {
         location: job.location,
         requirements: job.requirements,
         budget: job.budget.toNumber(),
+        currency: mapCurrencyToDomain(job.currency),
         status: mapStatusToDomain(job.status),
         skills: job.jobSkills.map((jobSkill) => jobSkill.skill),
         category: job.category,
@@ -131,7 +138,9 @@ export class JobRepository implements IJobRepository, IJobQueryRepository {
         }),
         ...((filter?.budgetMin !== undefined ||
           filter?.budgetMax !== undefined) && {
-          budget: {
+          // budgetMin/budgetMax are expressed in the base currency (VND) so
+          // filtering works consistently across jobs posted in different currencies.
+          budgetInBaseCurrency: {
             ...(filter?.budgetMin !== undefined && { gte: filter.budgetMin }),
             ...(filter?.budgetMax !== undefined && { lte: filter.budgetMax }),
           },
@@ -146,6 +155,7 @@ export class JobRepository implements IJobRepository, IJobQueryRepository {
             description: true,
             location: true,
             budget: true,
+            currency: true,
             dueAt: true,
             _count: {
               select: {
@@ -196,6 +206,7 @@ export class JobRepository implements IJobRepository, IJobQueryRepository {
         description: job.description,
         location: job.location,
         budget: job.budget.toNumber(),
+        currency: mapCurrencyToDomain(job.currency),
         skills: job.jobSkills.map((jobSkill) => jobSkill.skill),
         category: job.category,
         arrangement: job.arrangement,
@@ -227,6 +238,8 @@ export class JobRepository implements IJobRepository, IJobQueryRepository {
           status: mapStatusToPrisma(job.status),
           dueAt: job.dueAt,
           budget: job.budget,
+          currency: mapCurrencyToPrisma(job.currency),
+          budgetInBaseCurrency: job.budgetInBaseCurrency,
           createdAt: job.createdAt,
           updatedAt: job.updatedAt,
           postedBy: job.postedBy,

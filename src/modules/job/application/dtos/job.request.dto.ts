@@ -2,6 +2,8 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
   IsArray,
+  IsDate,
+  IsEnum,
   IsInt,
   IsNumber,
   IsOptional,
@@ -10,8 +12,55 @@ import {
 } from 'class-validator';
 import { PaginationQueryDto } from 'src/shared/common/pagination';
 import { IsGreaterThanOrEqual } from 'src/shared/common/validators/is-greater-than-or-equal.validator';
+import { CommonCurrency, CommonJobStatus } from 'src/shared/domain/enum';
 
-export class CreateJobRequestDto {}
+export class CreateJobRequestDto {
+  @ApiPropertyOptional({ description: '' })
+  @IsString()
+  title: string;
+
+  @ApiPropertyOptional({ description: '' })
+  @IsString()
+  description: string;
+
+  @ApiPropertyOptional({ description: '' })
+  @IsString()
+  requirements: string;
+
+  @ApiPropertyOptional({ description: '' })
+  @IsNumber()
+  budget: number;
+
+  @ApiPropertyOptional({ description: '' })
+  @IsEnum(CommonJobStatus)
+  status: CommonJobStatus;
+
+  @ApiPropertyOptional({ description: '' })
+  @IsEnum(CommonCurrency)
+  currency: CommonCurrency;
+
+  @ApiPropertyOptional({ description: '' })
+  @IsNumber()
+  categoryId: number;
+
+  @ApiPropertyOptional({ description: '' })
+  @IsArray()
+  @IsInt({ each: true, message: 'skillsId must be integers' })
+  skillsId: number[];
+
+  @ApiPropertyOptional({ description: '' })
+  @Type(() => Date)
+  @IsDate()
+  dueAt: Date;
+
+  @ApiPropertyOptional({ description: '' })
+  @IsNumber()
+  arrangementId: number;
+
+  @ApiPropertyOptional({ description: '' })
+  @IsString()
+  location: string;
+}
 
 export class UpdateJobRequestDto {}
 
@@ -47,14 +96,18 @@ export class GetJobListRequestDto extends PaginationQueryDto {
   @IsInt({ each: true, message: 'skillIds must be integers' })
   skillIds?: number[];
 
-  @ApiPropertyOptional({ description: 'Minimum budget' })
+  @ApiPropertyOptional({
+    description: `Minimum budget, in base currency (${CommonCurrency.VND})`,
+  })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(0)
   budgetMin?: number;
 
-  @ApiPropertyOptional({ description: 'Maximum budget' })
+  @ApiPropertyOptional({
+    description: `Maximum budget, in base currency (${CommonCurrency.VND})`,
+  })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()

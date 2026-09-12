@@ -34,3 +34,10 @@ enum UserRole {
 
   @@map("user_role")
 }
+
+enum Currency {
+  VND
+  USD
+
+  @@map("currency")
+}

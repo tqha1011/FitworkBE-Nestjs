@@ -1,23 +1,25 @@
 model Job {
-  id            Int            @id @default(autoincrement())
-  publicId      String         @unique @default(uuid()) @map("public_id")
-  title         String
-  description   String
-  requirements  String
-  location      String
-  status        JobStatus
-  dueAt         DateTime       @map("due_at")
-  budget        Decimal
-  createdAt     DateTime       @default(now()) @map("created_at")
-  updatedAt     DateTime       @updatedAt @map("updated_at")
-  user          User           @relation(fields: [postedBy], references: [id])
-  postedBy      Int            @map("posted_by")
-  arrangement   Arrangement    @relation(fields: [arrangementId], references: [id])
-  arrangementId Int            @map("arrangement_id")
-  category      Category       @relation(fields: [categoryId], references: [id])
-  categoryId    Int            @map("category_id")
-  jobApplicants JobApplicant[]
-  jobSkills     JobSkill[]
+  id                   Int            @id @default(autoincrement())
+  publicId             String         @unique @default(uuid()) @map("public_id")
+  title                String
+  description          String
+  requirements         String
+  location             String
+  status               JobStatus
+  dueAt                DateTime       @map("due_at")
+  budget               Decimal
+  currency             Currency       @default(VND)
+  budgetInBaseCurrency Decimal        @map("budget_in_base_currency")
+  createdAt            DateTime       @default(now()) @map("created_at")
+  updatedAt            DateTime       @updatedAt @map("updated_at")
+  user                 User           @relation(fields: [postedBy], references: [id])
+  postedBy             Int            @map("posted_by")
+  arrangement          Arrangement    @relation(fields: [arrangementId], references: [id])
+  arrangementId        Int            @map("arrangement_id")
+  category             Category       @relation(fields: [categoryId], references: [id])
+  categoryId           Int            @map("category_id")
+  jobApplicants        JobApplicant[]
+  jobSkills            JobSkill[]
 
   @@index([postedBy])
   @@index([arrangementId])

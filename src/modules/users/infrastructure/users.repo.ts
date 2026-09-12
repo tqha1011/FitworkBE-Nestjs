@@ -12,6 +12,24 @@ import { mapRoleToDomain, mapRoleToPrisma } from './user.mapper';
 @Injectable()
 export class UsersRepository implements IUserRepository {
   constructor(private readonly prismaService: PrismaService) {}
+  async resolvePublicIdToId(
+    publicId: string,
+  ): Promise<Result<number | null, Error>> {
+    try {
+      const user = await this.prismaService.user.findUnique({
+        where: { publicId },
+        select: {
+          id: true,
+        },
+      });
+      if (!user) {
+        return ok(null);
+      }
+      return ok(user.id);
+    } catch (error) {
+      return err(new Error(`Failed to resolve public id to id. ${error}`));
+    }
+  }
   async getUserRole(
     userPublicId: string,
   ): Promise<Result<CommonUserRole, Error>> {
