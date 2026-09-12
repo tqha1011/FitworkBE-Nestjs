@@ -36,7 +36,6 @@ export class PaginationQueryDto {
 export class PageResult<T> {
   items: T[];
   totalPages: number;
-  currentPage: number;
   pageNumber: number;
   pageSize: number;
   hasPrevious: boolean;
@@ -46,16 +45,14 @@ export class PageResult<T> {
     items: T[],
     totalItems: number,
     pageNumber: number,
-    currentPage: number,
     pageSize: number,
   ) {
     this.items = items;
     this.totalPages = Math.ceil(totalItems / pageSize);
-    this.currentPage = currentPage;
     this.pageNumber = pageNumber;
     this.pageSize = pageSize;
-    this.hasPrevious = currentPage > 1;
-    this.hasNext = currentPage < this.totalPages;
+    this.hasPrevious = pageNumber > 1;
+    this.hasNext = pageNumber < this.totalPages;
   }
 }
 

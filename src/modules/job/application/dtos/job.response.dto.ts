@@ -2,6 +2,7 @@ export type JobItemResponseDto = {
   publicId: string;
   title: string;
   description: string;
+  location: string;
   budget: number;
   skills: {
     id: number;
