@@ -3,13 +3,17 @@ import { IJobRepository } from '../domain/repositories/job.repo.interface';
 import { PrismaService } from 'src/shared/infrastructure/database/prisma.service';
 import { ok } from 'neverthrow';
 import { Job } from '../domain/entities/job.entity';
-import { IJobQueryRepository } from '../application/interfaces/job.query-repo.interface';
+import {
+  IJobQueryRepository,
+  JobListFilter,
+} from '../application/interfaces/job.query-repo.interface';
 import { PageResult } from 'src/shared/common/pagination';
 import {
   JobDetailResponseDto,
   JobItemResponseDto,
 } from '../application/dtos/job.response.dto';
 import { JobApplicantStatus, JobStatus } from 'generated/prisma/enums';
+import { Prisma } from 'generated/prisma/client';
 import { mapStatusToDomain, mapStatusToPrisma } from './job.mapper';
 
 export class JobRepository implements IJobRepository, IJobQueryRepository {
@@ -111,13 +115,31 @@ export class JobRepository implements IJobRepository, IJobQueryRepository {
   async getListJobs(
     pageNumber: number,
     pageSize: number,
+    filter?: JobListFilter,
   ): Promise<Result<PageResult<JobItemResponseDto>, Error>> {
     try {
+      const where: Prisma.JobWhereInput = {
+        status: JobStatus.OPEN,
+        ...(filter?.title && {
+          title: { contains: filter.title, mode: 'insensitive' },
+        }),
+        ...(filter?.categoryIds?.length && {
+          categoryId: { in: filter.categoryIds },
+        }),
+        ...(filter?.skillIds?.length && {
+          jobSkills: { some: { skillId: { in: filter.skillIds } } },
+        }),
+        ...((filter?.budgetMin !== undefined ||
+          filter?.budgetMax !== undefined) && {
+          budget: {
+            ...(filter?.budgetMin !== undefined && { gte: filter.budgetMin }),
+            ...(filter?.budgetMax !== undefined && { lte: filter.budgetMax }),
+          },
+        }),
+      };
       const [jobs, totalItems] = await Promise.all([
         this.prismaService.job.findMany({
-          where: {
-            status: JobStatus.OPEN,
-          },
+          where,
           select: {
             publicId: true,
             title: true,
@@ -166,11 +188,7 @@ export class JobRepository implements IJobRepository, IJobQueryRepository {
           take: pageSize,
           skip: (pageNumber - 1) * pageSize,
         }),
-        this.prismaService.job.count({
-          where: {
-            status: JobStatus.OPEN,
-          },
-        }),
+        this.prismaService.job.count({ where }),
       ]);
       const jobItemListResponse: JobItemResponseDto[] = jobs.map((job) => ({
         publicId: job.publicId,
