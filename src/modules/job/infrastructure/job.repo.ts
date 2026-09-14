@@ -251,6 +251,7 @@ export class JobRepository implements IJobRepository, IJobQueryRepository {
           jobSkills: {
             createMany: {
               data: skillIds.map((id) => ({ skillId: id })),
+              skipDuplicates: true,
             },
           },
         },
