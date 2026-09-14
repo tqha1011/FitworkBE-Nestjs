@@ -117,3 +117,19 @@ export class GetJobListRequestDto extends PaginationQueryDto {
   })
   budgetMax?: number;
 }
+
+export class JobApplicantRequestDto {
+  @ApiPropertyOptional({ description: 'Proposed rate' })
+  @IsNumber()
+  @Min(0)
+  proposedRate: number;
+
+  @ApiPropertyOptional({ description: 'Estimated day' })
+  @IsNumber()
+  @Min(1)
+  estimatedDay: number;
+
+  @ApiPropertyOptional({ description: 'Cover letter' })
+  @IsString()
+  coverLetter?: string;
+}

@@ -26,6 +26,7 @@ model ApplicantProfile {
   publicId        String   @unique @default(uuid()) @map("public_id")
   description     String?
   avatarUrl       String?  @map("avatar_url")
+  portfolioUrl    String?  @map("portfolio_url")
   location        String?
   user            User     @relation(fields: [userId], references: [id])
   userId          Int      @unique @map("user_id")

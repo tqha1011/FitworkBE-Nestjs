@@ -2,7 +2,7 @@ import { Result, ok, err } from 'neverthrow';
 import {
   ISkillRepository,
   SkillData,
-} from '../domain/repositories/job-skill.repo.interface';
+} from '../domain/repositories/skill.repo.interface';
 import { PrismaService } from 'src/shared/infrastructure/database/prisma.service';
 
 export class SkillRepository implements ISkillRepository {
