@@ -226,7 +226,10 @@ export class JobRepository implements IJobRepository, IJobQueryRepository {
     }
   }
 
-  async addJob(job: Job): Promise<Result<undefined, Error>> {
+  async addJob(
+    job: Job,
+    skillIds: number[],
+  ): Promise<Result<undefined, Error>> {
     try {
       await this.prismaService.job.create({
         data: {
@@ -245,6 +248,12 @@ export class JobRepository implements IJobRepository, IJobQueryRepository {
           postedBy: job.postedBy,
           arrangementId: job.arrangementId,
           categoryId: job.categoryId,
+          jobSkills: {
+            createMany: {
+              data: skillIds.map((id) => ({ skillId: id })),
+              skipDuplicates: true,
+            },
+          },
         },
       });
       return ok(undefined);
@@ -253,13 +262,15 @@ export class JobRepository implements IJobRepository, IJobQueryRepository {
     }
   }
 
-  async getJobIdByPublicId(publicId: string): Promise<Result<number, Error>> {
+  async getJobIdByPublicId(
+    publicId: string,
+  ): Promise<Result<number | null, Error>> {
     try {
       const job = await this.prismaService.job.findUnique({
         where: { publicId },
       });
       if (!job) {
-        return err(new Error('Job not found'));
+        return ok(null);
       }
       return ok(job.id);
     } catch (error) {

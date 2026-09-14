@@ -23,6 +23,20 @@ export type JobItemResponseDto = {
   totalApplicants: number;
 };
 
+export type JobApplicantResponseDto = {
+  message: string;
+};
+
+export type CategoryResponseDto = {
+  id: number;
+  name: string;
+};
+
+export type ArrangementResponseDto = {
+  id: number;
+  name: string;
+};
+
 export type JobDetailResponseDto = {
   publicId: string;
   title: string;
