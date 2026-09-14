@@ -15,6 +15,8 @@ import {
 } from '../application/dtos/job.response.dto';
 import { IJobService } from '../application/interfaces/job.service.interface';
 import { IJobApplicantService } from '../application/interfaces/job-applicant.service.interface';
+import { ICategoryService } from '../application/interfaces/category.service.interface';
+import { IArrangementService } from '../application/interfaces/arrangement.service.interface';
 import { PageResult } from 'src/shared/common/pagination';
 
 @ApiTags('job')
@@ -23,6 +25,8 @@ export class JobController {
   constructor(
     private readonly jobService: IJobService,
     private readonly jobApplicantService: IJobApplicantService,
+    private readonly categoryService: ICategoryService,
+    private readonly arrangementService: IArrangementService,
   ) {}
 
   @Post()

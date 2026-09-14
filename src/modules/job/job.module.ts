@@ -18,6 +18,10 @@ import { ICategoryRepository } from './domain/repositories/category.repo.interfa
 import { CategoryRepository } from './infrastructure/category.repo';
 import { IArrangementRepository } from './domain/repositories/arrangement.repo.interface';
 import { ArrangementRepository } from './infrastructure/arrangement.repo';
+import { ICategoryService } from './application/interfaces/category.service.interface';
+import { CategoryService } from './application/services/category.service';
+import { IArrangementService } from './application/interfaces/arrangement.service.interface';
+import { ArrangementService } from './application/services/arrangement.service';
 
 @Module({
   imports: [
@@ -46,6 +50,8 @@ import { ArrangementRepository } from './infrastructure/arrangement.repo';
     { provide: ISkillRepository, useClass: SkillRepository },
     { provide: ICategoryRepository, useClass: CategoryRepository },
     { provide: IArrangementRepository, useClass: ArrangementRepository },
+    { provide: ICategoryService, useClass: CategoryService },
+    { provide: IArrangementService, useClass: ArrangementService },
   ],
   exports: [
     IJobRepository,
@@ -56,6 +62,8 @@ import { ArrangementRepository } from './infrastructure/arrangement.repo';
     ISkillRepository,
     ICategoryRepository,
     IArrangementRepository,
+    ICategoryService,
+    IArrangementService,
   ],
 })
 export class JobModule {}
