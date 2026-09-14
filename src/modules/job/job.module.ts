@@ -22,6 +22,8 @@ import { ICategoryService } from './application/interfaces/category.service.inte
 import { CategoryService } from './application/services/category.service';
 import { IArrangementService } from './application/interfaces/arrangement.service.interface';
 import { ArrangementService } from './application/services/arrangement.service';
+import { ArrangementController } from './api/arrangment.controller';
+import { CategoryController } from './api/category.controller';
 
 @Module({
   imports: [
@@ -39,7 +41,7 @@ import { ArrangementService } from './application/services/arrangement.service';
       }),
     }),
   ],
-  controllers: [JobController],
+  controllers: [JobController, ArrangementController, CategoryController],
   providers: [
     JobRepository,
     { provide: IJobRepository, useExisting: JobRepository },
