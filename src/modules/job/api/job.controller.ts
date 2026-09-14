@@ -1,21 +1,29 @@
-import { Body, Controller, Get, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, Param } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { toHttpException } from 'src/shared/common/app-error.mapper';
 import { Auth } from 'src/shared/common/swagger/auth-swagger.decorator';
 import { User } from 'src/shared/common/user.decorator';
 import type { JwtPayload } from 'src/shared/common/jwt.payload.interface';
-import { PageResult } from 'src/shared/common/pagination';
 import {
   CreateJobRequestDto,
   GetJobListRequestDto,
+  JobApplicantRequestDto,
 } from '../application/dtos/job.request.dto';
-import { JobItemResponseDto } from '../application/dtos/job.response.dto';
+import {
+  JobApplicantResponseDto,
+  JobItemResponseDto,
+} from '../application/dtos/job.response.dto';
 import { IJobService } from '../application/interfaces/job.service.interface';
+import { IJobApplicantService } from '../application/interfaces/job-applicant.service.interface';
+import { PageResult } from 'src/shared/common/pagination';
 
 @ApiTags('job')
 @Controller('/api/job')
 export class JobController {
-  constructor(private readonly jobService: IJobService) {}
+  constructor(
+    private readonly jobService: IJobService,
+    private readonly jobApplicantService: IJobApplicantService,
+  ) {}
 
   @Post()
   @Auth()
@@ -41,6 +49,29 @@ export class JobController {
     });
     return result.match(
       (value) => value,
+      (error) => {
+        throw toHttpException(error);
+      },
+    );
+  }
+
+  @Post(':jobPublicId/apply')
+  @Auth()
+  @ApiOperation({ summary: 'Apply for a job' })
+  async applyForJob(
+    @User() user: JwtPayload,
+    @Body() request: JobApplicantRequestDto,
+    @Param('jobPublicId') jobPublicId: string,
+  ): Promise<JobApplicantResponseDto> {
+    const result = await this.jobApplicantService.applyJobAsync(
+      user.sub,
+      jobPublicId,
+      request,
+    );
+    return result.match(
+      () => ({
+        message: 'Applied successfully',
+      }),
       (error) => {
         throw toHttpException(error);
       },
