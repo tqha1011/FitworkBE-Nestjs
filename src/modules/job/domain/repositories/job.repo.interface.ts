@@ -6,5 +6,7 @@ export abstract class IJobRepository {
     job: Job,
     skillIds: number[],
   ): Promise<Result<undefined, Error>>;
-  abstract getJobIdByPublicId(publicId: string): Promise<Result<number, Error>>;
+  abstract getJobIdByPublicId(
+    publicId: string,
+  ): Promise<Result<number | null, Error>>;
 }

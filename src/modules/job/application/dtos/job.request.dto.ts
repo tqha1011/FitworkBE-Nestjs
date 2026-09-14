@@ -131,5 +131,9 @@ export class JobApplicantRequestDto {
 
   @ApiPropertyOptional({ description: 'Cover letter' })
   @IsString()
-  coverLetter?: string;
+  coverLetter: string;
+
+  @ApiPropertyOptional({ description: 'Resume public id' })
+  @IsString()
+  resumePublicId: string;
 }

@@ -261,13 +261,15 @@ export class JobRepository implements IJobRepository, IJobQueryRepository {
     }
   }
 
-  async getJobIdByPublicId(publicId: string): Promise<Result<number, Error>> {
+  async getJobIdByPublicId(
+    publicId: string,
+  ): Promise<Result<number | null, Error>> {
     try {
       const job = await this.prismaService.job.findUnique({
         where: { publicId },
       });
       if (!job) {
-        return err(new Error('Job not found'));
+        return ok(null);
       }
       return ok(job.id);
     } catch (error) {
