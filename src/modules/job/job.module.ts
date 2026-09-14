@@ -8,6 +8,10 @@ import { IJobService } from './application/interfaces/job.service.interface';
 import { JobService } from './application/services/job.service';
 import { UsersModule } from '../users/users.module';
 import { JobController } from './api/job.controller';
+import { IJobApplicantRepository } from './domain/repositories/job-applicant.repo.interface';
+import { JobApplicantRepository } from './infrastructure/job-applicant.repo';
+import { IJobApplicantService } from './application/interfaces/job-applicant.service.interface';
+import { JobApplicantService } from './application/services/job-applicant.service';
 
 @Module({
   imports: [
@@ -31,7 +35,15 @@ import { JobController } from './api/job.controller';
     { provide: IJobRepository, useExisting: JobRepository },
     { provide: IJobQueryRepository, useExisting: JobRepository },
     { provide: IJobService, useClass: JobService },
+    { provide: IJobApplicantRepository, useClass: JobApplicantRepository },
+    { provide: IJobApplicantService, useClass: JobApplicantService },
   ],
-  exports: [IJobRepository, IJobQueryRepository, IJobService],
+  exports: [
+    IJobRepository,
+    IJobQueryRepository,
+    IJobService,
+    IJobApplicantService,
+    IJobApplicantRepository,
+  ],
 })
 export class JobModule {}
