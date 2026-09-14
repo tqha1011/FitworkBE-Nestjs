@@ -12,6 +12,9 @@ import {
 import { JobItemResponseDto } from '../dtos/job.response.dto';
 import { IUserRepository } from 'src/modules/users/domain/repositories/users.repo.interface';
 import { PageResult, PaginationRequest } from 'src/shared/common/pagination';
+import { ISkillRepository } from '../../domain/repositories/skill.repo.interface';
+import { ICategoryRepository } from '../../domain/repositories/category.repo.interface';
+import { IArrangementRepository } from '../../domain/repositories/arrangement.repo.interface';
 
 @Injectable()
 export class JobService implements IJobService {
@@ -19,14 +22,28 @@ export class JobService implements IJobService {
     private readonly jobRepository: IJobRepository,
     private readonly jobQueryRepository: IJobQueryRepository,
     private readonly userRepository: IUserRepository,
+    private readonly skillRepository: ISkillRepository,
+    private readonly categoryRepository: ICategoryRepository,
+    private readonly arrangementRepository: IArrangementRepository,
   ) {}
 
   async createJobAsync(
     postedByPublicId: string,
     request: CreateJobRequestDto,
   ): Promise<Result<undefined, AppError>> {
-    const postedByIdResult =
-      await this.userRepository.resolvePublicIdToId(postedByPublicId);
+    const skillIds = [...new Set(request.skillsId)];
+    const [
+      postedByIdResult,
+      categoryExistsResult,
+      arrangementExistsResult,
+      existingSkillIdsResult,
+    ] = await Promise.all([
+      this.userRepository.resolvePublicIdToId(postedByPublicId),
+      this.categoryRepository.categoryExists(request.categoryId),
+      this.arrangementRepository.arrangementExists(request.arrangementId),
+      this.skillRepository.findExistingSkillIds(skillIds),
+    ]);
+
     if (postedByIdResult.isErr()) {
       return err(
         new AppError(
@@ -41,6 +58,51 @@ export class JobService implements IJobService {
         new AppError(ErrorCode.NotFound, 'Can not find the job owner'),
       );
     }
+
+    if (categoryExistsResult.isErr()) {
+      return err(
+        new AppError(
+          ErrorCode.InternalServerError,
+          categoryExistsResult.error.message,
+        ),
+      );
+    }
+    if (!categoryExistsResult.value) {
+      return err(new AppError(ErrorCode.NotFound, 'Category not found'));
+    }
+
+    if (arrangementExistsResult.isErr()) {
+      return err(
+        new AppError(
+          ErrorCode.InternalServerError,
+          arrangementExistsResult.error.message,
+        ),
+      );
+    }
+    if (!arrangementExistsResult.value) {
+      return err(new AppError(ErrorCode.NotFound, 'Arrangement not found'));
+    }
+
+    if (existingSkillIdsResult.isErr()) {
+      return err(
+        new AppError(
+          ErrorCode.InternalServerError,
+          existingSkillIdsResult.error.message,
+        ),
+      );
+    }
+    const missingSkillIds = skillIds.filter(
+      (id) => !existingSkillIdsResult.value.includes(id),
+    );
+    if (missingSkillIds.length > 0) {
+      return err(
+        new AppError(
+          ErrorCode.NotFound,
+          `Skill not found: ${missingSkillIds.join(', ')}`,
+        ),
+      );
+    }
+
     const job = Job.create({
       title: request.title,
       description: request.description,
@@ -58,10 +120,7 @@ export class JobService implements IJobService {
       return err(new AppError(ErrorCode.BadRequest, job.error.message));
     }
     // add job + skills
-    const addJobResult = await this.jobRepository.addJob(
-      job.value,
-      request.skillsId,
-    );
+    const addJobResult = await this.jobRepository.addJob(job.value, skillIds);
     if (addJobResult.isErr()) {
       return err(
         new AppError(ErrorCode.InternalServerError, 'Failed to create job'),

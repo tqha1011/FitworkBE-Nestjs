@@ -12,6 +12,12 @@ import { IJobApplicantRepository } from './domain/repositories/job-applicant.rep
 import { JobApplicantRepository } from './infrastructure/job-applicant.repo';
 import { IJobApplicantService } from './application/interfaces/job-applicant.service.interface';
 import { JobApplicantService } from './application/services/job-applicant.service';
+import { ISkillRepository } from './domain/repositories/skill.repo.interface';
+import { SkillRepository } from './infrastructure/skill.repo';
+import { ICategoryRepository } from './domain/repositories/category.repo.interface';
+import { CategoryRepository } from './infrastructure/category.repo';
+import { IArrangementRepository } from './domain/repositories/arrangement.repo.interface';
+import { ArrangementRepository } from './infrastructure/arrangement.repo';
 
 @Module({
   imports: [
@@ -37,6 +43,9 @@ import { JobApplicantService } from './application/services/job-applicant.servic
     { provide: IJobService, useClass: JobService },
     { provide: IJobApplicantRepository, useClass: JobApplicantRepository },
     { provide: IJobApplicantService, useClass: JobApplicantService },
+    { provide: ISkillRepository, useClass: SkillRepository },
+    { provide: ICategoryRepository, useClass: CategoryRepository },
+    { provide: IArrangementRepository, useClass: ArrangementRepository },
   ],
   exports: [
     IJobRepository,
@@ -44,6 +53,9 @@ import { JobApplicantService } from './application/services/job-applicant.servic
     IJobService,
     IJobApplicantService,
     IJobApplicantRepository,
+    ISkillRepository,
+    ICategoryRepository,
+    IArrangementRepository,
   ],
 })
 export class JobModule {}
