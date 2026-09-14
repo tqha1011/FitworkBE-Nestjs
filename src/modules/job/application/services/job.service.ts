@@ -57,7 +57,11 @@ export class JobService implements IJobService {
     if (job.isErr()) {
       return err(new AppError(ErrorCode.BadRequest, job.error.message));
     }
-    const addJobResult = await this.jobRepository.addJob(job.value);
+    // add job + skills
+    const addJobResult = await this.jobRepository.addJob(
+      job.value,
+      request.skillsId,
+    );
     if (addJobResult.isErr()) {
       return err(
         new AppError(ErrorCode.InternalServerError, 'Failed to create job'),

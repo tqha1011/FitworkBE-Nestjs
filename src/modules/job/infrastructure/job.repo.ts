@@ -226,7 +226,10 @@ export class JobRepository implements IJobRepository, IJobQueryRepository {
     }
   }
 
-  async addJob(job: Job): Promise<Result<undefined, Error>> {
+  async addJob(
+    job: Job,
+    skillIds: number[],
+  ): Promise<Result<undefined, Error>> {
     try {
       await this.prismaService.job.create({
         data: {
@@ -245,6 +248,11 @@ export class JobRepository implements IJobRepository, IJobQueryRepository {
           postedBy: job.postedBy,
           arrangementId: job.arrangementId,
           categoryId: job.categoryId,
+          jobSkills: {
+            createMany: {
+              data: skillIds.map((id) => ({ skillId: id })),
+            },
+          },
         },
       });
       return ok(undefined);
