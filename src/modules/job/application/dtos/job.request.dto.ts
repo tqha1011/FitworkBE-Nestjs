@@ -9,6 +9,7 @@ import {
   IsOptional,
   IsString,
   Min,
+  ValidateIf,
 } from 'class-validator';
 import { PaginationQueryDto } from 'src/shared/common/pagination';
 import { IsGreaterThanOrEqual } from 'src/shared/common/validators/is-greater-than-or-equal.validator';
@@ -141,37 +142,38 @@ export class JobApplicantRequestDto {
 export class JobUpdateRequestDto {
   @ApiPropertyOptional({ description: 'Job title' })
   @IsString()
-  @IsOptional()
-  title?: string | null;
+  @ValidateIf((_object, value) => value !== undefined)
+  title?: string;
 
   @ApiPropertyOptional({ description: 'Job description' })
   @IsString()
-  @IsOptional()
-  description?: string | null;
+  @ValidateIf((_object, value) => value !== undefined)
+  description?: string;
 
   @ApiPropertyOptional({ description: 'Location' })
   @IsString()
-  @IsOptional()
-  location?: string | null;
+  @ValidateIf((_object, value) => value !== undefined)
+  location?: string;
 
   @ApiPropertyOptional({ description: 'Job requirements' })
   @IsString()
-  @IsOptional()
-  requirements?: string | null;
+  @ValidateIf((_object, value) => value !== undefined)
+  requirements?: string;
 
   @ApiPropertyOptional({ description: 'Job status' })
   @IsEnum(CommonJobStatus)
-  @IsOptional()
-  status?: CommonJobStatus | null;
+  @ValidateIf((_object, value) => value !== undefined)
+  status?: CommonJobStatus;
 
   @ApiPropertyOptional({ description: 'Due date' })
+  @Type(() => Date)
   @IsDate()
-  @IsOptional()
-  dueAt?: Date | null;
+  @ValidateIf((_object, value) => value !== undefined)
+  dueAt?: Date;
 
   @ApiPropertyOptional({ description: 'Budget' })
   @IsNumber()
   @Min(0)
-  @IsOptional()
-  budget?: number | null;
+  @ValidateIf((_object, value) => value !== undefined)
+  budget?: number;
 }
