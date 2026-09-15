@@ -137,3 +137,41 @@ export class JobApplicantRequestDto {
   @IsString()
   resumePublicId: string;
 }
+
+export class JobUpdateRequestDto {
+  @ApiPropertyOptional({ description: 'Job title' })
+  @IsString()
+  @IsOptional()
+  title?: string | null;
+
+  @ApiPropertyOptional({ description: 'Job description' })
+  @IsString()
+  @IsOptional()
+  description?: string | null;
+
+  @ApiPropertyOptional({ description: 'Location' })
+  @IsString()
+  @IsOptional()
+  location?: string | null;
+
+  @ApiPropertyOptional({ description: 'Job requirements' })
+  @IsString()
+  @IsOptional()
+  requirements?: string | null;
+
+  @ApiPropertyOptional({ description: 'Job status' })
+  @IsEnum(CommonJobStatus)
+  @IsOptional()
+  status?: CommonJobStatus | null;
+
+  @ApiPropertyOptional({ description: 'Due date' })
+  @IsDate()
+  @IsOptional()
+  dueAt?: Date | null;
+
+  @ApiPropertyOptional({ description: 'Budget' })
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  budget?: number | null;
+}
