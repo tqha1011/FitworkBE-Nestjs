@@ -30,18 +30,3 @@ model ResumeContent {
   @@map("resume_content")
   @@index([resumeId])
 }
-
-model ApplicantEvaluation {
-  id             Int          @id @default(autoincrement())
-  jobApplicant   JobApplicant @relation(fields: [jobApplicantId], references: [id])
-  jobApplicantId Int          @map("job_applicant_id")
-  overallScore   Int          @map("overall_score")
-  scoreBreakdown Json         @map("score_breakdown")
-  evidence       Json
-  model          String
-  promptVersion  String       @map("prompt_version")
-  evaluatedAt    DateTime     @default(now()) @map("evaluated_at")
-
-  @@index([jobApplicantId])
-  @@map("applicant_evaluation")
-}
