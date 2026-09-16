@@ -8,6 +8,7 @@ import { Job } from '../../domain/entities/job.entity';
 import {
   CreateJobRequestDto,
   GetJobListRequestDto,
+  JobUpdateRequestDto,
 } from '../dtos/job.request.dto';
 import { JobItemResponseDto } from '../dtos/job.response.dto';
 import { IUserRepository } from 'src/modules/users/domain/repositories/users.repo.interface';
@@ -150,5 +151,62 @@ export class JobService implements IJobService {
       );
     }
     return ok(result.value);
+  }
+
+  async updateJobAsync(
+    userPublicId: string,
+    jobPublicId: string,
+    request: JobUpdateRequestDto,
+  ): Promise<Result<undefined, AppError>> {
+    const [userIdResult, jobResult] = await Promise.all([
+      this.userRepository.resolvePublicIdToId(userPublicId),
+      this.jobRepository.getJobByPublicId(jobPublicId),
+    ]);
+
+    if (userIdResult.isErr()) {
+      return err(
+        new AppError(
+          ErrorCode.InternalServerError,
+          'Failed to resolve job owner',
+        ),
+      );
+    }
+    if (!userIdResult.value) {
+      return err(new AppError(ErrorCode.NotFound, 'Job owner not found'));
+    }
+
+    if (jobResult.isErr()) {
+      return err(
+        new AppError(ErrorCode.InternalServerError, 'Failed to get job'),
+      );
+    }
+    if (!jobResult.value) {
+      return err(new AppError(ErrorCode.NotFound, 'Job not found'));
+    }
+    if (jobResult.value.postedBy !== userIdResult.value) {
+      return err(
+        new AppError(
+          ErrorCode.Forbidden,
+          'You are not allowed to update this job',
+        ),
+      );
+    }
+
+    const updatedJobResult = jobResult.value.update(request);
+    if (updatedJobResult.isErr()) {
+      return err(
+        new AppError(ErrorCode.BadRequest, updatedJobResult.error.message),
+      );
+    }
+
+    const updateResult = await this.jobRepository.updateJob(
+      updatedJobResult.value,
+    );
+    if (updateResult.isErr()) {
+      return err(
+        new AppError(ErrorCode.InternalServerError, 'Failed to update job'),
+      );
+    }
+    return ok(undefined);
   }
 }

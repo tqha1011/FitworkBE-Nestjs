@@ -63,8 +63,6 @@ export class CreateJobRequestDto {
   location: string;
 }
 
-export class UpdateJobRequestDto {}
-
 function toNumberArray({ value }: { value: unknown }): unknown {
   return typeof value === 'string'
     ? value.split(',').map((id) => Number(id.trim()))
@@ -177,3 +175,5 @@ export class JobUpdateRequestDto {
   @ValidateIf((_object, value) => value !== undefined)
   budget?: number;
 }
+
+export { JobUpdateRequestDto as UpdateJobRequestDto };

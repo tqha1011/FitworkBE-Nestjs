@@ -51,6 +51,10 @@ type JobValidationParams = Partial<
 export class Job {
   private constructor(private readonly params: JobGetParams) {}
 
+  static restore(params: JobGetParams): Job {
+    return new Job(params);
+  }
+
   static create(
     params: JobCreateParams,
   ): Result<Job, JobDomainErrorValidation> {
