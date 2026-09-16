@@ -1,11 +1,42 @@
 import { Injectable } from '@nestjs/common';
 import { err, ok, Result } from 'neverthrow';
 import { PrismaService } from 'src/shared/infrastructure/database/prisma.service';
-import { IResumeRepository } from '../domain/repositories/resume.repo.interface';
+import {
+  IResumeRepository,
+  ResumeStorageData,
+} from '../domain/repositories/resume.repo.interface';
 
 @Injectable()
 export class ResumeRepository implements IResumeRepository {
   constructor(private readonly prismaService: PrismaService) {}
+  async getResumeStorageData(
+    publicId: string,
+  ): Promise<Result<ResumeStorageData | null, Error>> {
+    try {
+      const resume = await this.prismaService.resume.findUnique({
+        where: { publicId },
+        select: {
+          id: true,
+          storagePath: true,
+          fileName: true,
+          fileType: true,
+          fileSize: true,
+        },
+      });
+      if (!resume) {
+        return ok(null);
+      }
+      return ok({
+        resumeId: resume.id,
+        storageKey: resume.storagePath,
+        fileName: resume.fileName,
+        fileType: resume.fileType,
+        fileSize: resume.fileSize,
+      });
+    } catch (error) {
+      return err(new Error(`Failed to get resume storage data. ${error}`));
+    }
+  }
 
   async resolvePublicIdToId(
     publicId: string,

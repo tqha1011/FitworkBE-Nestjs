@@ -10,7 +10,38 @@ model Resume {
   user          User           @relation(fields: [userId], references: [id])
   userId        Int            @map("user_id")
   jobApplicants JobApplicant[]
+  content       ResumeContent?
 
   @@index([userId])
   @@map("resume")
+}
+
+model ResumeContent {
+  id             Int      @id @default(autoincrement())
+  resume         Resume   @relation(fields: [resumeId], references: [id])
+  resumeId       Int      @unique @map("resume_id")
+  extractedText  String   @map("extracted_text") @db.Text
+  structuredData Json     @map("structured_data")
+  contentHash    String   @map("content_hash") @db.VarChar(64)
+  parserVersion  String   @map("parser_version")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@map("resume_content")
+  @@index([resumeId])
+}
+
+model ApplicantEvaluation {
+  id             Int          @id @default(autoincrement())
+  jobApplicant   JobApplicant @relation(fields: [jobApplicantId], references: [id])
+  jobApplicantId Int          @map("job_applicant_id")
+  overallScore   Int          @map("overall_score")
+  scoreBreakdown Json         @map("score_breakdown")
+  evidence       Json
+  model          String
+  promptVersion  String       @map("prompt_version")
+  evaluatedAt    DateTime     @default(now()) @map("evaluated_at")
+
+  @@index([jobApplicantId])
+  @@map("applicant_evaluation")
 }

@@ -7,6 +7,8 @@ import { UploadResumeRequestDto } from '../dtos/resume.request.dto';
 import { IUserRepository } from 'src/modules/users/domain/repositories/users.repo.interface';
 import { IFileStorage } from 'src/shared/infrastructure/storage/file-storage.interface';
 import { randomUUID } from 'crypto';
+import { IResumeRepository } from '../../domain/repositories/resume.repo.interface';
+import { CommonContentDisposition } from 'src/shared/domain/enum';
 
 export const extensionByContentType: Record<string, string> = {
   'application/pdf': 'pdf',
@@ -19,7 +21,36 @@ export class ResumeService implements IResumeService {
   constructor(
     private readonly userRepository: IUserRepository,
     private readonly fileStorage: IFileStorage,
+    private readonly resumeRepo: IResumeRepository,
   ) {}
+  async getDownloadUrlAsync(
+    resumePublicId: string,
+    diposition: CommonContentDisposition,
+  ): Promise<Result<string, AppError>> {
+    const resumeStorageData =
+      await this.resumeRepo.getResumeStorageData(resumePublicId);
+    if (resumeStorageData.isErr()) {
+      return err(
+        new AppError(
+          ErrorCode.InternalServerError,
+          `Failed to get resume storage data: ${resumeStorageData.error}`,
+        ),
+      );
+    }
+    if (!resumeStorageData.value) {
+      return err(new AppError(ErrorCode.NotFound, `Resume not found`));
+    }
+    const downloadUrl = await this.fileStorage.getDownloadUrl(
+      resumeStorageData.value.storageKey,
+      resumeStorageData.value.fileName,
+      diposition,
+    );
+    if (downloadUrl.isErr()) {
+      return err(downloadUrl.error);
+    }
+    return ok(downloadUrl.value);
+  }
+
   async getUploadUrlAsync(
     userPublicId: string,
     resumeUploadRequest: UploadResumeRequestDto,
