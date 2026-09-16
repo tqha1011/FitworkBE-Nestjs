@@ -29,3 +29,8 @@ export enum CommonContentDisposition {
   ATTACHMENT = 'attachment',
   INLINE = 'inline',
 }
+
+export enum CommonFileType {
+  PDF = 'pdf',
+  DOCX = 'docx',
+}

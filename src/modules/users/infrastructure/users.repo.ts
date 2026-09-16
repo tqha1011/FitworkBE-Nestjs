@@ -12,6 +12,21 @@ import { mapRoleToDomain, mapRoleToPrisma } from './user.mapper';
 @Injectable()
 export class UsersRepository implements IUserRepository {
   constructor(private readonly prismaService: PrismaService) {}
+  async checkUserExistsByPublicId(
+    publicId: string,
+  ): Promise<Result<boolean, Error>> {
+    try {
+      const user = await this.prismaService.user.findUnique({
+        where: { publicId },
+        select: {
+          id: true,
+        },
+      });
+      return ok(!!user);
+    } catch (error) {
+      return err(new Error(`Failed to check user public id exists. ${error}`));
+    }
+  }
   async resolvePublicIdToId(
     publicId: string,
   ): Promise<Result<number | null, Error>> {
