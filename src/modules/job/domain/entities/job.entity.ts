@@ -30,8 +30,30 @@ export type JobCreateParams = Omit<
   JobGetParams,
   'id' | 'publicId' | 'createdAt' | 'updatedAt' | 'budgetInBaseCurrency'
 >;
+
+export type JobUpdateParams = Partial<
+  Omit<
+    JobGetParams,
+    | 'id'
+    | 'publicId'
+    | 'createdAt'
+    | 'updatedAt'
+    | 'currency'
+    | 'budgetInBaseCurrency'
+    | 'postedBy'
+  >
+>;
+
+type JobValidationParams = Partial<
+  Pick<JobGetParams, 'dueAt' | 'budget' | 'status' | 'currency'>
+>;
+
 export class Job {
   private constructor(private readonly params: JobGetParams) {}
+
+  static restore(params: JobGetParams): Job {
+    return new Job(params);
+  }
 
   static create(
     params: JobCreateParams,
@@ -56,10 +78,31 @@ export class Job {
     );
   }
 
+  update(params: JobUpdateParams): Result<Job, JobDomainErrorValidation> {
+    const validateResult = Job.validate(params);
+    if (validateResult.isErr()) {
+      return err(validateResult.error);
+    }
+
+    const budgetInBaseCurrency =
+      params.budget === undefined
+        ? this.params.budgetInBaseCurrency
+        : convertToBaseCurrency(params.budget, this.params.currency);
+
+    return ok(
+      new Job({
+        ...this.params,
+        ...params,
+        budgetInBaseCurrency,
+        updatedAt: new Date(),
+      }),
+    );
+  }
+
   private static validate(
-    params: JobCreateParams,
+    params: JobValidationParams,
   ): Result<undefined, JobDomainErrorValidation> {
-    if (params.dueAt && params.dueAt < new Date()) {
+    if (params.dueAt !== undefined && params.dueAt < new Date()) {
       return err(
         new JobDomainErrorValidation(
           JobDomainError.DueAtLessThanNow,
@@ -68,7 +111,7 @@ export class Job {
       );
     }
 
-    if (params.budget && params.budget < 0) {
+    if (params.budget !== undefined && params.budget < 0) {
       return err(
         new JobDomainErrorValidation(
           JobDomainError.BudgetLessThanZero,
@@ -78,7 +121,7 @@ export class Job {
     }
 
     if (
-      params.status &&
+      params.status !== undefined &&
       !Object.values(CommonJobStatus).includes(params.status)
     ) {
       return err(
@@ -90,7 +133,7 @@ export class Job {
     }
 
     if (
-      params.currency &&
+      params.currency !== undefined &&
       !Object.values(CommonCurrency).includes(params.currency)
     ) {
       return err(

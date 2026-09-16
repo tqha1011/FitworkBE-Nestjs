@@ -9,4 +9,8 @@ export abstract class IJobRepository {
   abstract getJobIdByPublicId(
     publicId: string,
   ): Promise<Result<number | null, Error>>;
+  abstract getJobByPublicId(
+    publicId: string,
+  ): Promise<Result<Job | null, Error>>;
+  abstract updateJob(job: Job): Promise<Result<undefined, Error>>;
 }

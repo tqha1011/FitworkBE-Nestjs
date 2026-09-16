@@ -23,6 +23,70 @@ import {
 
 export class JobRepository implements IJobRepository, IJobQueryRepository {
   constructor(private readonly prismaService: PrismaService) {}
+
+  async getJobByPublicId(publicId: string): Promise<Result<Job | null, Error>> {
+    try {
+      const job = await this.prismaService.job.findUnique({
+        where: { publicId },
+        select: {
+          id: true,
+          publicId: true,
+          title: true,
+          description: true,
+          requirements: true,
+          location: true,
+          status: true,
+          budget: true,
+          currency: true,
+          budgetInBaseCurrency: true,
+          postedBy: true,
+          categoryId: true,
+          arrangementId: true,
+          dueAt: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+      if (!job) return ok(null);
+
+      return ok(
+        Job.restore({
+          ...job,
+          status: mapStatusToDomain(job.status),
+          budget: job.budget.toNumber(),
+          currency: mapCurrencyToDomain(job.currency),
+          budgetInBaseCurrency: job.budgetInBaseCurrency.toNumber(),
+        }),
+      );
+    } catch (error) {
+      return err(new Error(`Failed to get job by publicId ${error}`));
+    }
+  }
+
+  async updateJob(job: Job): Promise<Result<undefined, Error>> {
+    try {
+      await this.prismaService.job.update({
+        where: { id: job.id },
+        data: {
+          title: job.title,
+          description: job.description,
+          requirements: job.requirements,
+          location: job.location,
+          status: mapStatusToPrisma(job.status),
+          budget: job.budget,
+          budgetInBaseCurrency: job.budgetInBaseCurrency,
+          categoryId: job.categoryId,
+          arrangementId: job.arrangementId,
+          dueAt: job.dueAt,
+          updatedAt: job.updatedAt,
+        },
+      });
+      return ok(undefined);
+    } catch (error) {
+      return err(new Error(`Failed to update job ${error}`));
+    }
+  }
+
   async getJobDetails(
     jobPublicId: string,
   ): Promise<Result<JobDetailResponseDto | null, Error>> {

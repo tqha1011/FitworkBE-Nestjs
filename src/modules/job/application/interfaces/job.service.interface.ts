@@ -3,6 +3,7 @@ import { AppError } from 'src/shared/common/errorCode';
 import {
   CreateJobRequestDto,
   GetJobListRequestDto,
+  JobUpdateRequestDto,
 } from '../dtos/job.request.dto';
 import { PageResult, PaginationRequest } from 'src/shared/common/pagination';
 import { JobItemResponseDto } from '../dtos/job.response.dto';
@@ -17,4 +18,10 @@ export abstract class IJobService {
     request: GetJobListRequestDto,
     pagination: PaginationRequest,
   ): Promise<Result<PageResult<JobItemResponseDto>, AppError>>;
+
+  abstract updateJobAsync(
+    userPublicId: string,
+    jobPublicId: string,
+    request: JobUpdateRequestDto,
+  ): Promise<Result<undefined, AppError>>;
 }

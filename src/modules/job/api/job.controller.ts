@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Post, Query, Param } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { toHttpException } from 'src/shared/common/app-error.mapper';
 import { Auth } from 'src/shared/common/swagger/auth-swagger.decorator';
@@ -8,6 +16,7 @@ import {
   CreateJobRequestDto,
   GetJobListRequestDto,
   JobApplicantRequestDto,
+  JobUpdateRequestDto,
 } from '../application/dtos/job.request.dto';
 import {
   JobApplicantResponseDto,
@@ -57,6 +66,24 @@ export class JobController {
         throw toHttpException(error);
       },
     );
+  }
+
+  @Patch(':jobPublicId')
+  @Auth()
+  @ApiOperation({ summary: 'Update a job posting' })
+  async updateJob(
+    @User() user: JwtPayload,
+    @Param('jobPublicId') jobPublicId: string,
+    @Body() request: JobUpdateRequestDto,
+  ): Promise<void> {
+    const result = await this.jobService.updateJobAsync(
+      user.sub,
+      jobPublicId,
+      request,
+    );
+    if (result.isErr()) {
+      throw toHttpException(result.error);
+    }
   }
 
   @Post(':jobPublicId/apply')
