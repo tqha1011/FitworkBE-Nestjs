@@ -5,10 +5,33 @@ import {
   IResumeRepository,
   ResumeStorageData,
 } from '../domain/repositories/resume.repo.interface';
+import { Resume } from '../domain/entities/resume.entity';
+import { toPrismaFileType } from './resume.mapper';
 
 @Injectable()
 export class ResumeRepository implements IResumeRepository {
   constructor(private readonly prismaService: PrismaService) {}
+
+  async addResume(resume: Resume): Promise<Result<undefined, Error>> {
+    try {
+      await this.prismaService.resume.create({
+        data: {
+          publicId: resume.publicId,
+          storagePath: resume.storagePath,
+          fileSize: resume.fileSize,
+          fileType: toPrismaFileType(resume.fileType),
+          fileName: resume.fileName,
+          userId: resume.userId,
+          createdAt: resume.createdAt,
+          updatedAt: resume.updatedAt,
+        },
+      });
+      return ok(undefined);
+    } catch (error) {
+      return err(new Error(`Failed to add resume. ${error}`));
+    }
+  }
+
   async getResumeStorageData(
     publicId: string,
   ): Promise<Result<ResumeStorageData | null, Error>> {
@@ -21,6 +44,11 @@ export class ResumeRepository implements IResumeRepository {
           fileName: true,
           fileType: true,
           fileSize: true,
+          user: {
+            select: {
+              publicId: true,
+            },
+          },
         },
       });
       if (!resume) {
@@ -28,6 +56,7 @@ export class ResumeRepository implements IResumeRepository {
       }
       return ok({
         resumeId: resume.id,
+        ownerPublicId: resume.user.publicId,
         storageKey: resume.storagePath,
         fileName: resume.fileName,
         fileType: resume.fileType,

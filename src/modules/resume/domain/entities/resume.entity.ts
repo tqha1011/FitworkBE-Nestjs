@@ -4,20 +4,16 @@ import {
   ResumeDomainError,
   ResumeDomainErrorValidation,
 } from '../errors/resume-domain.error';
+import { CommonFileType } from 'src/shared/domain/enum';
 
 export const MAX_RESUME_FILE_SIZE = 5 * 1024 * 1024;
-
-export enum ResumeFileType {
-  PDF = 'PDF',
-  DOCX = 'DOCX',
-}
 
 export type ResumeGetParams = {
   readonly id: number;
   readonly publicId: string;
   readonly storagePath: string;
   readonly fileSize: number;
-  readonly fileType: ResumeFileType;
+  readonly fileType: CommonFileType;
   readonly fileName: string;
   readonly userId: number;
   readonly createdAt: Date;
@@ -81,7 +77,7 @@ export class Resume {
       );
     }
 
-    if (!Object.values(ResumeFileType).includes(params.fileType)) {
+    if (!Object.values(CommonFileType).includes(params.fileType)) {
       return err(
         new ResumeDomainErrorValidation(
           ResumeDomainError.InvalidFileType,
@@ -127,7 +123,7 @@ export class Resume {
     return this.params.fileSize;
   }
 
-  get fileType(): ResumeFileType {
+  get fileType(): CommonFileType {
     return this.params.fileType;
   }
 

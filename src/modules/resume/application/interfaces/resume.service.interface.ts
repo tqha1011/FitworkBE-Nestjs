@@ -1,7 +1,10 @@
 import { Result } from 'neverthrow';
 import { AppError } from 'src/shared/common/errorCode';
 import { ResumeUploadResponseDto } from '../dtos/resume.response.dto';
-import { UploadResumeRequestDto } from '../dtos/resume.request.dto';
+import {
+  CreateResumeRequestDto,
+  UploadResumeRequestDto,
+} from '../dtos/resume.request.dto';
 import { CommonContentDisposition } from 'src/shared/domain/enum';
 
 export abstract class IResumeService {
@@ -13,8 +16,11 @@ export abstract class IResumeService {
   abstract getDownloadUrlAsync(
     userPublicId: string,
     resumePublicId: string,
-    diposition: CommonContentDisposition,
+    disposition: CommonContentDisposition,
   ): Promise<Result<string, AppError>>;
 
-  abstract create;
+  abstract createResumeAsync(
+    userPublicId: string,
+    resumeCreateRequest: CreateResumeRequestDto,
+  ): Promise<Result<undefined, AppError>>;
 }

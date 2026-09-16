@@ -7,3 +7,7 @@ export type ResumeUploadResponseDto = {
   storageKey: string;
   expiresAt: Date;
 };
+
+export type ResumeDownloadUrlResponseDto = {
+  downloadUrl: string;
+};

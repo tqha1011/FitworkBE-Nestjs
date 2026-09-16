@@ -1,7 +1,9 @@
 import { Result } from 'neverthrow';
+import { Resume } from '../entities/resume.entity';
 
 export type ResumeStorageData = {
   resumeId: number;
+  ownerPublicId: string;
   storageKey: string;
   fileName: string;
   fileType: string;
@@ -9,6 +11,8 @@ export type ResumeStorageData = {
 };
 
 export abstract class IResumeRepository {
+  abstract addResume(resume: Resume): Promise<Result<undefined, Error>>;
+
   abstract resolvePublicIdToId(
     publicId: string,
   ): Promise<Result<number | null, Error>>;

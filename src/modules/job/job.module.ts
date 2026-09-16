@@ -24,10 +24,12 @@ import { IArrangementService } from './application/interfaces/arrangement.servic
 import { ArrangementService } from './application/services/arrangement.service';
 import { ArrangementController } from './api/arrangment.controller';
 import { CategoryController } from './api/category.controller';
+import { ResumeModule } from '../resume/resume.module';
 
 @Module({
   imports: [
     UsersModule,
+    ResumeModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
