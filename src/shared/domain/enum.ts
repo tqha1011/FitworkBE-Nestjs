@@ -24,3 +24,8 @@ export enum CommonCurrency {
   VND = 'VND',
   USD = 'USD',
 }
+
+export enum CommonContentDisposition {
+  ATTACHMENT = 'attachment',
+  INLINE = 'inline',
+}
