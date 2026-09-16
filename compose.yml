@@ -1,0 +1,96 @@
+name: smart-portal
+
+services:
+  FitWork-Nestjs-api:
+    container_name: Fitwork-backend-nestjs
+    restart: unless-stopped
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - '127.0.0.1:${API_PORT:-3000}:3000'
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:${REDIS_PORT:-6379}
+    depends_on:
+      - database
+      - redis
+    networks:
+      - Fitwork-backend
+
+  database:
+    image: pgvector/pgvector:pg15
+    restart: unless-stopped
+    container_name: Fitwork-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+
+    ports:
+      - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+    networks:
+      - Fitwork-backend
+
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  redis:
+    image: redis:8.6.1-alpine
+    container_name: redis-fitwork-nestjs
+    ports:
+      - '6379:6379'
+    networks:
+      - Fitwork-backend
+    volumes:
+      - redis_data:/data
+
+  minio:
+    image: minio/minio:latest
+    container_name: minio-fitwork-nestjs
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_DEFAULT_BUCKETS: ${MINIO_DEFAULT_BUCKETS}
+    ports:
+      - '9000:9000'
+    networks:
+      - Fitwork-backend
+    volumes:
+      - minio_data:/data
+    command: [ "server", "--console-address", ":9001", "/data" ]
+
+  minio-init:
+    image: minio/mc:latest
+    container_name: minio-init
+    depends_on:
+      minio:
+        condition: service_started
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_DEFAULT_BUCKETS: ${MINIO_DEFAULT_BUCKETS}
+    networks:
+      - Fitwork-backend
+    entrypoint: /bin/sh
+    command: -c 'mc config host add myminio http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} && mc mb myminio/${MINIO_DEFAULT_BUCKETS} --ignore-existing'
+
+networks:
+  Fitwork-backend:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
