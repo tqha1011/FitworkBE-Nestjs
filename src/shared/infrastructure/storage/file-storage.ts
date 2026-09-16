@@ -29,16 +29,16 @@ export class FileStorage implements IFileStorage, OnModuleDestroy {
   private readonly logger = new Logger(FileStorage.name);
 
   constructor(private readonly configService: ConfigService) {
-    this.bucket = this.requireEnv('S3_BUCKET_NAME');
+    this.bucket = this.requireEnv('MINIO_DEFAULT_BUCKETS');
     this.s3 = new S3Client({
       region: 'auto',
       // On the default setting the SDK stamps a CRC32 of the *empty* body into
       // the presigned URL, and the real upload then fails the checksum check.
       requestChecksumCalculation: 'WHEN_REQUIRED',
-      endpoint: this.requireEnv('S3_API_ENDPOINT'),
+      endpoint: this.requireEnv('MINIO_ENDPOINT'),
       credentials: {
-        accessKeyId: this.requireEnv('S3_ACCESS_KEY_ID'),
-        secretAccessKey: this.requireEnv('S3_SECRET_ACCESS_KEY'),
+        accessKeyId: this.requireEnv('MINIO_ROOT_USER'),
+        secretAccessKey: this.requireEnv('MINIO_ROOT_PASSWORD'),
       },
     });
   }
