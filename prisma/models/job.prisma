@@ -29,26 +29,33 @@ model Job {
 }
 
 model JobApplicant {
-  id           Int                   @id @default(autoincrement())
-  publicId     String                @unique @default(uuid()) @map("public_id")
-  job          Job                   @relation(fields: [jobId], references: [id])
-  jobId        Int                   @map("job_id")
-  applicant    User                  @relation(fields: [applicantId], references: [id])
-  applicantId  Int                   @map("applicant_id")
-  resume       Resume                @relation(fields: [resumeId], references: [id])
-  resumeId     Int                   @map("resume_id")
-  coverLetter  String                @map("cover_letter")
-  proposedRate Decimal               @map("proposed_rate")
-  estimatedDay Int                   @map("estimated_day")
-  status       JobApplicantStatus    @default(PENDING)
-  appliedAt    DateTime              @default(now()) @map("applied_at")
-  updatedAt    DateTime              @updatedAt @map("updated_at")
-  evaluations  ApplicantEvaluation[]
+  id              Int                   @id @default(autoincrement())
+  publicId        String                @unique @default(uuid()) @map("public_id")
+  job             Job                   @relation(fields: [jobId], references: [id])
+  jobId           Int                   @map("job_id")
+  applicant       User                  @relation(fields: [applicantId], references: [id])
+  applicantId     Int                   @map("applicant_id")
+  resume          Resume                @relation(fields: [resumeId], references: [id])
+  resumeId        Int                   @map("resume_id")
+  /// Nullable during the ingestion rollout; require it once every resume has a parsed version.
+  resumeContent   ResumeContent?        @relation(fields: [resumeContentId], references: [id])
+  resumeContentId Int?                  @map("resume_content_id")
+  /// Immutable job input captured when the applicant submits the application.
+  jobSnapshot     Json?                 @map("job_snapshot")
+  jobContentHash  String?               @map("job_content_hash") @db.VarChar(64)
+  coverLetter     String                @map("cover_letter")
+  proposedRate    Decimal               @map("proposed_rate")
+  estimatedDay    Int                   @map("estimated_day")
+  status          JobApplicantStatus    @default(PENDING)
+  appliedAt       DateTime              @default(now()) @map("applied_at")
+  updatedAt       DateTime              @updatedAt @map("updated_at")
+  evaluations     ApplicantEvaluation[]
 
   @@unique([jobId, applicantId])
   @@index([jobId])
   @@index([applicantId])
   @@index([resumeId])
+  @@index([resumeContentId])
   @@map("job_applicant")
 }
 
@@ -98,16 +105,25 @@ model Category {
 }
 
 model ApplicantEvaluation {
-  id             Int          @id @default(autoincrement())
-  jobApplicant   JobApplicant @relation(fields: [jobApplicantId], references: [id])
-  jobApplicantId Int          @map("job_applicant_id")
-  overallScore   Int          @map("overall_score")
-  scoreBreakdown Json         @map("score_breakdown")
-  evidence       Json
-  model          String
-  promptVersion  String       @map("prompt_version")
-  evaluatedAt    DateTime     @default(now()) @map("evaluated_at")
+  id                Int              @id @default(autoincrement())
+  jobApplicant      JobApplicant     @relation(fields: [jobApplicantId], references: [id])
+  jobApplicantId    Int              @map("job_applicant_id")
+  status            EvaluationStatus @default(PENDING)
+  overallScore      Int?             @map("overall_score")
+  scoreBreakdown    Json?            @map("score_breakdown")
+  evidence          Json?
+  resumeContentHash String           @map("resume_content_hash") @db.VarChar(64)
+  jobContentHash    String           @map("job_content_hash") @db.VarChar(64)
+  parserVersion     String           @map("parser_version")
+  model             String
+  promptVersion     String           @map("prompt_version")
+  errorMessage      String?          @map("error_message") @db.Text
+  createdAt         DateTime         @default(now()) @map("created_at")
+  evaluatedAt       DateTime?        @map("evaluated_at")
+  updatedAt         DateTime         @updatedAt @map("updated_at")
 
-  @@index([jobApplicantId])
+  @@unique([jobApplicantId, resumeContentHash, jobContentHash, parserVersion, model, promptVersion], map: "applicant_evaluation_input_version_key")
+  @@index([jobApplicantId, status])
+  @@index([status, createdAt])
   @@map("applicant_evaluation")
 }
