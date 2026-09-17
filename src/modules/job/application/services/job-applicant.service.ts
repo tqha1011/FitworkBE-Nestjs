@@ -20,10 +20,10 @@ export class JobApplicantService implements IJobApplicantService {
     jobPublicId: string,
     request: JobApplicantRequestDto,
   ): Promise<Result<undefined, AppError>> {
-    const [userId, jobId, resumeId] = await Promise.all([
+    const [userId, jobId, resume] = await Promise.all([
       this.userRepository.resolvePublicIdToId(userPublicId),
       this.jobRepository.getJobIdByPublicId(jobPublicId),
-      this.resumeRepository.resolvePublicIdToId(request.resumePublicId),
+      this.resumeRepository.getResumeByPublicId(request.resumePublicId),
     ]);
     if (userId.isErr())
       return err(
@@ -37,17 +37,22 @@ export class JobApplicantService implements IJobApplicantService {
       );
     if (!jobId.value)
       return err(new AppError(ErrorCode.NotFound, 'Job not found'));
-    if (resumeId.isErr())
+    if (resume.isErr())
       return err(
-        new AppError(ErrorCode.InternalServerError, resumeId.error.message),
+        new AppError(ErrorCode.InternalServerError, resume.error.message),
       );
-    if (!resumeId.value)
+    if (!resume.value)
       return err(new AppError(ErrorCode.NotFound, 'Resume not found'));
+
+    if (resume.value.userId !== userId.value)
+      return err(
+        new AppError(ErrorCode.Forbidden, 'Resume does not belong to user'),
+      );
 
     const jobApplicantResult = JobApplicant.create({
       jobId: jobId.value,
       applicantId: userId.value,
-      resumeId: resumeId.value,
+      resumeId: resume.value.id,
       coverLetter: request.coverLetter,
       proposedRate: request.proposedRate,
       estimatedDay: request.estimatedDay,
