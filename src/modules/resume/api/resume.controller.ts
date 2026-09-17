@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   ParseEnumPipe,
+  Patch,
   Post,
   Query,
 } from '@nestjs/common';
@@ -16,6 +17,7 @@ import { User } from 'src/shared/common/user.decorator';
 import { CommonContentDisposition } from 'src/shared/domain/enum';
 import {
   CreateResumeRequestDto,
+  UpdateResumeRequestDto,
   UploadResumeRequestDto,
 } from '../application/dtos/resume.request.dto';
 import {
@@ -68,6 +70,24 @@ export class ResumeController {
         throw toHttpException(error);
       },
     );
+  }
+
+  @Patch(':resumePublicId')
+  @Auth()
+  @ApiOperation({ summary: 'Update a resume from an uploaded file' })
+  async updateResume(
+    @User() user: JwtPayload,
+    @Param('resumePublicId') resumePublicId: string,
+    @Body() request: UpdateResumeRequestDto,
+  ): Promise<void> {
+    const result = await this.resumeService.updateResumeAsync(
+      user.sub,
+      resumePublicId,
+      request,
+    );
+    if (result.isErr()) {
+      throw toHttpException(result.error);
+    }
   }
 
   @Get(':resumePublicId/download-url')
