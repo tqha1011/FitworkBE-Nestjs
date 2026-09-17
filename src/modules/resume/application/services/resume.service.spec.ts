@@ -25,6 +25,7 @@ describe('ResumeService', () => {
   let resumeRepository: {
     addResume: jest.MockedFunction<IResumeRepository['addResume']>;
     updateResume: jest.MockedFunction<IResumeRepository['updateResume']>;
+    deleteResume: jest.MockedFunction<IResumeRepository['deleteResume']>;
     getResumeByPublicId: jest.MockedFunction<
       IResumeRepository['getResumeByPublicId']
     >;
@@ -41,6 +42,7 @@ describe('ResumeService', () => {
     resumeRepository = {
       addResume: jest.fn(),
       updateResume: jest.fn(),
+      deleteResume: jest.fn(),
       getResumeByPublicId: jest.fn(),
     };
     service = new ResumeService(
@@ -48,6 +50,114 @@ describe('ResumeService', () => {
       fileStorage as unknown as IFileStorage,
       resumeRepository as unknown as IResumeRepository,
     );
+  });
+
+  describe('deleteResumeAsync', () => {
+    const resumePublicId = 'b1ad7d9d-8c47-4fd3-b70b-c7d25b109e21';
+
+    const restoreResume = (userId = 42) =>
+      Resume.restore({
+        id: 10,
+        publicId: resumePublicId,
+        storagePath: `user/${userPublicId}/old-upload/cv.pdf`,
+        fileSize: 512,
+        fileType: CommonFileType.PDF,
+        fileName: 'Resume.pdf',
+        isActive: true,
+        userId,
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      });
+
+    it('soft-deletes a resume owned by the user', async () => {
+      userRepository.resolvePublicIdToId.mockResolvedValue(ok(42));
+      resumeRepository.getResumeByPublicId.mockResolvedValue(
+        ok(restoreResume()),
+      );
+      resumeRepository.deleteResume.mockResolvedValue(ok(undefined));
+
+      const result = await service.deleteResumeAsync(
+        userPublicId,
+        resumePublicId,
+      );
+
+      expect(result.isOk()).toBe(true);
+      expect(resumeRepository.deleteResume).toHaveBeenCalledWith(
+        resumePublicId,
+      );
+    });
+
+    it('returns not found when the user does not exist', async () => {
+      userRepository.resolvePublicIdToId.mockResolvedValue(ok(null));
+      resumeRepository.getResumeByPublicId.mockResolvedValue(
+        ok(restoreResume()),
+      );
+
+      const result = await service.deleteResumeAsync(
+        userPublicId,
+        resumePublicId,
+      );
+
+      expect(result.isErr()).toBe(true);
+      if (result.isErr()) {
+        expect(result.error.code).toBe(ErrorCode.NotFound);
+      }
+      expect(resumeRepository.deleteResume).not.toHaveBeenCalled();
+    });
+
+    it('returns not found when the resume does not exist or is inactive', async () => {
+      userRepository.resolvePublicIdToId.mockResolvedValue(ok(42));
+      resumeRepository.getResumeByPublicId.mockResolvedValue(ok(null));
+
+      const result = await service.deleteResumeAsync(
+        userPublicId,
+        resumePublicId,
+      );
+
+      expect(result.isErr()).toBe(true);
+      if (result.isErr()) {
+        expect(result.error.code).toBe(ErrorCode.NotFound);
+      }
+      expect(resumeRepository.deleteResume).not.toHaveBeenCalled();
+    });
+
+    it('rejects a delete from a user who does not own the resume', async () => {
+      userRepository.resolvePublicIdToId.mockResolvedValue(ok(42));
+      resumeRepository.getResumeByPublicId.mockResolvedValue(
+        ok(restoreResume(99)),
+      );
+
+      const result = await service.deleteResumeAsync(
+        userPublicId,
+        resumePublicId,
+      );
+
+      expect(result.isErr()).toBe(true);
+      if (result.isErr()) {
+        expect(result.error.code).toBe(ErrorCode.Forbidden);
+      }
+      expect(resumeRepository.deleteResume).not.toHaveBeenCalled();
+    });
+
+    it('maps repository failures to an internal server error', async () => {
+      userRepository.resolvePublicIdToId.mockResolvedValue(ok(42));
+      resumeRepository.getResumeByPublicId.mockResolvedValue(
+        ok(restoreResume()),
+      );
+      resumeRepository.deleteResume.mockResolvedValue(
+        err(new Error('database unavailable')),
+      );
+
+      const result = await service.deleteResumeAsync(
+        userPublicId,
+        resumePublicId,
+      );
+
+      expect(result.isErr()).toBe(true);
+      if (result.isErr()) {
+        expect(result.error.code).toBe(ErrorCode.InternalServerError);
+      }
+    });
   });
 
   describe('updateResumeAsync', () => {
@@ -62,6 +172,7 @@ describe('ResumeService', () => {
         fileSize: 512,
         fileType: CommonFileType.PDF,
         fileName: 'Old Resume.pdf',
+        isActive: true,
         userId,
         createdAt: new Date('2026-01-01T00:00:00.000Z'),
         updatedAt: new Date('2026-01-01T00:00:00.000Z'),
@@ -203,6 +314,7 @@ describe('ResumeService', () => {
       expect(resume.fileName).toBe('Backend Resume.pdf');
       expect(resume.fileSize).toBe(1024);
       expect(resume.fileType).toBe(CommonFileType.PDF);
+      expect(resume.isActive).toBe(true);
       expect(resume.userId).toBe(42);
     });
 

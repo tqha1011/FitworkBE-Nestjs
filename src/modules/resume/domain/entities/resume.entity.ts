@@ -15,6 +15,7 @@ export type ResumeGetParams = {
   readonly fileSize: number;
   readonly fileType: CommonFileType;
   readonly fileName: string;
+  readonly isActive: boolean;
   readonly userId: number;
   readonly createdAt: Date;
   readonly updatedAt: Date;
@@ -22,7 +23,7 @@ export type ResumeGetParams = {
 
 export type ResumeCreateParams = Omit<
   ResumeGetParams,
-  'id' | 'publicId' | 'createdAt' | 'updatedAt'
+  'id' | 'publicId' | 'isActive' | 'createdAt' | 'updatedAt'
 >;
 
 export type ResumeUpdateParams = Partial<
@@ -46,6 +47,7 @@ export class Resume {
         ...params,
         id: 0,
         publicId: randomUUID(),
+        isActive: true,
         createdAt: now,
         updatedAt: now,
       }),
@@ -149,6 +151,10 @@ export class Resume {
 
   get fileName(): string {
     return this.params.fileName;
+  }
+
+  get isActive(): boolean {
+    return this.params.isActive;
   }
 
   get userId(): number {

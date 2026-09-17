@@ -26,4 +26,6 @@ export abstract class IResumeRepository {
   abstract getResumeByPublicId(
     publicId: string,
   ): Promise<Result<Resume | null, Error>>;
+
+  abstract deleteResume(publicId: string): Promise<Result<undefined, Error>>;
 }

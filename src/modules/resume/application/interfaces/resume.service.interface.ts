@@ -30,4 +30,9 @@ export abstract class IResumeService {
     resumePublicId: string,
     resumeUpdateRequest: UpdateResumeRequestDto,
   ): Promise<Result<undefined, AppError>>;
+
+  abstract deleteResumeAsync(
+    userPublicId: string,
+    resumePublicId: string,
+  ): Promise<Result<undefined, AppError>>;
 }

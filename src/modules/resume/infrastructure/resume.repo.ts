@@ -11,12 +11,25 @@ import { toCommonFileType, toPrismaFileType } from './resume.mapper';
 @Injectable()
 export class ResumeRepository implements IResumeRepository {
   constructor(private readonly prismaService: PrismaService) {}
+  async deleteResume(publicId: string): Promise<Result<undefined, Error>> {
+    try {
+      await this.prismaService.resume.updateMany({
+        where: { publicId, isActive: true },
+        data: {
+          isActive: false,
+        },
+      });
+      return ok(undefined);
+    } catch (error) {
+      return err(new Error(`Failed to delete resume by public id. ${error}`));
+    }
+  }
   async getResumeByPublicId(
     publicId: string,
   ): Promise<Result<Resume | null, Error>> {
     try {
-      const resume = await this.prismaService.resume.findUnique({
-        where: { publicId },
+      const resume = await this.prismaService.resume.findFirst({
+        where: { publicId, isActive: true },
         select: {
           id: true,
           publicId: true,
@@ -24,6 +37,7 @@ export class ResumeRepository implements IResumeRepository {
           fileSize: true,
           fileType: true,
           fileName: true,
+          isActive: true,
           userId: true,
           createdAt: true,
           updatedAt: true,
@@ -71,6 +85,7 @@ export class ResumeRepository implements IResumeRepository {
           fileSize: resume.fileSize,
           fileType: toPrismaFileType(resume.fileType),
           fileName: resume.fileName,
+          isActive: resume.isActive,
           userId: resume.userId,
           createdAt: resume.createdAt,
           updatedAt: resume.updatedAt,
@@ -86,8 +101,8 @@ export class ResumeRepository implements IResumeRepository {
     publicId: string,
   ): Promise<Result<ResumeStorageData | null, Error>> {
     try {
-      const resume = await this.prismaService.resume.findUnique({
-        where: { publicId },
+      const resume = await this.prismaService.resume.findFirst({
+        where: { publicId, isActive: true },
         select: {
           id: true,
           storagePath: true,
@@ -121,8 +136,8 @@ export class ResumeRepository implements IResumeRepository {
     publicId: string,
   ): Promise<Result<number | null, Error>> {
     try {
-      const resume = await this.prismaService.resume.findUnique({
-        where: { publicId },
+      const resume = await this.prismaService.resume.findFirst({
+        where: { publicId, isActive: true },
         select: {
           id: true,
         },

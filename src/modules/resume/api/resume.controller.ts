@@ -2,7 +2,10 @@ import {
   Body,
   Controller,
   DefaultValuePipe,
+  Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   ParseEnumPipe,
   Patch,
@@ -84,6 +87,23 @@ export class ResumeController {
       user.sub,
       resumePublicId,
       request,
+    );
+    if (result.isErr()) {
+      throw toHttpException(result.error);
+    }
+  }
+
+  @Delete(':resumePublicId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Auth()
+  @ApiOperation({ summary: 'Soft-delete a resume' })
+  async deleteResume(
+    @User() user: JwtPayload,
+    @Param('resumePublicId') resumePublicId: string,
+  ): Promise<void> {
+    const result = await this.resumeService.deleteResumeAsync(
+      user.sub,
+      resumePublicId,
     );
     if (result.isErr()) {
       throw toHttpException(result.error);

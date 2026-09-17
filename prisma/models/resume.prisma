@@ -5,6 +5,7 @@ model Resume {
   fileSize      Int            @map("file_size")
   fileType      FileType       @map("file_type")
   fileName      String         @map("file_name")
+  isActive      Boolean        @default(true) @map("is_active")
   createdAt     DateTime       @default(now()) @map("created_at")
   updatedAt     DateTime       @updatedAt @map("updated_at")
   user          User           @relation(fields: [userId], references: [id])

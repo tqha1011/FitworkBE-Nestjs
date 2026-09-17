@@ -37,6 +37,47 @@ export class ResumeService implements IResumeService {
     private readonly fileStorage: IFileStorage,
     private readonly resumeRepo: IResumeRepository,
   ) {}
+  async deleteResumeAsync(
+    userPublicId: string,
+    resumePublicId: string,
+  ): Promise<Result<undefined, AppError>> {
+    const [userIdResult, resumeResult] = await Promise.all([
+      this.userRepository.resolvePublicIdToId(userPublicId),
+      this.resumeRepo.getResumeByPublicId(resumePublicId),
+    ]);
+    if (userIdResult.isErr()) {
+      return err(
+        new AppError(ErrorCode.InternalServerError, 'Failed to resolve user'),
+      );
+    }
+    if (!userIdResult.value) {
+      return err(new AppError(ErrorCode.NotFound, 'User not found'));
+    }
+
+    if (resumeResult.isErr()) {
+      return err(
+        new AppError(ErrorCode.InternalServerError, 'Failed to get resume'),
+      );
+    }
+    if (!resumeResult.value) {
+      return err(new AppError(ErrorCode.NotFound, 'Resume not found'));
+    }
+    if (resumeResult.value.userId !== userIdResult.value) {
+      return err(
+        new AppError(
+          ErrorCode.Forbidden,
+          'You are not allowed to delete this resume',
+        ),
+      );
+    }
+    const deleteResult = await this.resumeRepo.deleteResume(resumePublicId);
+    if (deleteResult.isErr()) {
+      return err(
+        new AppError(ErrorCode.InternalServerError, 'Failed to delete resume'),
+      );
+    }
+    return ok(undefined);
+  }
   async updateResumeAsync(
     userPublicId: string,
     resumePublicId: string,
