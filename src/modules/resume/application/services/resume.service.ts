@@ -39,6 +39,7 @@ export class ResumeService implements IResumeService {
     private readonly fileStorage: IFileStorage,
     private readonly resumeRepo: IResumeRepository,
   ) {}
+
   async deleteResumeAsync(
     userPublicId: string,
     resumePublicId: string,
@@ -60,6 +61,7 @@ export class ResumeService implements IResumeService {
     }
     return ok(undefined);
   }
+
   async updateResumeAsync(
     userPublicId: string,
     resumePublicId: string,
@@ -74,18 +76,12 @@ export class ResumeService implements IResumeService {
       return err(authorizedResumeResult.error);
     }
 
-    if (
-      !this.isStorageKeyOwnedByUser(
-        resumeUpdateRequest.storageKey,
-        userPublicId,
-      )
-    ) {
-      return err(
-        new AppError(
-          ErrorCode.Forbidden,
-          'The resume storage key does not belong to this user',
-        ),
-      );
+    const storageAuthorizationResult = this.authorizeStorageKeyOwner(
+      resumeUpdateRequest.storageKey,
+      userPublicId,
+    );
+    if (storageAuthorizationResult.isErr()) {
+      return err(storageAuthorizationResult.error);
     }
 
     const metadataResult = await this.fileStorage.getObjectMetadata(
@@ -155,18 +151,12 @@ export class ResumeService implements IResumeService {
       return err(userIdResult.error);
     }
 
-    if (
-      !this.isStorageKeyOwnedByUser(
-        resumeCreateRequest.storageKey,
-        userPublicId,
-      )
-    ) {
-      return err(
-        new AppError(
-          ErrorCode.Forbidden,
-          'The resume storage key does not belong to this user',
-        ),
-      );
+    const storageAuthorizationResult = this.authorizeStorageKeyOwner(
+      resumeCreateRequest.storageKey,
+      userPublicId,
+    );
+    if (storageAuthorizationResult.isErr()) {
+      return err(storageAuthorizationResult.error);
     }
 
     const metadataResult = await this.fileStorage.getObjectMetadata(
@@ -368,10 +358,19 @@ export class ResumeService implements IResumeService {
     return ok(resumeResult.value);
   }
 
-  private isStorageKeyOwnedByUser(
+  private authorizeStorageKeyOwner(
     storageKey: string,
     userPublicId: string,
-  ): boolean {
-    return storageKey.startsWith(`user/${userPublicId}/`);
+  ): Result<undefined, AppError> {
+    if (!storageKey.startsWith(`user/${userPublicId}/`)) {
+      return err(
+        new AppError(
+          ErrorCode.Forbidden,
+          'The resume storage key does not belong to this user',
+        ),
+      );
+    }
+
+    return ok(undefined);
   }
 }
