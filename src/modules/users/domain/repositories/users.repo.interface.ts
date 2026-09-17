@@ -41,4 +41,8 @@ export abstract class IUserRepository {
   abstract resolvePublicIdToId(
     publicId: string,
   ): Promise<Result<number | null, Error>>;
+
+  abstract checkUserExistsByPublicId(
+    publicId: string,
+  ): Promise<Result<boolean, Error>>;
 }

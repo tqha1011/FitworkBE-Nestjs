@@ -28,6 +28,15 @@ enum JobApplicantStatus {
   @@map("job_applicant_status")
 }
 
+enum EvaluationStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+
+  @@map("evaluation_status")
+}
+
 enum UserRole {
   ROLE_COMPANY
   ROLE_APPLICANT

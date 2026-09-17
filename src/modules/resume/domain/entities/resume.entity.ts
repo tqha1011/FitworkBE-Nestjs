@@ -4,21 +4,18 @@ import {
   ResumeDomainError,
   ResumeDomainErrorValidation,
 } from '../errors/resume-domain.error';
+import { CommonFileType } from 'src/shared/domain/enum';
 
 export const MAX_RESUME_FILE_SIZE = 5 * 1024 * 1024;
-
-export enum ResumeFileType {
-  PDF = 'PDF',
-  DOCX = 'DOCX',
-}
 
 export type ResumeGetParams = {
   readonly id: number;
   readonly publicId: string;
   readonly storagePath: string;
   readonly fileSize: number;
-  readonly fileType: ResumeFileType;
+  readonly fileType: CommonFileType;
   readonly fileName: string;
+  readonly isActive: boolean;
   readonly userId: number;
   readonly createdAt: Date;
   readonly updatedAt: Date;
@@ -26,7 +23,11 @@ export type ResumeGetParams = {
 
 export type ResumeCreateParams = Omit<
   ResumeGetParams,
-  'id' | 'publicId' | 'createdAt' | 'updatedAt'
+  'id' | 'publicId' | 'isActive' | 'createdAt' | 'updatedAt'
+>;
+
+export type ResumeUpdateParams = Partial<
+  Pick<ResumeGetParams, 'storagePath' | 'fileSize' | 'fileType' | 'fileName'>
 >;
 
 export class Resume {
@@ -46,6 +47,7 @@ export class Resume {
         ...params,
         id: 0,
         publicId: randomUUID(),
+        isActive: true,
         createdAt: now,
         updatedAt: now,
       }),
@@ -54,6 +56,22 @@ export class Resume {
 
   static restore(params: ResumeGetParams): Resume {
     return new Resume(params);
+  }
+
+  update(
+    params: ResumeUpdateParams,
+  ): Result<Resume, ResumeDomainErrorValidation> {
+    const updatedParams: ResumeGetParams = {
+      ...this.params,
+      ...params,
+      updatedAt: new Date(),
+    };
+    const validationResult = Resume.validate(updatedParams);
+    if (validationResult.isErr()) {
+      return err(validationResult.error);
+    }
+
+    return ok(new Resume(updatedParams));
   }
 
   private static validate(
@@ -81,7 +99,7 @@ export class Resume {
       );
     }
 
-    if (!Object.values(ResumeFileType).includes(params.fileType)) {
+    if (!Object.values(CommonFileType).includes(params.fileType)) {
       return err(
         new ResumeDomainErrorValidation(
           ResumeDomainError.InvalidFileType,
@@ -127,12 +145,16 @@ export class Resume {
     return this.params.fileSize;
   }
 
-  get fileType(): ResumeFileType {
+  get fileType(): CommonFileType {
     return this.params.fileType;
   }
 
   get fileName(): string {
     return this.params.fileName;
+  }
+
+  get isActive(): boolean {
+    return this.params.isActive;
   }
 
   get userId(): number {
