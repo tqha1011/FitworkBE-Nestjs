@@ -30,6 +30,8 @@ const fileTypeByContentType: Record<string, CommonFileType> = {
     CommonFileType.DOCX,
 };
 
+type ResumeOwnerAction = 'update' | 'delete';
+
 @Injectable()
 export class ResumeService implements IResumeService {
   constructor(
@@ -41,35 +43,15 @@ export class ResumeService implements IResumeService {
     userPublicId: string,
     resumePublicId: string,
   ): Promise<Result<undefined, AppError>> {
-    const [userIdResult, resumeResult] = await Promise.all([
-      this.userRepository.resolvePublicIdToId(userPublicId),
-      this.resumeRepo.getResumeByPublicId(resumePublicId),
-    ]);
-    if (userIdResult.isErr()) {
-      return err(
-        new AppError(ErrorCode.InternalServerError, 'Failed to resolve user'),
-      );
-    }
-    if (!userIdResult.value) {
-      return err(new AppError(ErrorCode.NotFound, 'User not found'));
+    const authorizedResumeResult = await this.authorizeResumeOwnerAsync(
+      userPublicId,
+      resumePublicId,
+      'delete',
+    );
+    if (authorizedResumeResult.isErr()) {
+      return err(authorizedResumeResult.error);
     }
 
-    if (resumeResult.isErr()) {
-      return err(
-        new AppError(ErrorCode.InternalServerError, 'Failed to get resume'),
-      );
-    }
-    if (!resumeResult.value) {
-      return err(new AppError(ErrorCode.NotFound, 'Resume not found'));
-    }
-    if (resumeResult.value.userId !== userIdResult.value) {
-      return err(
-        new AppError(
-          ErrorCode.Forbidden,
-          'You are not allowed to delete this resume',
-        ),
-      );
-    }
     const deleteResult = await this.resumeRepo.deleteResume(resumePublicId);
     if (deleteResult.isErr()) {
       return err(
@@ -83,35 +65,15 @@ export class ResumeService implements IResumeService {
     resumePublicId: string,
     resumeUpdateRequest: UpdateResumeRequestDto,
   ): Promise<Result<undefined, AppError>> {
-    const [userIdResult, resumeResult] = await Promise.all([
-      this.userRepository.resolvePublicIdToId(userPublicId),
-      this.resumeRepo.getResumeByPublicId(resumePublicId),
-    ]);
-    if (userIdResult.isErr()) {
-      return err(
-        new AppError(ErrorCode.InternalServerError, 'Failed to resolve user'),
-      );
-    }
-    if (!userIdResult.value) {
-      return err(new AppError(ErrorCode.NotFound, 'User not found'));
+    const authorizedResumeResult = await this.authorizeResumeOwnerAsync(
+      userPublicId,
+      resumePublicId,
+      'update',
+    );
+    if (authorizedResumeResult.isErr()) {
+      return err(authorizedResumeResult.error);
     }
 
-    if (resumeResult.isErr()) {
-      return err(
-        new AppError(ErrorCode.InternalServerError, 'Failed to get resume'),
-      );
-    }
-    if (!resumeResult.value) {
-      return err(new AppError(ErrorCode.NotFound, 'Resume not found'));
-    }
-    if (resumeResult.value.userId !== userIdResult.value) {
-      return err(
-        new AppError(
-          ErrorCode.Forbidden,
-          'You are not allowed to update this resume',
-        ),
-      );
-    }
     if (
       !this.isStorageKeyOwnedByUser(
         resumeUpdateRequest.storageKey,
@@ -161,7 +123,7 @@ export class ResumeService implements IResumeService {
       );
     }
 
-    const updatedResumeResult = resumeResult.value.update({
+    const updatedResumeResult = authorizedResumeResult.value.update({
       storagePath: resumeUpdateRequest.storageKey,
       fileSize: metadataResult.value.contentLength,
       fileType,
@@ -188,15 +150,9 @@ export class ResumeService implements IResumeService {
     userPublicId: string,
     resumeCreateRequest: CreateResumeRequestDto,
   ): Promise<Result<undefined, AppError>> {
-    const userIdResult =
-      await this.userRepository.resolvePublicIdToId(userPublicId);
+    const userIdResult = await this.resolveUserIdAsync(userPublicId);
     if (userIdResult.isErr()) {
-      return err(
-        new AppError(ErrorCode.InternalServerError, 'Failed to resolve user'),
-      );
-    }
-    if (!userIdResult.value) {
-      return err(new AppError(ErrorCode.NotFound, 'User not found'));
+      return err(userIdResult.error);
     }
 
     if (
@@ -361,6 +317,55 @@ export class ResumeService implements IResumeService {
   private buildStorageKey(userPublicId: string, extension: string): string {
     const uuid = randomUUID();
     return `user/${userPublicId}/${uuid}/cv.${extension}`;
+  }
+
+  private async resolveUserIdAsync(
+    userPublicId: string,
+  ): Promise<Result<number, AppError>> {
+    const userIdResult =
+      await this.userRepository.resolvePublicIdToId(userPublicId);
+    if (userIdResult.isErr()) {
+      return err(
+        new AppError(ErrorCode.InternalServerError, 'Failed to resolve user'),
+      );
+    }
+    if (!userIdResult.value) {
+      return err(new AppError(ErrorCode.NotFound, 'User not found'));
+    }
+
+    return ok(userIdResult.value);
+  }
+
+  private async authorizeResumeOwnerAsync(
+    userPublicId: string,
+    resumePublicId: string,
+    action: ResumeOwnerAction,
+  ): Promise<Result<Resume, AppError>> {
+    const [userIdResult, resumeResult] = await Promise.all([
+      this.resolveUserIdAsync(userPublicId),
+      this.resumeRepo.getResumeByPublicId(resumePublicId),
+    ]);
+    if (userIdResult.isErr()) {
+      return err(userIdResult.error);
+    }
+    if (resumeResult.isErr()) {
+      return err(
+        new AppError(ErrorCode.InternalServerError, 'Failed to get resume'),
+      );
+    }
+    if (!resumeResult.value) {
+      return err(new AppError(ErrorCode.NotFound, 'Resume not found'));
+    }
+    if (resumeResult.value.userId !== userIdResult.value) {
+      return err(
+        new AppError(
+          ErrorCode.Forbidden,
+          `You are not allowed to ${action} this resume`,
+        ),
+      );
+    }
+
+    return ok(resumeResult.value);
   }
 
   private isStorageKeyOwnedByUser(
