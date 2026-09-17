@@ -6,11 +6,61 @@ import {
   ResumeStorageData,
 } from '../domain/repositories/resume.repo.interface';
 import { Resume } from '../domain/entities/resume.entity';
-import { toPrismaFileType } from './resume.mapper';
+import { toCommonFileType, toPrismaFileType } from './resume.mapper';
 
 @Injectable()
 export class ResumeRepository implements IResumeRepository {
   constructor(private readonly prismaService: PrismaService) {}
+  async getResumeByPublicId(
+    publicId: string,
+  ): Promise<Result<Resume | null, Error>> {
+    try {
+      const resume = await this.prismaService.resume.findUnique({
+        where: { publicId },
+        select: {
+          id: true,
+          publicId: true,
+          storagePath: true,
+          fileSize: true,
+          fileType: true,
+          fileName: true,
+          userId: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+      if (!resume) {
+        return ok(null);
+      }
+
+      return ok(
+        Resume.restore({
+          ...resume,
+          fileType: toCommonFileType(resume.fileType),
+        }),
+      );
+    } catch (error) {
+      return err(new Error(`Failed to get resume by public id. ${error}`));
+    }
+  }
+
+  async updateResume(resume: Resume): Promise<Result<undefined, Error>> {
+    try {
+      await this.prismaService.resume.update({
+        where: { id: resume.id },
+        data: {
+          storagePath: resume.storagePath,
+          fileSize: resume.fileSize,
+          fileType: toPrismaFileType(resume.fileType),
+          fileName: resume.fileName,
+          updatedAt: resume.updatedAt,
+        },
+      });
+      return ok(undefined);
+    } catch (error) {
+      return err(new Error(`Failed to update resume. ${error}`));
+    }
+  }
 
   async addResume(resume: Resume): Promise<Result<undefined, Error>> {
     try {

@@ -5,6 +5,7 @@ import { AppError, ErrorCode } from 'src/shared/common/errorCode';
 import { ResumeUploadResponseDto } from '../dtos/resume.response.dto';
 import {
   CreateResumeRequestDto,
+  UpdateResumeRequestDto,
   UploadResumeRequestDto,
 } from '../dtos/resume.request.dto';
 import { IUserRepository } from 'src/modules/users/domain/repositories/users.repo.interface';
@@ -36,6 +37,112 @@ export class ResumeService implements IResumeService {
     private readonly fileStorage: IFileStorage,
     private readonly resumeRepo: IResumeRepository,
   ) {}
+  async updateResumeAsync(
+    userPublicId: string,
+    resumePublicId: string,
+    resumeUpdateRequest: UpdateResumeRequestDto,
+  ): Promise<Result<undefined, AppError>> {
+    const [userIdResult, resumeResult] = await Promise.all([
+      this.userRepository.resolvePublicIdToId(userPublicId),
+      this.resumeRepo.getResumeByPublicId(resumePublicId),
+    ]);
+    if (userIdResult.isErr()) {
+      return err(
+        new AppError(ErrorCode.InternalServerError, 'Failed to resolve user'),
+      );
+    }
+    if (!userIdResult.value) {
+      return err(new AppError(ErrorCode.NotFound, 'User not found'));
+    }
+
+    if (resumeResult.isErr()) {
+      return err(
+        new AppError(ErrorCode.InternalServerError, 'Failed to get resume'),
+      );
+    }
+    if (!resumeResult.value) {
+      return err(new AppError(ErrorCode.NotFound, 'Resume not found'));
+    }
+    if (resumeResult.value.userId !== userIdResult.value) {
+      return err(
+        new AppError(
+          ErrorCode.Forbidden,
+          'You are not allowed to update this resume',
+        ),
+      );
+    }
+    if (
+      !this.isStorageKeyOwnedByUser(
+        resumeUpdateRequest.storageKey,
+        userPublicId,
+      )
+    ) {
+      return err(
+        new AppError(
+          ErrorCode.Forbidden,
+          'The resume storage key does not belong to this user',
+        ),
+      );
+    }
+
+    const metadataResult = await this.fileStorage.getObjectMetadata(
+      resumeUpdateRequest.storageKey,
+    );
+    if (metadataResult.isErr()) {
+      return err(metadataResult.error);
+    }
+    if (!metadataResult.value) {
+      return err(new AppError(ErrorCode.NotFound, 'Uploaded resume not found'));
+    }
+
+    const contentType = metadataResult.value.contentType;
+    const fileType = contentType
+      ? fileTypeByContentType[contentType]
+      : undefined;
+    const extension = contentType
+      ? extensionByContentType[contentType]
+      : undefined;
+    if (!fileType || !extension) {
+      return err(
+        new AppError(
+          ErrorCode.BadRequest,
+          `Unsupported resume content type: ${contentType ?? 'unknown'}`,
+        ),
+      );
+    }
+
+    if (!resumeUpdateRequest.storageKey.endsWith(`/cv.${extension}`)) {
+      return err(
+        new AppError(
+          ErrorCode.BadRequest,
+          'Resume content type does not match its storage key',
+        ),
+      );
+    }
+
+    const updatedResumeResult = resumeResult.value.update({
+      storagePath: resumeUpdateRequest.storageKey,
+      fileSize: metadataResult.value.contentLength,
+      fileType,
+      fileName: resumeUpdateRequest.name.trim(),
+    });
+    if (updatedResumeResult.isErr()) {
+      return err(
+        new AppError(ErrorCode.BadRequest, updatedResumeResult.error.message),
+      );
+    }
+
+    const updateResult = await this.resumeRepo.updateResume(
+      updatedResumeResult.value,
+    );
+    if (updateResult.isErr()) {
+      return err(
+        new AppError(ErrorCode.InternalServerError, 'Failed to update resume'),
+      );
+    }
+
+    return ok(undefined);
+  }
   async createResumeAsync(
     userPublicId: string,
     resumeCreateRequest: CreateResumeRequestDto,

@@ -2,7 +2,10 @@ import { err, ok } from 'neverthrow';
 import { IUserRepository } from 'src/modules/users/domain/repositories/users.repo.interface';
 import { ErrorCode } from 'src/shared/common/errorCode';
 import { IFileStorage } from 'src/shared/infrastructure/storage/file-storage.interface';
-import { MAX_RESUME_FILE_SIZE } from '../../domain/entities/resume.entity';
+import {
+  MAX_RESUME_FILE_SIZE,
+  Resume,
+} from '../../domain/entities/resume.entity';
 import { IResumeRepository } from '../../domain/repositories/resume.repo.interface';
 import { ResumeService } from './resume.service';
 import { CommonFileType } from 'src/shared/domain/enum';
@@ -21,6 +24,10 @@ describe('ResumeService', () => {
   };
   let resumeRepository: {
     addResume: jest.MockedFunction<IResumeRepository['addResume']>;
+    updateResume: jest.MockedFunction<IResumeRepository['updateResume']>;
+    getResumeByPublicId: jest.MockedFunction<
+      IResumeRepository['getResumeByPublicId']
+    >;
   };
   let service: ResumeService;
 
@@ -33,12 +40,142 @@ describe('ResumeService', () => {
     };
     resumeRepository = {
       addResume: jest.fn(),
+      updateResume: jest.fn(),
+      getResumeByPublicId: jest.fn(),
     };
     service = new ResumeService(
       userRepository as unknown as IUserRepository,
       fileStorage as unknown as IFileStorage,
       resumeRepository as unknown as IResumeRepository,
     );
+  });
+
+  describe('updateResumeAsync', () => {
+    const resumePublicId = 'b1ad7d9d-8c47-4fd3-b70b-c7d25b109e21';
+    const originalStorageKey = `user/${userPublicId}/old-upload/cv.pdf`;
+
+    const restoreResume = (userId = 42) =>
+      Resume.restore({
+        id: 10,
+        publicId: resumePublicId,
+        storagePath: originalStorageKey,
+        fileSize: 512,
+        fileType: CommonFileType.PDF,
+        fileName: 'Old Resume.pdf',
+        userId,
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      });
+
+    it('updates a resume using uploaded object metadata', async () => {
+      userRepository.resolvePublicIdToId.mockResolvedValue(ok(42));
+      resumeRepository.getResumeByPublicId.mockResolvedValue(
+        ok(restoreResume()),
+      );
+      fileStorage.getObjectMetadata.mockResolvedValue(
+        ok({
+          contentType: 'application/pdf',
+          contentLength: 2048,
+          lastModified: new Date(),
+        }),
+      );
+      resumeRepository.updateResume.mockResolvedValue(ok(undefined));
+
+      const result = await service.updateResumeAsync(
+        userPublicId,
+        resumePublicId,
+        {
+          name: ' Updated Resume.pdf ',
+          storageKey,
+        },
+      );
+
+      expect(result.isOk()).toBe(true);
+      expect(resumeRepository.updateResume).toHaveBeenCalledTimes(1);
+      const updatedResume = resumeRepository.updateResume.mock.calls[0][0];
+      expect(updatedResume.id).toBe(10);
+      expect(updatedResume.publicId).toBe(resumePublicId);
+      expect(updatedResume.userId).toBe(42);
+      expect(updatedResume.storagePath).toBe(storageKey);
+      expect(updatedResume.fileSize).toBe(2048);
+      expect(updatedResume.fileType).toBe(CommonFileType.PDF);
+      expect(updatedResume.fileName).toBe('Updated Resume.pdf');
+    });
+
+    it('rejects an update from a user who does not own the resume', async () => {
+      userRepository.resolvePublicIdToId.mockResolvedValue(ok(42));
+      resumeRepository.getResumeByPublicId.mockResolvedValue(
+        ok(restoreResume(99)),
+      );
+
+      const result = await service.updateResumeAsync(
+        userPublicId,
+        resumePublicId,
+        {
+          name: 'Updated Resume.pdf',
+          storageKey,
+        },
+      );
+
+      expect(result.isErr()).toBe(true);
+      if (result.isErr()) {
+        expect(result.error.code).toBe(ErrorCode.Forbidden);
+      }
+      expect(fileStorage.getObjectMetadata).not.toHaveBeenCalled();
+      expect(resumeRepository.updateResume).not.toHaveBeenCalled();
+    });
+
+    it('rejects a replacement storage key owned by another user', async () => {
+      userRepository.resolvePublicIdToId.mockResolvedValue(ok(42));
+      resumeRepository.getResumeByPublicId.mockResolvedValue(
+        ok(restoreResume()),
+      );
+
+      const result = await service.updateResumeAsync(
+        userPublicId,
+        resumePublicId,
+        {
+          name: 'Updated Resume.pdf',
+          storageKey: 'user/another-user/upload-id/cv.pdf',
+        },
+      );
+
+      expect(result.isErr()).toBe(true);
+      if (result.isErr()) {
+        expect(result.error.code).toBe(ErrorCode.Forbidden);
+      }
+      expect(fileStorage.getObjectMetadata).not.toHaveBeenCalled();
+      expect(resumeRepository.updateResume).not.toHaveBeenCalled();
+    });
+
+    it('maps domain validation failures to a bad request', async () => {
+      userRepository.resolvePublicIdToId.mockResolvedValue(ok(42));
+      resumeRepository.getResumeByPublicId.mockResolvedValue(
+        ok(restoreResume()),
+      );
+      fileStorage.getObjectMetadata.mockResolvedValue(
+        ok({
+          contentType: 'application/pdf',
+          contentLength: MAX_RESUME_FILE_SIZE + 1,
+          lastModified: new Date(),
+        }),
+      );
+
+      const result = await service.updateResumeAsync(
+        userPublicId,
+        resumePublicId,
+        {
+          name: 'Updated Resume.pdf',
+          storageKey,
+        },
+      );
+
+      expect(result.isErr()).toBe(true);
+      if (result.isErr()) {
+        expect(result.error.code).toBe(ErrorCode.BadRequest);
+      }
+      expect(resumeRepository.updateResume).not.toHaveBeenCalled();
+    });
   });
 
   describe('createResumeAsync', () => {

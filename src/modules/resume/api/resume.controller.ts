@@ -55,14 +55,19 @@ export class ResumeController {
   async createResume(
     @User() user: JwtPayload,
     @Body() request: CreateResumeRequestDto,
-  ): Promise<void> {
+  ) {
     const result = await this.resumeService.createResumeAsync(
       user.sub,
       request,
     );
-    if (result.isErr()) {
-      throw toHttpException(result.error);
-    }
+    return result.match(
+      () => {
+        return { message: 'Created successfully' };
+      },
+      (error) => {
+        throw toHttpException(error);
+      },
+    );
   }
 
   @Get(':resumePublicId/download-url')

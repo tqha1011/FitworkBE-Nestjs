@@ -8,8 +8,6 @@ export class CreateResumeRequestDto {
   storageKey!: string;
 }
 
-export class UpdateResumeRequestDto {}
-
 export class UploadResumeRequestDto {
   @IsString()
   fileName!: string;
@@ -21,3 +19,5 @@ export class UploadResumeRequestDto {
   @IsPositive()
   fileSize!: number;
 }
+
+export class UpdateResumeRequestDto extends CreateResumeRequestDto {}

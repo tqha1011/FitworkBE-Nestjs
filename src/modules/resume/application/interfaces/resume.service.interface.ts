@@ -3,6 +3,7 @@ import { AppError } from 'src/shared/common/errorCode';
 import { ResumeUploadResponseDto } from '../dtos/resume.response.dto';
 import {
   CreateResumeRequestDto,
+  UpdateResumeRequestDto,
   UploadResumeRequestDto,
 } from '../dtos/resume.request.dto';
 import { CommonContentDisposition } from 'src/shared/domain/enum';
@@ -22,5 +23,11 @@ export abstract class IResumeService {
   abstract createResumeAsync(
     userPublicId: string,
     resumeCreateRequest: CreateResumeRequestDto,
+  ): Promise<Result<undefined, AppError>>;
+
+  abstract updateResumeAsync(
+    userPublicId: string,
+    resumePublicId: string,
+    resumeUpdateRequest: UpdateResumeRequestDto,
   ): Promise<Result<undefined, AppError>>;
 }

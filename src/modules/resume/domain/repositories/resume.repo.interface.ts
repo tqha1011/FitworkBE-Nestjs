@@ -13,6 +13,8 @@ export type ResumeStorageData = {
 export abstract class IResumeRepository {
   abstract addResume(resume: Resume): Promise<Result<undefined, Error>>;
 
+  abstract updateResume(resume: Resume): Promise<Result<undefined, Error>>;
+
   abstract resolvePublicIdToId(
     publicId: string,
   ): Promise<Result<number | null, Error>>;
@@ -20,4 +22,8 @@ export abstract class IResumeRepository {
   abstract getResumeStorageData(
     publicId: string,
   ): Promise<Result<ResumeStorageData | null, Error>>;
+
+  abstract getResumeByPublicId(
+    publicId: string,
+  ): Promise<Result<Resume | null, Error>>;
 }

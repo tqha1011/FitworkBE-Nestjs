@@ -25,6 +25,10 @@ export type ResumeCreateParams = Omit<
   'id' | 'publicId' | 'createdAt' | 'updatedAt'
 >;
 
+export type ResumeUpdateParams = Partial<
+  Pick<ResumeGetParams, 'storagePath' | 'fileSize' | 'fileType' | 'fileName'>
+>;
+
 export class Resume {
   private constructor(private readonly params: ResumeGetParams) {}
 
@@ -50,6 +54,22 @@ export class Resume {
 
   static restore(params: ResumeGetParams): Resume {
     return new Resume(params);
+  }
+
+  update(
+    params: ResumeUpdateParams,
+  ): Result<Resume, ResumeDomainErrorValidation> {
+    const updatedParams: ResumeGetParams = {
+      ...this.params,
+      ...params,
+      updatedAt: new Date(),
+    };
+    const validationResult = Resume.validate(updatedParams);
+    if (validationResult.isErr()) {
+      return err(validationResult.error);
+    }
+
+    return ok(new Resume(updatedParams));
   }
 
   private static validate(
