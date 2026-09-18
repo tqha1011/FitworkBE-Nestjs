@@ -6,7 +6,16 @@ import {
   ResumeStorageData,
 } from '../domain/repositories/resume.repo.interface';
 import { Resume } from '../domain/entities/resume.entity';
-import { toCommonFileType, toPrismaFileType } from './resume.mapper';
+import {
+  ResumeContentSnapshot,
+  ResumeIngestionReference,
+} from '../domain/entities/resume-content.entity';
+import {
+  toCommonFileType,
+  toCommonIngestionStatus,
+  toPrismaFileType,
+} from './resume.mapper';
+import { ResumeIngestionStatus } from 'generated/prisma/enums';
 
 @Injectable()
 export class ResumeRepository implements IResumeRepository {
@@ -58,43 +67,119 @@ export class ResumeRepository implements IResumeRepository {
     }
   }
 
-  async updateResume(resume: Resume): Promise<Result<undefined, Error>> {
+  async updateResumeWithPendingContent(
+    resume: Resume,
+    snapshot: ResumeContentSnapshot,
+  ): Promise<Result<ResumeIngestionReference, Error>> {
     try {
-      await this.prismaService.resume.update({
-        where: { id: resume.id },
-        data: {
-          storagePath: resume.storagePath,
-          fileSize: resume.fileSize,
-          fileType: toPrismaFileType(resume.fileType),
-          fileName: resume.fileName,
-          updatedAt: resume.updatedAt,
-        },
+      const ingestion = await this.prismaService.$transaction(async (tx) => {
+        await tx.resume.update({
+          where: { id: resume.id },
+          data: {
+            storagePath: resume.storagePath,
+            fileSize: resume.fileSize,
+            fileType: toPrismaFileType(resume.fileType),
+            fileName: resume.fileName,
+            updatedAt: resume.updatedAt,
+          },
+        });
+
+        const existing = await tx.resumeContent.findUnique({
+          where: {
+            resumeId_storagePath_parserVersion: {
+              resumeId: resume.id,
+              storagePath: snapshot.storagePath,
+              parserVersion: snapshot.parserVersion,
+            },
+          },
+          select: { publicId: true, status: true },
+        });
+
+        if (!existing) {
+          return tx.resumeContent.create({
+            data: this.pendingContentData(resume.id, snapshot),
+            select: { publicId: true, status: true },
+          });
+        }
+
+        if (existing.status === ResumeIngestionStatus.FAILED) {
+          return tx.resumeContent.update({
+            where: { publicId: existing.publicId },
+            data: {
+              status: ResumeIngestionStatus.PENDING,
+              errorMessage: null,
+              extractedText: null,
+              contentHash: null,
+              startedAt: null,
+              completedAt: null,
+            },
+            select: { publicId: true, status: true },
+          });
+        }
+
+        return existing;
       });
-      return ok(undefined);
+
+      return ok({
+        publicId: resume.publicId,
+        ingestionPublicId: ingestion.publicId,
+        ingestionStatus: toCommonIngestionStatus(ingestion.status),
+      });
     } catch (error) {
-      return err(new Error(`Failed to update resume. ${error}`));
+      return err(new Error(`Failed to update resume with content. ${error}`));
     }
   }
 
-  async addResume(resume: Resume): Promise<Result<undefined, Error>> {
+  async addResumeWithPendingContent(
+    resume: Resume,
+    snapshot: ResumeContentSnapshot,
+  ): Promise<Result<ResumeIngestionReference, Error>> {
     try {
-      await this.prismaService.resume.create({
-        data: {
-          publicId: resume.publicId,
-          storagePath: resume.storagePath,
-          fileSize: resume.fileSize,
-          fileType: toPrismaFileType(resume.fileType),
-          fileName: resume.fileName,
-          isActive: resume.isActive,
-          userId: resume.userId,
-          createdAt: resume.createdAt,
-          updatedAt: resume.updatedAt,
-        },
+      const ingestion = await this.prismaService.$transaction(async (tx) => {
+        const createdResume = await tx.resume.create({
+          data: {
+            publicId: resume.publicId,
+            storagePath: resume.storagePath,
+            fileSize: resume.fileSize,
+            fileType: toPrismaFileType(resume.fileType),
+            fileName: resume.fileName,
+            isActive: resume.isActive,
+            userId: resume.userId,
+            createdAt: resume.createdAt,
+            updatedAt: resume.updatedAt,
+          },
+          select: { id: true },
+        });
+
+        return tx.resumeContent.create({
+          data: this.pendingContentData(createdResume.id, snapshot),
+          select: { publicId: true, status: true },
+        });
       });
-      return ok(undefined);
+
+      return ok({
+        publicId: resume.publicId,
+        ingestionPublicId: ingestion.publicId,
+        ingestionStatus: toCommonIngestionStatus(ingestion.status),
+      });
     } catch (error) {
-      return err(new Error(`Failed to add resume. ${error}`));
+      return err(new Error(`Failed to add resume with content. ${error}`));
     }
+  }
+
+  private pendingContentData(
+    resumeId: number,
+    snapshot: ResumeContentSnapshot,
+  ) {
+    return {
+      resumeId,
+      storagePath: snapshot.storagePath,
+      fileSize: snapshot.fileSize,
+      fileType: toPrismaFileType(snapshot.fileType),
+      fileName: snapshot.fileName,
+      parserVersion: snapshot.parserVersion,
+      status: ResumeIngestionStatus.PENDING,
+    };
   }
 
   async getResumeStorageData(

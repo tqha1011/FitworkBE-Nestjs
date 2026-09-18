@@ -1,5 +1,9 @@
 import { Result } from 'neverthrow';
 import { Resume } from '../entities/resume.entity';
+import {
+  ResumeContentSnapshot,
+  ResumeIngestionReference,
+} from '../entities/resume-content.entity';
 
 export type ResumeStorageData = {
   resumeId: number;
@@ -11,9 +15,15 @@ export type ResumeStorageData = {
 };
 
 export abstract class IResumeRepository {
-  abstract addResume(resume: Resume): Promise<Result<undefined, Error>>;
+  abstract addResumeWithPendingContent(
+    resume: Resume,
+    snapshot: ResumeContentSnapshot,
+  ): Promise<Result<ResumeIngestionReference, Error>>;
 
-  abstract updateResume(resume: Resume): Promise<Result<undefined, Error>>;
+  abstract updateResumeWithPendingContent(
+    resume: Resume,
+    snapshot: ResumeContentSnapshot,
+  ): Promise<Result<ResumeIngestionReference, Error>>;
 
   abstract resolvePublicIdToId(
     publicId: string,

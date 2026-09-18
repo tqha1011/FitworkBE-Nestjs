@@ -25,6 +25,7 @@ import {
 } from '../application/dtos/resume.request.dto';
 import {
   ResumeDownloadUrlResponseDto,
+  ResumeResponseDto,
   ResumeUploadResponseDto,
 } from '../application/dtos/resume.response.dto';
 import { IResumeService } from '../application/interfaces/resume.service.interface';
@@ -60,15 +61,13 @@ export class ResumeController {
   async createResume(
     @User() user: JwtPayload,
     @Body() request: CreateResumeRequestDto,
-  ) {
+  ): Promise<ResumeResponseDto> {
     const result = await this.resumeService.createResumeAsync(
       user.sub,
       request,
     );
     return result.match(
-      () => {
-        return { message: 'Created successfully' };
-      },
+      (value) => value,
       (error) => {
         throw toHttpException(error);
       },
@@ -82,7 +81,7 @@ export class ResumeController {
     @User() user: JwtPayload,
     @Param('resumePublicId') resumePublicId: string,
     @Body() request: UpdateResumeRequestDto,
-  ): Promise<void> {
+  ): Promise<ResumeResponseDto> {
     const result = await this.resumeService.updateResumeAsync(
       user.sub,
       resumePublicId,
@@ -91,6 +90,7 @@ export class ResumeController {
     if (result.isErr()) {
       throw toHttpException(result.error);
     }
+    return result.value;
   }
 
   @Delete(':resumePublicId')

@@ -1,6 +1,9 @@
 import { Result } from 'neverthrow';
 import { AppError } from 'src/shared/common/errorCode';
-import { ResumeUploadResponseDto } from '../dtos/resume.response.dto';
+import {
+  ResumeResponseDto,
+  ResumeUploadResponseDto,
+} from '../dtos/resume.response.dto';
 import {
   CreateResumeRequestDto,
   UpdateResumeRequestDto,
@@ -23,13 +26,13 @@ export abstract class IResumeService {
   abstract createResumeAsync(
     userPublicId: string,
     resumeCreateRequest: CreateResumeRequestDto,
-  ): Promise<Result<undefined, AppError>>;
+  ): Promise<Result<ResumeResponseDto, AppError>>;
 
   abstract updateResumeAsync(
     userPublicId: string,
     resumePublicId: string,
     resumeUpdateRequest: UpdateResumeRequestDto,
-  ): Promise<Result<undefined, AppError>>;
+  ): Promise<Result<ResumeResponseDto, AppError>>;
 
   abstract deleteResumeAsync(
     userPublicId: string,

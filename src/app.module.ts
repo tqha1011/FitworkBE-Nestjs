@@ -13,6 +13,7 @@ import { JobModule } from './modules/job/job.module';
 import { ResumeModule } from './modules/resume/resume.module';
 import { LoggerMiddleware } from './shared/common/logger.middleware';
 import { PrismaModule } from './shared/infrastructure/database/prisma.module';
+import { QueueModule } from './shared/infrastructure/queue/queue.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { PrismaModule } from './shared/infrastructure/database/prisma.module';
       isGlobal: true,
     }),
     PrismaModule,
+    QueueModule,
     ConfigModule,
     UsersModule,
     AuthModule,

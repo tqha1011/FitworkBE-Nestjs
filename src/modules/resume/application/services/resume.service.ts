@@ -2,7 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { IResumeService } from '../interfaces/resume.service.interface';
 import { err, ok, Result } from 'neverthrow';
 import { AppError, ErrorCode } from 'src/shared/common/errorCode';
-import { ResumeUploadResponseDto } from '../dtos/resume.response.dto';
+import {
+  ResumeResponseDto,
+  ResumeUploadResponseDto,
+} from '../dtos/resume.response.dto';
 import {
   CreateResumeRequestDto,
   UpdateResumeRequestDto,
@@ -17,6 +20,11 @@ import {
   CommonFileType,
 } from 'src/shared/domain/enum';
 import { Resume } from '../../domain/entities/resume.entity';
+import { IResumeIngestionQueue } from '../interfaces/resume-ingestion-queue.interface';
+import { IResumeTextExtractor } from '../interfaces/resume-text-extractor.interface';
+import { IResumeContentRepository } from '../../domain/repositories/resume-content.repo.interface';
+import { IResumeIngestionNotifier } from '../interfaces/resume-ingestion-notifier.interface';
+import { CommonResumeIngestionStatus } from 'src/shared/domain/enum';
 
 export const extensionByContentType: Record<string, string> = {
   'application/pdf': 'pdf',
@@ -38,6 +46,10 @@ export class ResumeService implements IResumeService {
     private readonly userRepository: IUserRepository,
     private readonly fileStorage: IFileStorage,
     private readonly resumeRepo: IResumeRepository,
+    private readonly ingestionQueue: IResumeIngestionQueue,
+    private readonly textExtractor: IResumeTextExtractor,
+    private readonly contentRepository: IResumeContentRepository,
+    private readonly notifier: IResumeIngestionNotifier,
   ) {}
 
   async deleteResumeAsync(
@@ -66,7 +78,7 @@ export class ResumeService implements IResumeService {
     userPublicId: string,
     resumePublicId: string,
     resumeUpdateRequest: UpdateResumeRequestDto,
-  ): Promise<Result<undefined, AppError>> {
+  ): Promise<Result<ResumeResponseDto, AppError>> {
     const authorizedResumeResult = await this.authorizeResumeOwnerAsync(
       userPublicId,
       resumePublicId,
@@ -131,8 +143,16 @@ export class ResumeService implements IResumeService {
       );
     }
 
-    const updateResult = await this.resumeRepo.updateResume(
-      updatedResumeResult.value,
+    const updatedResume = updatedResumeResult.value;
+    const updateResult = await this.resumeRepo.updateResumeWithPendingContent(
+      updatedResume,
+      {
+        storagePath: updatedResume.storagePath,
+        fileSize: updatedResume.fileSize,
+        fileType: updatedResume.fileType,
+        fileName: updatedResume.fileName,
+        parserVersion: this.textExtractor.parserVersion(updatedResume.fileType),
+      },
     );
     if (updateResult.isErr()) {
       return err(
@@ -140,12 +160,16 @@ export class ResumeService implements IResumeService {
       );
     }
 
-    return ok(undefined);
+    const enqueueResult = await this.enqueueIngestion(updateResult.value);
+    if (enqueueResult.isErr()) {
+      return err(enqueueResult.error);
+    }
+    return ok(updateResult.value);
   }
   async createResumeAsync(
     userPublicId: string,
     resumeCreateRequest: CreateResumeRequestDto,
-  ): Promise<Result<undefined, AppError>> {
+  ): Promise<Result<ResumeResponseDto, AppError>> {
     const userIdResult = await this.resolveUserIdAsync(userPublicId);
     if (userIdResult.isErr()) {
       return err(userIdResult.error);
@@ -207,14 +231,28 @@ export class ResumeService implements IResumeService {
       );
     }
 
-    const addResult = await this.resumeRepo.addResume(resumeResult.value);
+    const resume = resumeResult.value;
+    const addResult = await this.resumeRepo.addResumeWithPendingContent(
+      resume,
+      {
+        storagePath: resume.storagePath,
+        fileSize: resume.fileSize,
+        fileType: resume.fileType,
+        fileName: resume.fileName,
+        parserVersion: this.textExtractor.parserVersion(resume.fileType),
+      },
+    );
     if (addResult.isErr()) {
       return err(
         new AppError(ErrorCode.InternalServerError, 'Failed to create resume'),
       );
     }
 
-    return ok(undefined);
+    const enqueueResult = await this.enqueueIngestion(addResult.value);
+    if (enqueueResult.isErr()) {
+      return err(enqueueResult.error);
+    }
+    return ok(addResult.value);
   }
   async getDownloadUrlAsync(
     userPublicId: string,
@@ -372,5 +410,42 @@ export class ResumeService implements IResumeService {
     }
 
     return ok(undefined);
+  }
+
+  private async enqueueIngestion(
+    reference: ResumeResponseDto,
+  ): Promise<Result<undefined, AppError>> {
+    if (reference.ingestionStatus === CommonResumeIngestionStatus.COMPLETED) {
+      return ok(undefined);
+    }
+
+    try {
+      await this.ingestionQueue.enqueue({
+        resumePublicId: reference.publicId,
+        resumeContentPublicId: reference.ingestionPublicId,
+      });
+      return ok(undefined);
+    } catch (error) {
+      const message = `Failed to enqueue resume ingestion: ${error instanceof Error ? error.message : String(error)}`;
+      const failedResult = await this.contentRepository.markFailed(
+        reference.ingestionPublicId,
+        message,
+      );
+      if (failedResult.isOk() && failedResult.value) {
+        await this.notifier.notify({
+          resumePublicId: failedResult.value.resumePublicId,
+          ingestionPublicId: failedResult.value.publicId,
+          status: failedResult.value.status,
+          errorMessage: failedResult.value.errorMessage ?? message,
+          updatedAt: failedResult.value.updatedAt.toISOString(),
+        });
+      }
+      return err(
+        new AppError(
+          ErrorCode.InternalServerError,
+          'Failed to enqueue resume ingestion',
+        ),
+      );
+    }
   }
 }

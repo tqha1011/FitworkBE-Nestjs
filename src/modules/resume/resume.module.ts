@@ -9,6 +9,19 @@ import { IResumeRepository } from './domain/repositories/resume.repo.interface';
 import { ResumeRepository } from './infrastructure/resume.repo';
 import { IFileStorage } from 'src/shared/infrastructure/storage/file-storage.interface';
 import { FileStorage } from 'src/shared/infrastructure/storage/file-storage';
+import { IResumeContentRepository } from './domain/repositories/resume-content.repo.interface';
+import { ResumeContentRepository } from './infrastructure/resume-content.repo';
+import { IResumeIngestionQueue } from './application/interfaces/resume-ingestion-queue.interface';
+import { ResumeIngestionQueue } from './infrastructure/resume-ingestion.queue';
+import { IResumeTextExtractor } from './application/interfaces/resume-text-extractor.interface';
+import { ResumeTextExtractor } from './infrastructure/resume-text-extractor';
+import { PDFParserService } from 'src/shared/infrastructure/parser/pdf-parser.service';
+import { DocxParserService } from 'src/shared/infrastructure/parser/docx-parser.service';
+import { IResumeIngestionService } from './application/interfaces/resume-ingestion.service.interface';
+import { ResumeIngestionService } from './application/services/resume-ingestion.service';
+import { ResumeIngestionProcessor } from './infrastructure/resume-ingestion.processor';
+import { ResumeIngestionGateway } from './api/resume-ingestion.gateway';
+import { IResumeIngestionNotifier } from './application/interfaces/resume-ingestion-notifier.interface';
 
 @Module({
   imports: [
@@ -28,9 +41,32 @@ import { FileStorage } from 'src/shared/infrastructure/storage/file-storage';
   ],
   controllers: [ResumeController],
   providers: [
-    { provide: IResumeRepository, useClass: ResumeRepository },
+    ResumeRepository,
+    { provide: IResumeRepository, useExisting: ResumeRepository },
+    ResumeContentRepository,
+    {
+      provide: IResumeContentRepository,
+      useExisting: ResumeContentRepository,
+    },
     { provide: IResumeService, useClass: ResumeService },
     { provide: IFileStorage, useClass: FileStorage },
+    ResumeIngestionQueue,
+    { provide: IResumeIngestionQueue, useExisting: ResumeIngestionQueue },
+    PDFParserService,
+    DocxParserService,
+    ResumeTextExtractor,
+    { provide: IResumeTextExtractor, useExisting: ResumeTextExtractor },
+    ResumeIngestionGateway,
+    {
+      provide: IResumeIngestionNotifier,
+      useExisting: ResumeIngestionGateway,
+    },
+    ResumeIngestionService,
+    {
+      provide: IResumeIngestionService,
+      useExisting: ResumeIngestionService,
+    },
+    ResumeIngestionProcessor,
   ],
   exports: [IResumeRepository, IResumeService],
 })
