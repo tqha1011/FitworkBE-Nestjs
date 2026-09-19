@@ -4,7 +4,7 @@ import { Queue } from 'bullmq';
 import { IResumeIngestionQueue } from '../application/interfaces/resume-ingestion-queue.interface';
 import { EventName } from 'src/shared/infrastructure/queue/constant/event-name';
 import { QueueName } from 'src/shared/infrastructure/queue/constant/queue-name';
-import { IngestionJobRequestDto } from 'src/shared/infrastructure/queue/type/ingestion-job.request.dto';
+import { ResumeIngestionJobDto } from '../application/dtos/resume-ingestion-job.dto';
 
 export const RESUME_INGESTION_ATTEMPTS = 3;
 
@@ -12,10 +12,10 @@ export const RESUME_INGESTION_ATTEMPTS = 3;
 export class ResumeIngestionQueue implements IResumeIngestionQueue {
   constructor(
     @InjectQueue(QueueName.ResumeIngestion)
-    private readonly queue: Queue<IngestionJobRequestDto>,
+    private readonly queue: Queue<ResumeIngestionJobDto>,
   ) {}
 
-  async enqueue(payload: IngestionJobRequestDto): Promise<void> {
+  async enqueue(payload: ResumeIngestionJobDto): Promise<void> {
     const jobId = payload.resumeContentPublicId;
     const existingJob = await this.queue.getJob(jobId);
     if (existingJob) {

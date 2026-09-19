@@ -2,7 +2,7 @@ import { createHash } from 'crypto';
 import { Injectable } from '@nestjs/common';
 import { CommonResumeIngestionStatus } from 'src/shared/domain/enum';
 import { IFileStorage } from 'src/shared/infrastructure/storage/file-storage.interface';
-import { IngestionJobRequestDto } from 'src/shared/infrastructure/queue/type/ingestion-job.request.dto';
+import { ResumeIngestionJobDto } from '../dtos/resume-ingestion-job.dto';
 import { MAX_RESUME_FILE_SIZE } from '../../domain/entities/resume.entity';
 import { IResumeContentRepository } from '../../domain/repositories/resume-content.repo.interface';
 import { IResumeIngestionNotifier } from '../interfaces/resume-ingestion-notifier.interface';
@@ -19,7 +19,7 @@ export class ResumeIngestionService implements IResumeIngestionService {
   ) {}
 
   async ingest(
-    payload: IngestionJobRequestDto,
+    payload: ResumeIngestionJobDto,
     attemptsMade: number,
     maxAttempts: number,
   ): Promise<void> {

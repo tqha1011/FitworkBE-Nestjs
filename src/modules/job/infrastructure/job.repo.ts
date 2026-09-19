@@ -1,5 +1,8 @@
 import { err, Result } from 'neverthrow';
-import { IJobRepository } from '../domain/repositories/job.repo.interface';
+import {
+  IJobRepository,
+  JobSnapshotData,
+} from '../domain/repositories/job.repo.interface';
 import { PrismaService } from 'src/shared/infrastructure/database/prisma.service';
 import { ok } from 'neverthrow';
 import { Job } from '../domain/entities/job.entity';
@@ -28,6 +31,64 @@ export class JobRepository
   implements IJobRepository, IJobQueryRepository, IJobApplicantQueryRepo
 {
   constructor(private readonly prismaService: PrismaService) {}
+
+  async getJobDataForSnapshot(
+    jobPublicId: string,
+  ): Promise<Result<JobSnapshotData | null, Error>> {
+    try {
+      const job = await this.prismaService.job.findUnique({
+        where: { publicId: jobPublicId },
+        select: {
+          id: true,
+          publicId: true,
+          title: true,
+          description: true,
+          requirements: true,
+          location: true,
+          jobSkills: {
+            select: {
+              skill: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+            orderBy: { skillId: 'asc' },
+          },
+          category: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          arrangement: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      });
+      if (!job) return ok(null);
+      return ok({
+        jobId: job.id,
+        snapshot: {
+          schemaVersion: 1,
+          publicId: job.publicId,
+          title: job.title,
+          description: job.description,
+          requirements: job.requirements,
+          location: job.location,
+          skills: job.jobSkills.map((jobSkill) => jobSkill.skill),
+          category: job.category,
+          arrangement: job.arrangement,
+        },
+      });
+    } catch (error) {
+      return err(new Error(`Failed to get job data for snapshot: ${error}`));
+    }
+  }
 
   async getJobsAppliedAsync(
     userId: number,

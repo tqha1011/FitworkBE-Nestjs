@@ -1,6 +1,6 @@
 import { Queue } from 'bullmq';
 import { EventName } from 'src/shared/infrastructure/queue/constant/event-name';
-import { IngestionJobRequestDto } from 'src/shared/infrastructure/queue/type/ingestion-job.request.dto';
+import { ResumeIngestionJobDto } from '../application/dtos/resume-ingestion-job.dto';
 import {
   RESUME_INGESTION_ATTEMPTS,
   ResumeIngestionQueue,
@@ -24,7 +24,7 @@ describe('ResumeIngestionQueue', () => {
       add: jest.fn().mockResolvedValue(undefined),
     };
     producer = new ResumeIngestionQueue(
-      queue as unknown as Queue<IngestionJobRequestDto>,
+      queue as unknown as Queue<ResumeIngestionJobDto>,
     );
   });
 

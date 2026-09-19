@@ -2,7 +2,7 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { IResumeIngestionService } from '../application/interfaces/resume-ingestion.service.interface';
 import { QueueName } from 'src/shared/infrastructure/queue/constant/queue-name';
-import { IngestionJobRequestDto } from 'src/shared/infrastructure/queue/type/ingestion-job.request.dto';
+import { ResumeIngestionJobDto } from '../application/dtos/resume-ingestion-job.dto';
 
 @Processor(QueueName.ResumeIngestion, { concurrency: 2 })
 export class ResumeIngestionProcessor extends WorkerHost {
@@ -10,7 +10,7 @@ export class ResumeIngestionProcessor extends WorkerHost {
     super();
   }
 
-  async process(job: Job<IngestionJobRequestDto>): Promise<void> {
+  async process(job: Job<ResumeIngestionJobDto>): Promise<void> {
     await this.ingestionService.ingest(
       job.data,
       job.attemptsMade,

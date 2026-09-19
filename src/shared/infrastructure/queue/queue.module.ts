@@ -30,9 +30,14 @@ function connectionFromUrl(redisUrl: string) {
       }),
     }),
 
-    BullModule.registerQueue({
-      name: QueueName.ResumeIngestion,
-    }),
+    BullModule.registerQueue(
+      {
+        name: QueueName.ResumeIngestion,
+      },
+      {
+        name: QueueName.LlmEvaluation,
+      },
+    ),
   ],
   exports: [BullModule],
 })
