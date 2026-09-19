@@ -6,7 +6,10 @@ import {
   JobUpdateRequestDto,
 } from '../dtos/job.request.dto';
 import { PageResult, PaginationRequest } from 'src/shared/common/pagination';
-import { JobItemResponseDto } from '../dtos/job.response.dto';
+import {
+  JobApplicantItemResponseDto,
+  JobItemResponseDto,
+} from '../dtos/job.response.dto';
 
 export abstract class IJobService {
   abstract createJobAsync(
@@ -18,6 +21,11 @@ export abstract class IJobService {
     request: GetJobListRequestDto,
     pagination: PaginationRequest,
   ): Promise<Result<PageResult<JobItemResponseDto>, AppError>>;
+
+  abstract getJobsAppliedAsync(
+    userPublicId: string,
+    pagination: PaginationRequest,
+  ): Promise<Result<PageResult<JobApplicantItemResponseDto>, AppError>>;
 
   abstract updateJobAsync(
     userPublicId: string,

@@ -18,20 +18,28 @@ model Resume {
 }
 
 model ResumeContent {
-  id             Int            @id @default(autoincrement())
-  resume         Resume         @relation(fields: [resumeId], references: [id])
-  resumeId       Int            @map("resume_id")
-  storagePath    String         @map("storage_path")
-  fileSize       Int            @map("file_size")
-  fileType       FileType       @map("file_type")
-  fileName       String         @map("file_name")
-  extractedText  String         @map("extracted_text") @db.Text
-  structuredData Json           @map("structured_data")
-  contentHash    String         @map("content_hash") @db.VarChar(64)
-  parserVersion  String         @map("parser_version")
-  createdAt      DateTime       @default(now()) @map("created_at")
+  id             Int                   @id @default(autoincrement())
+  publicId       String                @unique @default(uuid()) @map("public_id")
+  resume         Resume                @relation(fields: [resumeId], references: [id])
+  resumeId       Int                   @map("resume_id")
+  status         ResumeIngestionStatus @default(PENDING)
+  errorMessage   String?               @map("error_message") @db.Text
+  storagePath    String                @map("storage_path")
+  fileSize       Int                   @map("file_size")
+  fileType       FileType              @map("file_type")
+  fileName       String                @map("file_name")
+  extractedText  String?               @map("extracted_text") @db.Text
+  structuredData Json?                 @map("structured_data")
+  contentHash    String?               @map("content_hash") @db.VarChar(64)
+  parserVersion  String                @map("parser_version")
+  startedAt      DateTime?             @map("started_at")
+  completedAt    DateTime?             @map("completed_at")
+  createdAt      DateTime              @default(now()) @map("created_at")
+  updatedAt      DateTime              @updatedAt @map("updated_at")
   jobApplicants  JobApplicant[]
 
-  @@unique([resumeId, contentHash, parserVersion], map: "resume_content_version_key")
+  @@unique([resumeId, storagePath, parserVersion], map: "resume_content_version_key")
+  @@index([contentHash])
+  @@index([resumeId, status])
   @@map("resume_content")
 }

@@ -10,23 +10,63 @@ import {
   GetJobListRequestDto,
   JobUpdateRequestDto,
 } from '../dtos/job.request.dto';
-import { JobItemResponseDto } from '../dtos/job.response.dto';
+import {
+  JobApplicantItemResponseDto,
+  JobItemResponseDto,
+} from '../dtos/job.response.dto';
 import { IUserRepository } from 'src/modules/users/domain/repositories/users.repo.interface';
 import { PageResult, PaginationRequest } from 'src/shared/common/pagination';
 import { ISkillRepository } from '../../domain/repositories/skill.repo.interface';
 import { ICategoryRepository } from '../../domain/repositories/category.repo.interface';
 import { IArrangementRepository } from '../../domain/repositories/arrangement.repo.interface';
+import { IJobApplicantQueryRepo } from '../interfaces/job-applicant.query-repo.interface';
 
 @Injectable()
 export class JobService implements IJobService {
   constructor(
     private readonly jobRepository: IJobRepository,
     private readonly jobQueryRepository: IJobQueryRepository,
+    private readonly jobApplicantQueryRepo: IJobApplicantQueryRepo,
     private readonly userRepository: IUserRepository,
     private readonly skillRepository: ISkillRepository,
     private readonly categoryRepository: ICategoryRepository,
     private readonly arrangementRepository: IArrangementRepository,
   ) {}
+
+  async getJobsAppliedAsync(
+    userPublicId: string,
+    pagination: PaginationRequest,
+  ): Promise<Result<PageResult<JobApplicantItemResponseDto>, AppError>> {
+    const userIdResult =
+      await this.userRepository.resolvePublicIdToId(userPublicId);
+    if (userIdResult.isErr()) {
+      return err(
+        new AppError(
+          ErrorCode.InternalServerError,
+          'Failed to resolve applicant',
+        ),
+      );
+    }
+    if (!userIdResult.value) {
+      return err(new AppError(ErrorCode.NotFound, 'Applicant not found'));
+    }
+
+    const result = await this.jobApplicantQueryRepo.getJobsAppliedAsync(
+      userIdResult.value,
+      pagination.pageNumber,
+      pagination.pageSize,
+    );
+    if (result.isErr()) {
+      return err(
+        new AppError(
+          ErrorCode.InternalServerError,
+          'Failed to get jobs applied',
+        ),
+      );
+    }
+
+    return ok(result.value);
+  }
 
   async createJobAsync(
     postedByPublicId: string,

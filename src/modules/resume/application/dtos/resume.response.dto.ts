@@ -1,5 +1,9 @@
+import { CommonResumeIngestionStatus } from 'src/shared/domain/enum';
+
 export type ResumeResponseDto = {
   publicId: string;
+  ingestionPublicId: string;
+  ingestionStatus: CommonResumeIngestionStatus;
 };
 
 export type ResumeUploadResponseDto = {

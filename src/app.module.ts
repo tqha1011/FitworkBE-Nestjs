@@ -13,18 +13,24 @@ import { JobModule } from './modules/job/job.module';
 import { ResumeModule } from './modules/resume/resume.module';
 import { LoggerMiddleware } from './shared/common/logger.middleware';
 import { PrismaModule } from './shared/infrastructure/database/prisma.module';
+import { QueueModule } from './shared/infrastructure/queue/queue.module';
+import { RealtimeModule } from './modules/realtime/realtime.module';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+    EventEmitterModule.forRoot(),
     PrismaModule,
+    QueueModule,
     ConfigModule,
     UsersModule,
     AuthModule,
     JobModule,
     ResumeModule,
+    RealtimeModule,
   ],
   providers: [
     {

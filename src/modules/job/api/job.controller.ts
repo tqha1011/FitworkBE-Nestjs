@@ -19,6 +19,7 @@ import {
   JobUpdateRequestDto,
 } from '../application/dtos/job.request.dto';
 import {
+  JobApplicantItemResponseDto,
   JobApplicantResponseDto,
   JobItemResponseDto,
 } from '../application/dtos/job.response.dto';
@@ -26,7 +27,7 @@ import { IJobService } from '../application/interfaces/job.service.interface';
 import { IJobApplicantService } from '../application/interfaces/job-applicant.service.interface';
 import { ICategoryService } from '../application/interfaces/category.service.interface';
 import { IArrangementService } from '../application/interfaces/arrangement.service.interface';
-import { PageResult } from 'src/shared/common/pagination';
+import { PageResult, PaginationQueryDto } from 'src/shared/common/pagination';
 
 @ApiTags('job')
 @Controller('/api/job')
@@ -60,6 +61,22 @@ export class JobController {
       pageNumber: query.pageNumber,
       pageSize: query.pageSize,
     });
+    return result.match(
+      (value) => value,
+      (error) => {
+        throw toHttpException(error);
+      },
+    );
+  }
+
+  @Get('applied')
+  @Auth()
+  @ApiOperation({ summary: 'Get jobs applied by the current user' })
+  async getJobsApplied(
+    @User() user: JwtPayload,
+    @Query() query: PaginationQueryDto,
+  ): Promise<PageResult<JobApplicantItemResponseDto>> {
+    const result = await this.jobService.getJobsAppliedAsync(user.sub, query);
     return result.match(
       (value) => value,
       (error) => {

@@ -9,6 +9,9 @@ import {
 import { IResumeRepository } from '../../domain/repositories/resume.repo.interface';
 import { ResumeService } from './resume.service';
 import { CommonFileType } from 'src/shared/domain/enum';
+import { CommonResumeIngestionStatus } from 'src/shared/domain/enum';
+import { IResumeTextExtractor } from '../interfaces/resume-text-extractor.interface';
+import { IResumeContentRepository } from '../../domain/repositories/resume-content.repo.interface';
 
 describe('ResumeService', () => {
   const userPublicId = '8c6cf582-9a29-48ed-a31f-93f9d78bb701';
@@ -23,13 +26,21 @@ describe('ResumeService', () => {
     getObjectMetadata: jest.MockedFunction<IFileStorage['getObjectMetadata']>;
   };
   let resumeRepository: {
-    addResume: jest.MockedFunction<IResumeRepository['addResume']>;
-    updateResume: jest.MockedFunction<IResumeRepository['updateResume']>;
+    addResumeWithPendingContent: jest.MockedFunction<
+      IResumeRepository['addResumeWithPendingContent']
+    >;
+    updateResumeWithPendingContent: jest.MockedFunction<
+      IResumeRepository['updateResumeWithPendingContent']
+    >;
     deleteResume: jest.MockedFunction<IResumeRepository['deleteResume']>;
     getResumeByPublicId: jest.MockedFunction<
       IResumeRepository['getResumeByPublicId']
     >;
   };
+  let ingestionQueue: { enqueue: jest.Mock };
+  let textExtractor: { parserVersion: jest.Mock };
+  let contentRepository: { markFailed: jest.Mock };
+  let notifier: { notify: jest.Mock };
   let service: ResumeService;
 
   beforeEach(() => {
@@ -40,15 +51,25 @@ describe('ResumeService', () => {
       getObjectMetadata: jest.fn(),
     };
     resumeRepository = {
-      addResume: jest.fn(),
-      updateResume: jest.fn(),
+      addResumeWithPendingContent: jest.fn(),
+      updateResumeWithPendingContent: jest.fn(),
       deleteResume: jest.fn(),
       getResumeByPublicId: jest.fn(),
     };
+    ingestionQueue = { enqueue: jest.fn().mockResolvedValue(undefined) };
+    textExtractor = {
+      parserVersion: jest.fn().mockReturnValue('pdf-parse@2.4.5/text-v1'),
+    };
+    contentRepository = { markFailed: jest.fn() };
+    notifier = { notify: jest.fn() };
     service = new ResumeService(
       userRepository as unknown as IUserRepository,
       fileStorage as unknown as IFileStorage,
       resumeRepository as unknown as IResumeRepository,
+      ingestionQueue,
+      textExtractor as unknown as IResumeTextExtractor,
+      contentRepository as unknown as IResumeContentRepository,
+      notifier,
     );
   });
 
@@ -190,7 +211,13 @@ describe('ResumeService', () => {
           lastModified: new Date(),
         }),
       );
-      resumeRepository.updateResume.mockResolvedValue(ok(undefined));
+      resumeRepository.updateResumeWithPendingContent.mockResolvedValue(
+        ok({
+          publicId: resumePublicId,
+          ingestionPublicId: 'ingestion-id',
+          ingestionStatus: CommonResumeIngestionStatus.PENDING,
+        }),
+      );
 
       const result = await service.updateResumeAsync(
         userPublicId,
@@ -202,8 +229,11 @@ describe('ResumeService', () => {
       );
 
       expect(result.isOk()).toBe(true);
-      expect(resumeRepository.updateResume).toHaveBeenCalledTimes(1);
-      const updatedResume = resumeRepository.updateResume.mock.calls[0][0];
+      expect(
+        resumeRepository.updateResumeWithPendingContent,
+      ).toHaveBeenCalledTimes(1);
+      const updatedResume =
+        resumeRepository.updateResumeWithPendingContent.mock.calls[0][0];
       expect(updatedResume.id).toBe(10);
       expect(updatedResume.publicId).toBe(resumePublicId);
       expect(updatedResume.userId).toBe(42);
@@ -233,7 +263,9 @@ describe('ResumeService', () => {
         expect(result.error.code).toBe(ErrorCode.Forbidden);
       }
       expect(fileStorage.getObjectMetadata).not.toHaveBeenCalled();
-      expect(resumeRepository.updateResume).not.toHaveBeenCalled();
+      expect(
+        resumeRepository.updateResumeWithPendingContent,
+      ).not.toHaveBeenCalled();
     });
 
     it('rejects a replacement storage key owned by another user', async () => {
@@ -256,7 +288,9 @@ describe('ResumeService', () => {
         expect(result.error.code).toBe(ErrorCode.Forbidden);
       }
       expect(fileStorage.getObjectMetadata).not.toHaveBeenCalled();
-      expect(resumeRepository.updateResume).not.toHaveBeenCalled();
+      expect(
+        resumeRepository.updateResumeWithPendingContent,
+      ).not.toHaveBeenCalled();
     });
 
     it('maps domain validation failures to a bad request', async () => {
@@ -285,7 +319,9 @@ describe('ResumeService', () => {
       if (result.isErr()) {
         expect(result.error.code).toBe(ErrorCode.BadRequest);
       }
-      expect(resumeRepository.updateResume).not.toHaveBeenCalled();
+      expect(
+        resumeRepository.updateResumeWithPendingContent,
+      ).not.toHaveBeenCalled();
     });
   });
 
@@ -299,7 +335,13 @@ describe('ResumeService', () => {
           lastModified: new Date(),
         }),
       );
-      resumeRepository.addResume.mockResolvedValue(ok(undefined));
+      resumeRepository.addResumeWithPendingContent.mockResolvedValue(
+        ok({
+          publicId: 'resume-id',
+          ingestionPublicId: 'ingestion-id',
+          ingestionStatus: CommonResumeIngestionStatus.PENDING,
+        }),
+      );
 
       const result = await service.createResumeAsync(userPublicId, {
         name: ' Backend Resume.pdf ',
@@ -307,15 +349,22 @@ describe('ResumeService', () => {
       });
 
       expect(result.isOk()).toBe(true);
-      expect(resumeRepository.addResume).toHaveBeenCalledTimes(1);
+      expect(
+        resumeRepository.addResumeWithPendingContent,
+      ).toHaveBeenCalledTimes(1);
 
-      const resume = resumeRepository.addResume.mock.calls[0][0];
+      const resume =
+        resumeRepository.addResumeWithPendingContent.mock.calls[0][0];
       expect(resume.storagePath).toBe(storageKey);
       expect(resume.fileName).toBe('Backend Resume.pdf');
       expect(resume.fileSize).toBe(1024);
       expect(resume.fileType).toBe(CommonFileType.PDF);
       expect(resume.isActive).toBe(true);
       expect(resume.userId).toBe(42);
+      expect(ingestionQueue.enqueue).toHaveBeenCalledWith({
+        resumePublicId: 'resume-id',
+        resumeContentPublicId: 'ingestion-id',
+      });
     });
 
     it('rejects a storage key owned by another user', async () => {
@@ -331,7 +380,9 @@ describe('ResumeService', () => {
         expect(result.error.code).toBe(ErrorCode.Forbidden);
       }
       expect(fileStorage.getObjectMetadata).not.toHaveBeenCalled();
-      expect(resumeRepository.addResume).not.toHaveBeenCalled();
+      expect(
+        resumeRepository.addResumeWithPendingContent,
+      ).not.toHaveBeenCalled();
     });
 
     it('rejects a create request when the uploaded object does not exist', async () => {
@@ -347,7 +398,9 @@ describe('ResumeService', () => {
       if (result.isErr()) {
         expect(result.error.code).toBe(ErrorCode.NotFound);
       }
-      expect(resumeRepository.addResume).not.toHaveBeenCalled();
+      expect(
+        resumeRepository.addResumeWithPendingContent,
+      ).not.toHaveBeenCalled();
     });
 
     it('rejects an unsupported content type', async () => {
@@ -369,7 +422,9 @@ describe('ResumeService', () => {
       if (result.isErr()) {
         expect(result.error.code).toBe(ErrorCode.BadRequest);
       }
-      expect(resumeRepository.addResume).not.toHaveBeenCalled();
+      expect(
+        resumeRepository.addResumeWithPendingContent,
+      ).not.toHaveBeenCalled();
     });
 
     it('rejects an uploaded object larger than the domain limit', async () => {
@@ -391,7 +446,9 @@ describe('ResumeService', () => {
       if (result.isErr()) {
         expect(result.error.code).toBe(ErrorCode.BadRequest);
       }
-      expect(resumeRepository.addResume).not.toHaveBeenCalled();
+      expect(
+        resumeRepository.addResumeWithPendingContent,
+      ).not.toHaveBeenCalled();
     });
 
     it('maps repository failures to an internal server error', async () => {
@@ -403,7 +460,7 @@ describe('ResumeService', () => {
           lastModified: new Date(),
         }),
       );
-      resumeRepository.addResume.mockResolvedValue(
+      resumeRepository.addResumeWithPendingContent.mockResolvedValue(
         err(new Error('database unavailable')),
       );
 
@@ -416,6 +473,53 @@ describe('ResumeService', () => {
       if (result.isErr()) {
         expect(result.error.code).toBe(ErrorCode.InternalServerError);
       }
+    });
+
+    it('marks ingestion failed and returns an error when enqueue fails', async () => {
+      userRepository.resolvePublicIdToId.mockResolvedValue(ok(42));
+      fileStorage.getObjectMetadata.mockResolvedValue(
+        ok({
+          contentType: 'application/pdf',
+          contentLength: 1024,
+          lastModified: new Date(),
+        }),
+      );
+      resumeRepository.addResumeWithPendingContent.mockResolvedValue(
+        ok({
+          publicId: 'resume-id',
+          ingestionPublicId: 'ingestion-id',
+          ingestionStatus: CommonResumeIngestionStatus.PENDING,
+        }),
+      );
+      ingestionQueue.enqueue.mockRejectedValue(new Error('Redis unavailable'));
+      contentRepository.markFailed.mockResolvedValue(
+        ok({
+          publicId: 'ingestion-id',
+          resumePublicId: 'resume-id',
+          status: CommonResumeIngestionStatus.FAILED,
+          errorMessage: 'Failed to enqueue resume ingestion: Redis unavailable',
+          updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+        }),
+      );
+
+      const result = await service.createResumeAsync(userPublicId, {
+        name: 'Resume.pdf',
+        storageKey,
+      });
+
+      expect(result.isErr()).toBe(true);
+      if (result.isErr()) {
+        expect(result.error.code).toBe(ErrorCode.InternalServerError);
+      }
+      expect(contentRepository.markFailed).toHaveBeenCalledWith(
+        'ingestion-id',
+        expect.stringContaining('Redis unavailable'),
+      );
+      expect(notifier.notify).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: CommonResumeIngestionStatus.FAILED,
+        }),
+      );
     });
   });
 });

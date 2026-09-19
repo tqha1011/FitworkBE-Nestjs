@@ -37,6 +37,15 @@ enum EvaluationStatus {
   @@map("evaluation_status")
 }
 
+enum ResumeIngestionStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+
+  @@map("resume_ingestion_status")
+}
+
 enum UserRole {
   ROLE_COMPANY
   ROLE_APPLICANT

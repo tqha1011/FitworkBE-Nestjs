@@ -1,4 +1,8 @@
-import { CommonCurrency, CommonJobStatus } from 'src/shared/domain/enum';
+import {
+  CommonCurrency,
+  CommonJobApplicantStatus,
+  CommonJobStatus,
+} from 'src/shared/domain/enum';
 
 export type JobItemResponseDto = {
   publicId: string;
@@ -25,6 +29,16 @@ export type JobItemResponseDto = {
 
 export type JobApplicantResponseDto = {
   message: string;
+};
+
+export type JobApplicantItemResponseDto = {
+  jobPublicId: string;
+  status: CommonJobApplicantStatus;
+  resumePublicId: string;
+  proposedRate: number;
+  estimatedDays: number;
+  appliedAt: Date;
+  matchingScore: number;
 };
 
 export type CategoryResponseDto = {

@@ -34,3 +34,10 @@ export enum CommonFileType {
   PDF = 'pdf',
   DOCX = 'docx',
 }
+
+export enum CommonResumeIngestionStatus {
+  PENDING = 'PENDING',
+  PROCESSING = 'PROCESSING',
+  COMPLETED = 'COMPLETED',
+  FAILED = 'FAILED',
+}
