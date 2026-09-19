@@ -25,6 +25,7 @@ import { ArrangementService } from './application/services/arrangement.service';
 import { ArrangementController } from './api/arrangment.controller';
 import { CategoryController } from './api/category.controller';
 import { ResumeModule } from '../resume/resume.module';
+import { IJobApplicantQueryRepo } from './application/interfaces/job-applicant.query-repo.interface';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { ResumeModule } from '../resume/resume.module';
     JobRepository,
     { provide: IJobRepository, useExisting: JobRepository },
     { provide: IJobQueryRepository, useExisting: JobRepository },
+    { provide: IJobApplicantQueryRepo, useExisting: JobRepository },
     { provide: IJobService, useClass: JobService },
     { provide: IJobApplicantRepository, useClass: JobApplicantRepository },
     { provide: IJobApplicantService, useClass: JobApplicantService },
@@ -60,6 +62,7 @@ import { ResumeModule } from '../resume/resume.module';
   exports: [
     IJobRepository,
     IJobQueryRepository,
+    IJobApplicantQueryRepo,
     IJobService,
     IJobApplicantService,
     IJobApplicantRepository,

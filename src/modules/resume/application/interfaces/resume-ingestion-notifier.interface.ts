@@ -1,5 +1,7 @@
 import { CommonResumeIngestionStatus } from 'src/shared/domain/enum';
 
+export const RESUME_INGESTION_UPDATED_EVENT = 'resume.ingestion.updated';
+
 export type ResumeIngestionUpdatedEvent = {
   resumePublicId: string;
   ingestionPublicId: string;

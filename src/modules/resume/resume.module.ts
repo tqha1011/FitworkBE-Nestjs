@@ -1,6 +1,4 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule, ConfigService } from '@nestjs/config';
-import { JwtModule } from '@nestjs/jwt';
 import { UsersModule } from '../users/users.module';
 import { ResumeController } from './api/resume.controller';
 import { IResumeService } from './application/interfaces/resume.service.interface';
@@ -20,25 +18,11 @@ import { DocxParserService } from 'src/shared/infrastructure/parser/docx-parser.
 import { IResumeIngestionService } from './application/interfaces/resume-ingestion.service.interface';
 import { ResumeIngestionService } from './application/services/resume-ingestion.service';
 import { ResumeIngestionProcessor } from './infrastructure/resume-ingestion.processor';
-import { ResumeIngestionGateway } from './api/resume-ingestion.gateway';
 import { IResumeIngestionNotifier } from './application/interfaces/resume-ingestion-notifier.interface';
+import { ResumeIngestionEventPublisher } from './infrastructure/resume-ingestion-event.publisher';
 
 @Module({
-  imports: [
-    UsersModule,
-    JwtModule.registerAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET'),
-        signOptions: {
-          expiresIn: Number(
-            configService.get<string>('JWT_ACCESS_EXPIRES_IN_SECONDS', '900'),
-          ),
-        },
-      }),
-    }),
-  ],
+  imports: [UsersModule],
   controllers: [ResumeController],
   providers: [
     ResumeRepository,
@@ -56,10 +40,10 @@ import { IResumeIngestionNotifier } from './application/interfaces/resume-ingest
     DocxParserService,
     ResumeTextExtractor,
     { provide: IResumeTextExtractor, useExisting: ResumeTextExtractor },
-    ResumeIngestionGateway,
+    ResumeIngestionEventPublisher,
     {
       provide: IResumeIngestionNotifier,
-      useExisting: ResumeIngestionGateway,
+      useExisting: ResumeIngestionEventPublisher,
     },
     ResumeIngestionService,
     {
@@ -68,6 +52,6 @@ import { IResumeIngestionNotifier } from './application/interfaces/resume-ingest
     },
     ResumeIngestionProcessor,
   ],
-  exports: [IResumeRepository, IResumeService],
+  exports: [IResumeRepository, IResumeContentRepository, IResumeService],
 })
 export class ResumeModule {}
