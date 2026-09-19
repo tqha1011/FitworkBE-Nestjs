@@ -38,4 +38,9 @@ export abstract class IResumeRepository {
   ): Promise<Result<Resume | null, Error>>;
 
   abstract deleteResume(publicId: string): Promise<Result<undefined, Error>>;
+
+  abstract authorizeResume(
+    resumePublicId: string,
+    userPublicId: string,
+  ): Promise<Result<boolean, Error>>;
 }

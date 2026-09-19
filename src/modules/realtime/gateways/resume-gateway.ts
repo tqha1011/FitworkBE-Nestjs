@@ -4,9 +4,14 @@ import {
   WebSocketServer,
   OnGatewayConnection,
   OnGatewayDisconnect,
+  SubscribeMessage,
+  WsResponse,
 } from '@nestjs/websockets';
 import { DefaultEventsMap, Server, Socket } from 'socket.io';
 import { JwtPayload } from 'src/shared/common/jwt.payload.interface';
+import { EventName } from '../constants/event-name';
+import { ResumeJoinDto } from '../payload/resume-event.dto';
+import { IResumeRepository } from 'src/modules/resume/domain/repositories/resume.repo.interface';
 
 type SocketData = { user: JwtPayload };
 
@@ -26,7 +31,10 @@ export type ResumeIngestionSocket = Socket<
 export class ResumeGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   private readonly server!: Server;
-  constructor(private readonly jwtService: JwtService) {}
+  constructor(
+    private readonly jwtService: JwtService,
+    private readonly resumeRepository: IResumeRepository,
+  ) {}
   handleDisconnect(client: ResumeIngestionSocket) {
     client.disconnect(true);
   }
@@ -47,6 +55,35 @@ export class ResumeGateway implements OnGatewayConnection, OnGatewayDisconnect {
       await client.join(`user/${payload.sub}`);
     } catch {
       client.disconnect(true);
+    }
+  }
+
+  @SubscribeMessage(EventName.ResumeJoin)
+  async handleResumeJoin(
+    client: ResumeIngestionSocket,
+    data: ResumeJoinDto,
+  ): Promise<WsResponse<{ joined: boolean }>> {
+    try {
+      const result = await this.resumeRepository.authorizeResume(
+        data.resumePublicId,
+        client.data.user.sub,
+      );
+      if (result.isErr() || !result.value) {
+        return {
+          event: EventName.ResumeJoin,
+          data: { joined: false },
+        };
+      }
+      await client.join(`resume/${data.resumePublicId}`);
+      return {
+        event: EventName.ResumeJoin,
+        data: { joined: true },
+      };
+    } catch {
+      return {
+        event: EventName.ResumeJoin,
+        data: { joined: false },
+      };
     }
   }
 }

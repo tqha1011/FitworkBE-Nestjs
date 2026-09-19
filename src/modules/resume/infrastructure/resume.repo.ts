@@ -20,6 +20,29 @@ import { ResumeIngestionStatus } from 'generated/prisma/enums';
 @Injectable()
 export class ResumeRepository implements IResumeRepository {
   constructor(private readonly prismaService: PrismaService) {}
+  async authorizeResume(
+    resumePublicId: string,
+    userPublicId: string,
+  ): Promise<Result<boolean, Error>> {
+    try {
+      const resume = await this.prismaService.resume.findFirst({
+        where: {
+          publicId: resumePublicId,
+          isActive: true,
+          user: {
+            publicId: userPublicId,
+          },
+        },
+      });
+      if (!resume) {
+        return ok(false);
+      }
+
+      return ok(true);
+    } catch (error) {
+      return err(new Error(`Failed to authorize resume. ${error}`));
+    }
+  }
   async deleteResume(publicId: string): Promise<Result<undefined, Error>> {
     try {
       await this.prismaService.resume.updateMany({
