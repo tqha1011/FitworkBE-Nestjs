@@ -15,6 +15,7 @@ import { LoggerMiddleware } from './shared/common/logger.middleware';
 import { PrismaModule } from './shared/infrastructure/database/prisma.module';
 import { QueueModule } from './shared/infrastructure/queue/queue.module';
 import { RealtimeModule } from './modules/realtime/realtime.module';
+import { EvaluationModule } from './modules/evaluation/evaluation.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 
 @Module({
@@ -31,6 +32,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
     JobModule,
     ResumeModule,
     RealtimeModule,
+    EvaluationModule,
   ],
   providers: [
     {
