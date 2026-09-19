@@ -10,7 +10,7 @@ import {
 import { DefaultEventsMap, Server, Socket } from 'socket.io';
 import { JwtPayload } from 'src/shared/common/jwt.payload.interface';
 import { EventName } from '../constants/event-name';
-import { ResumeJoinDto } from '../payload/resume-event.dto';
+import { ResumeJoinDto, ResumeLeaveDto } from '../payload/resume-event.dto';
 import { IResumeRepository } from 'src/modules/resume/domain/repositories/resume.repo.interface';
 
 type SocketData = { user: JwtPayload };
@@ -74,7 +74,7 @@ export class ResumeGateway implements OnGatewayConnection, OnGatewayDisconnect {
           data: { joined: false },
         };
       }
-      await client.join(`resume/${data.resumePublicId}`);
+      await client.join(this.buildRoom(data.resumePublicId));
       return {
         event: EventName.ResumeJoin,
         data: { joined: true },
@@ -85,5 +85,28 @@ export class ResumeGateway implements OnGatewayConnection, OnGatewayDisconnect {
         data: { joined: false },
       };
     }
+  }
+
+  @SubscribeMessage(EventName.ResumeLeave)
+  async handleResumeLeave(
+    client: ResumeIngestionSocket,
+    data: ResumeLeaveDto,
+  ): Promise<WsResponse<{ left: boolean }>> {
+    try {
+      await client.leave(this.buildRoom(data.resumePublicId));
+      return {
+        event: EventName.ResumeLeave,
+        data: { left: true },
+      };
+    } catch {
+      return {
+        event: EventName.ResumeLeave,
+        data: { left: false },
+      };
+    }
+  }
+
+  private buildRoom(resumePublicId: string): string {
+    return `resume/${resumePublicId}`;
   }
 }
