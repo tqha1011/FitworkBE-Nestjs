@@ -38,7 +38,13 @@ describe('ApplicantEvaluationService', () => {
 
   let resumeContentRepository: { getCurrentForOwner: jest.Mock };
   let jobRepository: { getJobDataForSnapshot: jest.Mock };
-  let applicantEvaluationRepository: { prepare: jest.Mock };
+  let applicantEvaluationRepository: {
+    prepare: jest.Mock;
+    claimForProcessing: jest.Mock;
+    markCompleted: jest.Mock;
+    markPending: jest.Mock;
+    markFailed: jest.Mock;
+  };
   let applicantEvaluationQueue: { enqueue: jest.Mock; retry: jest.Mock };
   let configService: { get: jest.Mock };
   let service: ApplicantEvaluationService;
@@ -63,6 +69,10 @@ describe('ApplicantEvaluationService', () => {
           resetFromFailed: false,
         }),
       ),
+      claimForProcessing: jest.fn(),
+      markCompleted: jest.fn(),
+      markPending: jest.fn(),
+      markFailed: jest.fn(),
     };
     applicantEvaluationQueue = {
       enqueue: jest.fn().mockResolvedValue(undefined),

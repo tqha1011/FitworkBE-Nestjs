@@ -2,7 +2,12 @@ import { EvaluationStatus } from 'generated/prisma/enums';
 import { Prisma } from 'generated/prisma/client';
 import { PrismaService } from 'src/shared/infrastructure/database/prisma.service';
 import { CommonEvaluationStatus } from 'src/shared/domain/enum';
-import { PrepareApplicantEvaluationInput } from '../domain/repositories/applicant-evaluation.repo.interface';
+import { hashCanonicalJson } from 'src/shared/common/canonical-json';
+import { JobSnapshotV1 } from 'src/modules/job/domain/value-objects/job-snapshot';
+import {
+  CompleteApplicantEvaluationInput,
+  PrepareApplicantEvaluationInput,
+} from '../domain/repositories/applicant-evaluation.repo.interface';
 import { ApplicantEvaluationRepository } from './applicant-evaluation.repo';
 
 jest.mock('generated/prisma/client', () => ({
@@ -11,28 +16,46 @@ jest.mock('generated/prisma/client', () => ({
 }));
 
 describe('ApplicantEvaluationRepository', () => {
+  const jobSnapshot: JobSnapshotV1 = {
+    schemaVersion: 1,
+    publicId: 'job-id',
+    title: 'Backend Engineer',
+    description: 'Build services',
+    requirements: 'TypeScript',
+    location: 'Remote',
+    skills: [{ id: 1, name: 'TypeScript' }],
+    category: { id: 2, name: 'Engineering' },
+    arrangement: { id: 3, name: 'Remote' },
+  };
   const input: PrepareApplicantEvaluationInput = {
     applicantPublicId: 'applicant-id',
     jobId: 10,
     resumeId: 20,
     resumeContentId: 30,
-    jobSnapshot: {
-      schemaVersion: 1,
-      publicId: 'job-id',
-      title: 'Backend Engineer',
-      description: 'Build services',
-      requirements: 'TypeScript',
-      location: 'Remote',
-      skills: [{ id: 1, name: 'TypeScript' }],
-      category: { id: 2, name: 'Engineering' },
-      arrangement: { id: 3, name: 'Remote' },
-    },
-    jobContentHash: 'job-hash',
+    jobSnapshot,
+    jobContentHash: hashCanonicalJson(jobSnapshot),
     resumeContentHash: 'resume-hash',
     parserVersion: 'parser-v1',
     model: 'evaluation-model',
     promptVersion: 'applicant-match-v1',
   };
+  const createProcessingEvaluation = () => ({
+    publicId: 'evaluation-id',
+    status: EvaluationStatus.PENDING,
+    resumeContentHash: input.resumeContentHash,
+    jobContentHash: input.jobContentHash,
+    parserVersion: input.parserVersion,
+    model: input.model,
+    promptVersion: input.promptVersion,
+    jobApplicant: {
+      jobSnapshot,
+      resumeContent: {
+        extractedText: 'Five years of TypeScript experience.',
+        contentHash: input.resumeContentHash,
+        parserVersion: input.parserVersion,
+      },
+    },
+  });
 
   let tx: {
     jobApplicant: {
@@ -42,9 +65,14 @@ describe('ApplicantEvaluationRepository', () => {
     applicantEvaluation: {
       upsert: jest.Mock;
       update: jest.Mock;
+      findUnique: jest.Mock;
+      updateMany: jest.Mock;
     };
   };
-  let prismaService: { $transaction: jest.Mock };
+  let prismaService: {
+    $transaction: jest.Mock;
+    applicantEvaluation: { updateMany: jest.Mock };
+  };
   let repository: ApplicantEvaluationRepository;
 
   beforeEach(() => {
@@ -59,6 +87,8 @@ describe('ApplicantEvaluationRepository', () => {
           status: EvaluationStatus.PENDING,
         }),
         update: jest.fn().mockResolvedValue(undefined),
+        findUnique: jest.fn().mockResolvedValue(createProcessingEvaluation()),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
     };
     const runTransaction = async (
@@ -66,6 +96,9 @@ describe('ApplicantEvaluationRepository', () => {
     ): Promise<unknown> => callback(tx);
     prismaService = {
       $transaction: jest.fn(runTransaction),
+      applicantEvaluation: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
     };
     repository = new ApplicantEvaluationRepository(
       prismaService as unknown as PrismaService,
@@ -183,5 +216,235 @@ describe('ApplicantEvaluationRepository', () => {
     expect(result._unsafeUnwrapErr().message).toContain(
       'Failed to prepare applicant evaluation',
     );
+  });
+
+  describe('claimForProcessing', () => {
+    it('validates persisted inputs and claims an evaluation', async () => {
+      const result = await repository.claimForProcessing('evaluation-id');
+
+      expect(result._unsafeUnwrap()).toEqual({
+        publicId: 'evaluation-id',
+        jobSnapshot,
+        resumeText: 'Five years of TypeScript experience.',
+        model: input.model,
+        promptVersion: input.promptVersion,
+      });
+      expect(tx.applicantEvaluation.updateMany).toHaveBeenCalledWith({
+        where: {
+          publicId: 'evaluation-id',
+          status: {
+            in: [EvaluationStatus.PENDING, EvaluationStatus.PROCESSING],
+          },
+        },
+        data: {
+          status: EvaluationStatus.PROCESSING,
+          errorMessage: null,
+        },
+      });
+    });
+
+    it.each([EvaluationStatus.COMPLETED, EvaluationStatus.FAILED])(
+      'does not claim an evaluation in %s state',
+      async (status) => {
+        tx.applicantEvaluation.findUnique.mockResolvedValue({
+          ...createProcessingEvaluation(),
+          status,
+        });
+
+        const result = await repository.claimForProcessing('evaluation-id');
+
+        expect(result._unsafeUnwrap()).toBeNull();
+        expect(tx.applicantEvaluation.updateMany).not.toHaveBeenCalled();
+      },
+    );
+
+    it('returns null when the evaluation does not exist', async () => {
+      tx.applicantEvaluation.findUnique.mockResolvedValue(null);
+
+      const result = await repository.claimForProcessing('missing-id');
+
+      expect(result._unsafeUnwrap()).toBeNull();
+    });
+
+    it('returns an error when resume content is incomplete', async () => {
+      tx.applicantEvaluation.findUnique.mockResolvedValue({
+        ...createProcessingEvaluation(),
+        jobApplicant: {
+          jobSnapshot,
+          resumeContent: null,
+        },
+      });
+
+      const result = await repository.claimForProcessing('evaluation-id');
+
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr().message).toContain(
+        'Evaluation resume content is incomplete',
+      );
+    });
+
+    it('returns an error when the job hash does not match', async () => {
+      tx.applicantEvaluation.findUnique.mockResolvedValue({
+        ...createProcessingEvaluation(),
+        jobContentHash: 'different-job-hash',
+      });
+
+      const result = await repository.claimForProcessing('evaluation-id');
+
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr().message).toContain(
+        'Evaluation job snapshot hash does not match',
+      );
+    });
+
+    it('returns an error when the resume hash does not match', async () => {
+      tx.applicantEvaluation.findUnique.mockResolvedValue({
+        ...createProcessingEvaluation(),
+        resumeContentHash: 'different-resume-hash',
+      });
+
+      const result = await repository.claimForProcessing('evaluation-id');
+
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr().message).toContain(
+        'Evaluation resume content hash does not match',
+      );
+    });
+
+    it('returns an error when the parser version does not match', async () => {
+      tx.applicantEvaluation.findUnique.mockResolvedValue({
+        ...createProcessingEvaluation(),
+        parserVersion: 'different-parser',
+      });
+
+      const result = await repository.claimForProcessing('evaluation-id');
+
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr().message).toContain(
+        'Evaluation parser version does not match',
+      );
+    });
+  });
+
+  describe('processing state transitions', () => {
+    const completedInput: CompleteApplicantEvaluationInput = {
+      evaluationPublicId: 'evaluation-id',
+      overallScore: 88,
+      scoreBreakdown: {
+        schemaVersion: 1,
+        skills: 90,
+        experience: 85,
+        education: 75,
+        overallFit: 88,
+      },
+      evidence: {
+        schemaVersion: 1,
+        strengths: ['Strong TypeScript experience'],
+        gaps: ['No PostgreSQL evidence'],
+        explanation: 'The candidate matches most requirements.',
+      },
+    };
+
+    it('stores the result and marks a processing evaluation completed', async () => {
+      const result = await repository.markCompleted(completedInput);
+
+      expect(result._unsafeUnwrap()).toBe(true);
+      expect(prismaService.applicantEvaluation.updateMany).toHaveBeenCalledWith(
+        {
+          where: {
+            publicId: completedInput.evaluationPublicId,
+            status: EvaluationStatus.PROCESSING,
+          },
+          data: {
+            status: EvaluationStatus.COMPLETED,
+            overallScore: completedInput.overallScore,
+            scoreBreakdown: completedInput.scoreBreakdown,
+            evidence: completedInput.evidence,
+            errorMessage: null,
+            evaluatedAt: expect.any(Date) as Date,
+          },
+        },
+      );
+    });
+
+    it('releases a processing evaluation for retry', async () => {
+      const result = await repository.markPending(
+        'evaluation-id',
+        'Gemini unavailable',
+      );
+
+      expect(result._unsafeUnwrap()).toBe(true);
+      expect(prismaService.applicantEvaluation.updateMany).toHaveBeenCalledWith(
+        {
+          where: {
+            publicId: 'evaluation-id',
+            status: {
+              in: [EvaluationStatus.PENDING, EvaluationStatus.PROCESSING],
+            },
+          },
+          data: {
+            status: EvaluationStatus.PENDING,
+            errorMessage: 'Gemini unavailable',
+            overallScore: null,
+            scoreBreakdown: Prisma.DbNull,
+            evidence: Prisma.DbNull,
+            evaluatedAt: null,
+          },
+        },
+      );
+    });
+
+    it('marks a processing evaluation permanently failed', async () => {
+      const result = await repository.markFailed(
+        'evaluation-id',
+        'Invalid evaluation input',
+      );
+
+      expect(result._unsafeUnwrap()).toBe(true);
+      expect(prismaService.applicantEvaluation.updateMany).toHaveBeenCalledWith(
+        {
+          where: {
+            publicId: 'evaluation-id',
+            status: {
+              in: [EvaluationStatus.PENDING, EvaluationStatus.PROCESSING],
+            },
+          },
+          data: {
+            status: EvaluationStatus.FAILED,
+            errorMessage: 'Invalid evaluation input',
+            overallScore: null,
+            scoreBreakdown: Prisma.DbNull,
+            evidence: Prisma.DbNull,
+            evaluatedAt: null,
+          },
+        },
+      );
+    });
+
+    it('returns false when the evaluation is no longer processing', async () => {
+      prismaService.applicantEvaluation.updateMany.mockResolvedValue({
+        count: 0,
+      });
+
+      const result = await repository.markCompleted(completedInput);
+
+      expect(result._unsafeUnwrap()).toBe(false);
+    });
+
+    it('returns an error when a state transition fails', async () => {
+      prismaService.applicantEvaluation.updateMany.mockRejectedValue(
+        new Error('database down'),
+      );
+
+      const result = await repository.markFailed(
+        'evaluation-id',
+        'Gemini unavailable',
+      );
+
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr().message).toContain(
+        'Failed to fail applicant evaluation',
+      );
+    });
   });
 });
