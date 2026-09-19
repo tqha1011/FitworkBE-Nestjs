@@ -3,11 +3,19 @@ import {
   WebSocketGateway,
   WebSocketServer,
   OnGatewayConnection,
+  OnGatewayDisconnect,
 } from '@nestjs/websockets';
-import { Server, Socket } from 'socket.io';
+import { DefaultEventsMap, Server, Socket } from 'socket.io';
 import { JwtPayload } from 'src/shared/common/jwt.payload.interface';
 
 type SocketData = { user: JwtPayload };
+
+export type ResumeIngestionSocket = Socket<
+  DefaultEventsMap,
+  DefaultEventsMap,
+  DefaultEventsMap,
+  SocketData
+>;
 @WebSocketGateway({
   namespace: '/resume',
   cors: {
@@ -15,22 +23,28 @@ type SocketData = { user: JwtPayload };
     credentials: true,
   },
 })
-export class ResumeGateway implements OnGatewayConnection {
+export class ResumeGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   private readonly server!: Server;
   constructor(private readonly jwtService: JwtService) {}
+  handleDisconnect(client: ResumeIngestionSocket) {
+    client.disconnect(true);
+  }
 
-  async handleConnection(client: Socket): Promise<void> {
-    const auth = client.handshake.auth as Record<string, unknown>;
-    const token = auth.token;
-    if (typeof token !== 'string' || !token) {
-      client.disconnect(true);
-      return;
-    }
-
+  async handleConnection(client: ResumeIngestionSocket) {
     try {
-      (client.data as SocketData).user =
-        await this.jwtService.verifyAsync<JwtPayload>(token);
+      const token = client.handshake.auth.token as string;
+      if (typeof token !== 'string' || !token) {
+        client.disconnect(true);
+        return;
+      }
+      const payload = await this.jwtService.verifyAsync<JwtPayload>(token);
+      client.data.user = {
+        email: payload.email,
+        sub: payload.sub,
+        role: payload.role,
+      };
+      await client.join(`user/${payload.sub}`);
     } catch {
       client.disconnect(true);
     }
