@@ -41,3 +41,10 @@ export enum CommonResumeIngestionStatus {
   COMPLETED = 'COMPLETED',
   FAILED = 'FAILED',
 }
+
+export enum CommonEvaluationStatus {
+  PENDING = 'PENDING',
+  PROCESSING = 'PROCESSING',
+  COMPLETED = 'COMPLETED',
+  FAILED = 'FAILED',
+}

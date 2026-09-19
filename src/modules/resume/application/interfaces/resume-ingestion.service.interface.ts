@@ -1,8 +1,8 @@
-import { IngestionJobRequestDto } from 'src/shared/infrastructure/queue/type/ingestion-job.request.dto';
+import { ResumeIngestionJobDto } from '../dtos/resume-ingestion-job.dto';
 
 export abstract class IResumeIngestionService {
   abstract ingest(
-    payload: IngestionJobRequestDto,
+    payload: ResumeIngestionJobDto,
     attemptsMade: number,
     maxAttempts: number,
   ): Promise<void>;

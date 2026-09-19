@@ -106,6 +106,7 @@ model Category {
 
 model ApplicantEvaluation {
   id                Int              @id @default(autoincrement())
+  publicId          String           @unique @default(uuid()) @map("public_id")
   jobApplicant      JobApplicant     @relation(fields: [jobApplicantId], references: [id])
   jobApplicantId    Int              @map("job_applicant_id")
   status            EvaluationStatus @default(PENDING)
