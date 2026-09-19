@@ -1,4 +1,4 @@
-import { Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { err, ok, Result } from 'neverthrow';
 import {
   ApplicantEvaluationLlmInput,
@@ -11,6 +11,7 @@ import { buildApplicantEvaluationPrompt } from '../applicant-evaluation-prompt.b
 import { APPLICANT_EVALUATION_RESPONSE_SCHEMA } from '../applicant-evaluation-response.schema';
 import { validateApplicantEvaluationOutput } from '../applicant-evaluation-response.validator';
 
+@Injectable()
 export class GeminiEvaluateApplicant implements IApplicantEvaluationLlm {
   private readonly logger = new Logger(GeminiEvaluateApplicant.name);
   private readonly client: GoogleGenAI;
@@ -25,7 +26,7 @@ export class GeminiEvaluateApplicant implements IApplicantEvaluationLlm {
     try {
       const prompt = buildApplicantEvaluationPrompt(input);
       const generatedResponse = await this.client.models.generateContent({
-        model: this.configService.getOrThrow<string>('LLM_EVALUATION_MODEL'),
+        model: input.model,
         contents: prompt.user,
         config: {
           temperature: 0,

@@ -3,10 +3,13 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { ResumeModule } from '../resume/resume.module';
 import { ResumeGateway } from './gateways/resume-gateway';
+import { ApplicantEvaluationModule } from '../applicant-evaluation/applicant-evaluation.module';
+import { ApplicantEvaluationGateway } from './gateways/applicant-evaluation-gateway';
 
 @Module({
   imports: [
     ResumeModule,
+    ApplicantEvaluationModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -20,6 +23,6 @@ import { ResumeGateway } from './gateways/resume-gateway';
       }),
     }),
   ],
-  providers: [ResumeGateway],
+  providers: [ResumeGateway, ApplicantEvaluationGateway],
 })
 export class RealtimeModule {}

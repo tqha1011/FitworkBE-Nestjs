@@ -71,7 +71,7 @@ describe('ApplicantEvaluationRepository', () => {
   };
   let prismaService: {
     $transaction: jest.Mock;
-    applicantEvaluation: { updateMany: jest.Mock };
+    applicantEvaluation: { findUnique: jest.Mock; updateMany: jest.Mock };
   };
   let repository: ApplicantEvaluationRepository;
 
@@ -97,12 +97,67 @@ describe('ApplicantEvaluationRepository', () => {
     prismaService = {
       $transaction: jest.fn(runTransaction),
       applicantEvaluation: {
+        findUnique: jest.fn(),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
     };
     repository = new ApplicantEvaluationRepository(
       prismaService as unknown as PrismaService,
     );
+  });
+
+  describe('getRealtimeStateForApplicant', () => {
+    it('returns the current state only for the owning applicant', async () => {
+      const updatedAt = new Date('2026-09-19T00:00:00.000Z');
+      prismaService.applicantEvaluation.findUnique.mockResolvedValue({
+        publicId: 'evaluation-id',
+        status: EvaluationStatus.COMPLETED,
+        overallScore: 88,
+        errorMessage: null,
+        updatedAt,
+      });
+
+      const result = await repository.getRealtimeStateForApplicant(
+        'evaluation-id',
+        'applicant-id',
+      );
+
+      expect(prismaService.applicantEvaluation.findUnique).toHaveBeenCalledWith(
+        {
+          where: {
+            publicId: 'evaluation-id',
+            jobApplicant: {
+              applicant: { publicId: 'applicant-id' },
+            },
+          },
+          select: {
+            publicId: true,
+            status: true,
+            overallScore: true,
+            errorMessage: true,
+            updatedAt: true,
+          },
+        },
+      );
+      expect(result._unsafeUnwrap()).toEqual({
+        evaluationPublicId: 'evaluation-id',
+        status: CommonEvaluationStatus.COMPLETED,
+        overallScore: 88,
+        errorMessage: null,
+        updatedAt,
+      });
+    });
+
+    it('returns null when the applicant does not own the evaluation', async () => {
+      prismaService.applicantEvaluation.findUnique.mockResolvedValue(null);
+
+      const result = await repository.getRealtimeStateForApplicant(
+        'evaluation-id',
+        'another-applicant',
+      );
+
+      expect(result._unsafeUnwrap()).toBeNull();
+    });
   });
 
   it('attaches immutable inputs and creates or reuses an evaluation atomically', async () => {

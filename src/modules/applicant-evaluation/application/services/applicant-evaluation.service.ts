@@ -14,6 +14,7 @@ import {
   CommonResumeIngestionStatus,
 } from 'src/shared/domain/enum';
 import { APPLICANT_EVALUATION_PROMPT_VERSION } from '../constants/applicant-evaluation.constants';
+import { ApplicantEvaluationResponseDto } from '../dtos/applicant-evaluation.response.dto';
 
 @Injectable()
 export class ApplicantEvaluationService implements IApplicantEvaluationService {
@@ -27,7 +28,7 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
   async evaluateApplicantAsync(
     applicantPublicId: string,
     data: CreateApplicantEvaluationRequestDto,
-  ): Promise<Result<undefined, AppError>> {
+  ): Promise<Result<ApplicantEvaluationResponseDto, AppError>> {
     const [jobResult, resumeResult] = await Promise.all([
       this.jobRepository.getJobDataForSnapshot(data.jobPublicId),
       this.resumeContentRepository.getCurrentForOwner(
@@ -106,7 +107,7 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
       prepareResult.value.status === CommonEvaluationStatus.COMPLETED ||
       prepareResult.value.status === CommonEvaluationStatus.PROCESSING
     ) {
-      return ok(undefined);
+      return ok({ publicId: prepareResult.value.publicId });
     }
 
     const queuePayload = {
@@ -126,6 +127,6 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
         ),
       );
     }
-    return ok(undefined);
+    return ok({ publicId: prepareResult.value.publicId });
   }
 }

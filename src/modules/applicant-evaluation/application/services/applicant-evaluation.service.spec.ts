@@ -44,6 +44,7 @@ describe('ApplicantEvaluationService', () => {
     markCompleted: jest.Mock;
     markPending: jest.Mock;
     markFailed: jest.Mock;
+    getRealtimeStateForApplicant: jest.Mock;
   };
   let applicantEvaluationQueue: { enqueue: jest.Mock; retry: jest.Mock };
   let configService: { get: jest.Mock };
@@ -73,6 +74,7 @@ describe('ApplicantEvaluationService', () => {
       markCompleted: jest.fn(),
       markPending: jest.fn(),
       markFailed: jest.fn(),
+      getRealtimeStateForApplicant: jest.fn(),
     };
     applicantEvaluationQueue = {
       enqueue: jest.fn().mockResolvedValue(undefined),
@@ -97,6 +99,7 @@ describe('ApplicantEvaluationService', () => {
     );
 
     expect(result.isOk()).toBe(true);
+    expect(result._unsafeUnwrap()).toEqual({ publicId: 'evaluation-id' });
     expect(resumeContentRepository.getCurrentForOwner).toHaveBeenCalledWith(
       request.resumePublicId,
       'applicant-id',
@@ -134,6 +137,7 @@ describe('ApplicantEvaluationService', () => {
     );
 
     expect(result.isOk()).toBe(true);
+    expect(result._unsafeUnwrap()).toEqual({ publicId: 'evaluation-id' });
     expect(applicantEvaluationQueue.retry).toHaveBeenCalledWith({
       evaluationPublicId: 'evaluation-id',
     });
@@ -154,6 +158,7 @@ describe('ApplicantEvaluationService', () => {
     );
 
     expect(result.isOk()).toBe(true);
+    expect(result._unsafeUnwrap()).toEqual({ publicId: 'evaluation-id' });
     expect(applicantEvaluationQueue.enqueue).not.toHaveBeenCalled();
     expect(applicantEvaluationQueue.retry).not.toHaveBeenCalled();
   });

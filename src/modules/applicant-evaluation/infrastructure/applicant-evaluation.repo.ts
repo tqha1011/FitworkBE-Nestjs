@@ -8,6 +8,7 @@ import { CommonEvaluationStatus } from 'src/shared/domain/enum';
 import { PrismaService } from 'src/shared/infrastructure/database/prisma.service';
 import {
   ApplicantEvaluationProcessingData,
+  ApplicantEvaluationRealtimeState,
   CompleteApplicantEvaluationInput,
   IApplicantEvaluationRepository,
   PreparedApplicantEvaluation,
@@ -17,6 +18,44 @@ import {
 @Injectable()
 export class ApplicantEvaluationRepository implements IApplicantEvaluationRepository {
   constructor(private readonly prismaService: PrismaService) {}
+
+  async getRealtimeStateForApplicant(
+    evaluationPublicId: string,
+    applicantPublicId: string,
+  ): Promise<Result<ApplicantEvaluationRealtimeState | null, Error>> {
+    try {
+      const evaluation =
+        await this.prismaService.applicantEvaluation.findUnique({
+          where: {
+            publicId: evaluationPublicId,
+            jobApplicant: { applicant: { publicId: applicantPublicId } },
+          },
+          select: {
+            publicId: true,
+            status: true,
+            overallScore: true,
+            errorMessage: true,
+            updatedAt: true,
+          },
+        });
+      if (!evaluation) {
+        return ok(null);
+      }
+      return ok({
+        evaluationPublicId: evaluation.publicId,
+        status: this.toCommonStatus(evaluation.status),
+        overallScore: evaluation.overallScore,
+        errorMessage: evaluation.errorMessage,
+        updatedAt: evaluation.updatedAt,
+      });
+    } catch (error) {
+      return err(
+        new Error(
+          `Failed to get applicant evaluation realtime state: ${String(error)}`,
+        ),
+      );
+    }
+  }
 
   async prepare(
     input: PrepareApplicantEvaluationInput,

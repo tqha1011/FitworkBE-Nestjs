@@ -15,6 +15,7 @@ describe('buildApplicantEvaluationPrompt', () => {
         arrangement: { id: 3, name: 'Remote' },
       },
       resumeText: 'Five years of TypeScript experience.',
+      model: 'gemini-test-model',
     });
 
     expect(JSON.parse(prompt.user)).toEqual({

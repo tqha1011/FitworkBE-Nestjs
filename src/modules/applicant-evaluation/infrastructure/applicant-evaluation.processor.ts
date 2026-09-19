@@ -15,6 +15,8 @@ export class ApplicantEvaluationProcessor extends WorkerHost {
   async process(job: Job<ApplicantEvaluationJobDto>): Promise<void> {
     const result = await this.processingService.process(
       job.data.evaluationPublicId,
+      job.attemptsMade,
+      job.opts.attempts ?? 1,
     );
     if (result.isErr()) {
       throw result.error;

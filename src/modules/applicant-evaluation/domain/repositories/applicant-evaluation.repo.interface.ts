@@ -40,6 +40,14 @@ export type CompleteApplicantEvaluationInput = {
   evidence: EvaluationEvidenceV1;
 };
 
+export type ApplicantEvaluationRealtimeState = {
+  evaluationPublicId: string;
+  status: CommonEvaluationStatus;
+  overallScore: number | null;
+  errorMessage: string | null;
+  updatedAt: Date;
+};
+
 export abstract class IApplicantEvaluationRepository {
   abstract prepare(
     input: PrepareApplicantEvaluationInput,
@@ -62,4 +70,9 @@ export abstract class IApplicantEvaluationRepository {
     evaluationPublicId: string,
     errorMessage: string,
   ): Promise<Result<boolean, Error>>;
+
+  abstract getRealtimeStateForApplicant(
+    evaluationPublicId: string,
+    applicantPublicId: string,
+  ): Promise<Result<ApplicantEvaluationRealtimeState | null, Error>>;
 }

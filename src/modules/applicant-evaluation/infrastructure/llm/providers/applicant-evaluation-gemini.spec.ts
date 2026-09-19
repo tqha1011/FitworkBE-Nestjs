@@ -26,6 +26,7 @@ describe('GeminiEvaluateApplicant', () => {
       arrangement: { id: 3, name: 'Remote' },
     },
     resumeText: 'Five years of TypeScript experience.',
+    model: 'persisted-gemini-model',
   };
   const output: ApplicantEvaluationLlmOutput = {
     schemaVersion: 1,
@@ -73,7 +74,7 @@ describe('GeminiEvaluateApplicant', () => {
 
     expect(result._unsafeUnwrap()).toEqual(output);
     expect(mockGenerateContent).toHaveBeenCalledWith({
-      model: 'gemini-test-model',
+      model: input.model,
       contents: JSON.stringify({
         job: input.jobSnapshot,
         resumeText: input.resumeText,

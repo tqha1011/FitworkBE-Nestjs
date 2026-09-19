@@ -8,6 +8,7 @@ import {
 export type ApplicantEvaluationLlmInput = {
   jobSnapshot: JobSnapshotV1;
   resumeText: string;
+  model: string;
 };
 
 export type ApplicantEvaluationLlmOutput = {
