@@ -14,7 +14,10 @@ import {
   CommonResumeIngestionStatus,
 } from 'src/shared/domain/enum';
 import { APPLICANT_EVALUATION_PROMPT_VERSION } from '../constants/applicant-evaluation.constants';
-import { ApplicantEvaluationResponseDto } from '../dtos/applicant-evaluation.response.dto';
+import {
+  ApplicantEvaluationDetailDto,
+  ApplicantEvaluationResponseDto,
+} from '../dtos/applicant-evaluation.response.dto';
 
 @Injectable()
 export class ApplicantEvaluationService implements IApplicantEvaluationService {
@@ -25,6 +28,49 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
     private readonly applicantEvaluationQueue: IApplicantEvaluationQueueInterface,
     private readonly configService: ConfigService,
   ) {}
+  async getApplicantEvaluationDetailAsync(
+    applicantPublicId: string,
+    evaluationPublicId: string,
+  ): Promise<Result<ApplicantEvaluationDetailDto, AppError>> {
+    const result =
+      await this.applicantEvaluationRepository.getApplicantEvaluationDetail(
+        applicantPublicId,
+        evaluationPublicId,
+      );
+    if (result.isErr()) {
+      return err(
+        new AppError(
+          ErrorCode.InternalServerError,
+          'Failed to get applicant evaluation detail',
+        ),
+      );
+    }
+    if (!result.value) {
+      return err(
+        new AppError(ErrorCode.NotFound, 'Applicant evaluation not found'),
+      );
+    }
+    if (
+      result.value.overallScore === null ||
+      result.value.scoreBreakdown === null ||
+      result.value.evidence === null
+    ) {
+      return err(
+        new AppError(
+          ErrorCode.Conflict,
+          'Applicant evaluation is not completed',
+        ),
+      );
+    }
+
+    return ok({
+      publicId: result.value.evaluationPublicId,
+      overallScore: result.value.overallScore,
+      scoreBreakdown: result.value.scoreBreakdown,
+      evidence: result.value.evidence,
+    });
+  }
+
   async evaluateApplicantAsync(
     applicantPublicId: string,
     data: CreateApplicantEvaluationRequestDto,

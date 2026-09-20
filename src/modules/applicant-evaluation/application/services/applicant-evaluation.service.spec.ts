@@ -45,6 +45,7 @@ describe('ApplicantEvaluationService', () => {
     markPending: jest.Mock;
     markFailed: jest.Mock;
     getRealtimeStateForApplicant: jest.Mock;
+    getApplicantEvaluationDetail: jest.Mock;
   };
   let applicantEvaluationQueue: { enqueue: jest.Mock; retry: jest.Mock };
   let configService: { get: jest.Mock };
@@ -75,6 +76,7 @@ describe('ApplicantEvaluationService', () => {
       markPending: jest.fn(),
       markFailed: jest.fn(),
       getRealtimeStateForApplicant: jest.fn(),
+      getApplicantEvaluationDetail: jest.fn(),
     };
     applicantEvaluationQueue = {
       enqueue: jest.fn().mockResolvedValue(undefined),
@@ -90,6 +92,88 @@ describe('ApplicantEvaluationService', () => {
       applicantEvaluationQueue,
       configService as unknown as ConfigService,
     );
+  });
+
+  describe('getApplicantEvaluationDetailAsync', () => {
+    const detail = {
+      evaluationPublicId: 'evaluation-id',
+      overallScore: 88,
+      scoreBreakdown: {
+        schemaVersion: 1 as const,
+        skills: 90,
+        experience: 85,
+        education: 75,
+        overallFit: 88,
+      },
+      evidence: {
+        schemaVersion: 1 as const,
+        strengths: ['Strong TypeScript experience'],
+        gaps: ['No PostgreSQL evidence'],
+        explanation: 'Candidate matches most requirements.',
+      },
+    };
+
+    it('returns completed evaluation detail', async () => {
+      applicantEvaluationRepository.getApplicantEvaluationDetail.mockResolvedValue(
+        ok(detail),
+      );
+
+      const result = await service.getApplicantEvaluationDetailAsync(
+        'applicant-id',
+        'evaluation-id',
+      );
+
+      expect(
+        applicantEvaluationRepository.getApplicantEvaluationDetail,
+      ).toHaveBeenCalledWith('applicant-id', 'evaluation-id');
+      expect(result._unsafeUnwrap()).toEqual({
+        publicId: 'evaluation-id',
+        overallScore: 88,
+        scoreBreakdown: detail.scoreBreakdown,
+        evidence: detail.evidence,
+      });
+    });
+
+    it('returns not found when evaluation does not exist', async () => {
+      applicantEvaluationRepository.getApplicantEvaluationDetail.mockResolvedValue(
+        ok(null),
+      );
+
+      const result = await service.getApplicantEvaluationDetailAsync(
+        'applicant-id',
+        'evaluation-id',
+      );
+
+      expect(result._unsafeUnwrapErr().code).toBe(ErrorCode.NotFound);
+    });
+
+    it('returns conflict when evaluation is not completed', async () => {
+      applicantEvaluationRepository.getApplicantEvaluationDetail.mockResolvedValue(
+        ok({ ...detail, overallScore: null }),
+      );
+
+      const result = await service.getApplicantEvaluationDetailAsync(
+        'applicant-id',
+        'evaluation-id',
+      );
+
+      expect(result._unsafeUnwrapErr().code).toBe(ErrorCode.Conflict);
+    });
+
+    it('returns internal error when repository fails', async () => {
+      applicantEvaluationRepository.getApplicantEvaluationDetail.mockResolvedValue(
+        err(new Error('database down')),
+      );
+
+      const result = await service.getApplicantEvaluationDetailAsync(
+        'applicant-id',
+        'evaluation-id',
+      );
+
+      expect(result._unsafeUnwrapErr().code).toBe(
+        ErrorCode.InternalServerError,
+      );
+    });
   });
 
   it('persists evaluation inputs before enqueueing an ID-only job', async () => {
