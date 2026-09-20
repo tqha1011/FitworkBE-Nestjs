@@ -51,6 +51,11 @@ export type ArrangementResponseDto = {
   name: string;
 };
 
+export type SkillResponseDto = {
+  id: number;
+  name: string;
+};
+
 export type JobDetailResponseDto = {
   publicId: string;
   title: string;
