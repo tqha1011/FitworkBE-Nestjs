@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { IApplicantEvaluationService } from '../interfaces/applicant-evaluation.service.interface';
 import { err, ok, Result } from 'neverthrow';
@@ -18,9 +18,8 @@ import {
   ApplicantEvaluationDetailDto,
   ApplicantEvaluationResponseDto,
 } from '../dtos/applicant-evaluation.response.dto';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import type { Cache } from '@nestjs/cache-manager';
 import { Logger } from '@nestjs/common';
+import { IApplicationCache } from 'src/shared/infrastructure/cache/application-cache.interface';
 
 @Injectable()
 export class ApplicantEvaluationService implements IApplicantEvaluationService {
@@ -31,7 +30,7 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
     private readonly applicantEvaluationRepository: IApplicantEvaluationRepository,
     private readonly applicantEvaluationQueue: IApplicantEvaluationQueueInterface,
     private readonly configService: ConfigService,
-    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+    private readonly cacheManager: IApplicationCache,
   ) {}
   async getApplicantEvaluationDetailAsync(
     applicantPublicId: string,
