@@ -32,6 +32,7 @@ export type JobApplicantResponseDto = {
 };
 
 export type JobApplicantItemResponseDto = {
+  jobApplicantPublicId: string;
   jobPublicId: string;
   status: CommonJobApplicantStatus;
   resumePublicId: string;

@@ -57,9 +57,16 @@ import { SkillService } from './application/services/skill.service';
     JobRepository,
     { provide: IJobRepository, useExisting: JobRepository },
     { provide: IJobQueryRepository, useExisting: JobRepository },
-    { provide: IJobApplicantQueryRepo, useExisting: JobRepository },
+    JobApplicantRepository,
+    {
+      provide: IJobApplicantRepository,
+      useExisting: JobApplicantRepository,
+    },
+    {
+      provide: IJobApplicantQueryRepo,
+      useExisting: JobApplicantRepository,
+    },
     { provide: IJobService, useClass: JobService },
-    { provide: IJobApplicantRepository, useClass: JobApplicantRepository },
     { provide: IJobApplicantService, useClass: JobApplicantService },
     { provide: ISkillRepository, useClass: SkillRepository },
     { provide: ICategoryRepository, useClass: CategoryRepository },

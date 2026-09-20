@@ -13,7 +13,6 @@ import {
 import { PageResult } from 'src/shared/common/pagination';
 import {
   JobDetailResponseDto,
-  JobApplicantItemResponseDto,
   JobItemResponseDto,
 } from '../application/dtos/job.response.dto';
 import { JobApplicantStatus, JobStatus } from 'generated/prisma/enums';
@@ -24,12 +23,8 @@ import {
   mapStatusToDomain,
   mapStatusToPrisma,
 } from './job.mapper';
-import { IJobApplicantQueryRepo } from '../application/interfaces/job-applicant.query-repo.interface';
-import { mapJobApplicantStatusToDomain } from './job-applicant.mapper';
 
-export class JobRepository
-  implements IJobRepository, IJobQueryRepository, IJobApplicantQueryRepo
-{
+export class JobRepository implements IJobRepository, IJobQueryRepository {
   constructor(private readonly prismaService: PrismaService) {}
 
   async getJobDataForSnapshot(
@@ -87,55 +82,6 @@ export class JobRepository
       });
     } catch (error) {
       return err(new Error(`Failed to get job data for snapshot: ${error}`));
-    }
-  }
-
-  async getJobsAppliedAsync(
-    userId: number,
-    pageNumber: number,
-    pageSize: number,
-  ): Promise<Result<PageResult<JobApplicantItemResponseDto>, Error>> {
-    try {
-      const where: Prisma.JobApplicantWhereInput = { applicantId: userId };
-      const [applications, totalItems] = await Promise.all([
-        this.prismaService.jobApplicant.findMany({
-          where,
-          select: {
-            status: true,
-            proposedRate: true,
-            estimatedDay: true,
-            appliedAt: true,
-            job: { select: { publicId: true } },
-            resume: { select: { publicId: true } },
-            evaluations: {
-              where: { overallScore: { not: null } },
-              select: { overallScore: true },
-              orderBy: { createdAt: 'desc' },
-              take: 1,
-            },
-          },
-          orderBy: [{ appliedAt: 'desc' }, { id: 'desc' }],
-          take: pageSize,
-          skip: (pageNumber - 1) * pageSize,
-        }),
-        this.prismaService.jobApplicant.count({ where }),
-      ]);
-
-      const items: JobApplicantItemResponseDto[] = applications.map(
-        (application) => ({
-          jobPublicId: application.job.publicId,
-          status: mapJobApplicantStatusToDomain(application.status),
-          resumePublicId: application.resume.publicId,
-          proposedRate: application.proposedRate.toNumber(),
-          estimatedDays: application.estimatedDay,
-          appliedAt: application.appliedAt,
-          matchingScore: application.evaluations[0]?.overallScore ?? 0,
-        }),
-      );
-
-      return ok(new PageResult(items, totalItems, pageNumber, pageSize));
-    } catch (error) {
-      return err(new Error(`Failed to get jobs applied: ${error}`));
     }
   }
 
