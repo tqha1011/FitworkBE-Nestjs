@@ -48,6 +48,13 @@ export type ApplicantEvaluationRealtimeState = {
   updatedAt: Date;
 };
 
+export type ApplicantEvaluationDetail = {
+  evaluationPublicId: string;
+  overallScore: number | null;
+  scoreBreakdown: EvaluationBreakdown | null;
+  evidence: EvaluationEvidenceV1 | null;
+};
+
 export abstract class IApplicantEvaluationRepository {
   abstract prepare(
     input: PrepareApplicantEvaluationInput,
@@ -75,4 +82,9 @@ export abstract class IApplicantEvaluationRepository {
     evaluationPublicId: string,
     applicantPublicId: string,
   ): Promise<Result<ApplicantEvaluationRealtimeState | null, Error>>;
+
+  abstract getApplicantEvaluationDetail(
+    applicantPublicId: string,
+    evaluationPublicId: string,
+  ): Promise<Result<ApplicantEvaluationDetail | null, Error>>;
 }

@@ -20,9 +20,10 @@ import { ResumeIngestionService } from './application/services/resume-ingestion.
 import { ResumeIngestionProcessor } from './infrastructure/resume-ingestion.processor';
 import { IResumeIngestionNotifier } from './application/interfaces/resume-ingestion-notifier.interface';
 import { ResumeIngestionEventPublisher } from './infrastructure/resume-ingestion-event.publisher';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
-  imports: [UsersModule],
+  imports: [UsersModule, AuthModule],
   controllers: [ResumeController],
   providers: [
     ResumeRepository,

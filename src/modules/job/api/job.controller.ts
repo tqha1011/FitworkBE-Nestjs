@@ -17,6 +17,7 @@ import {
   GetJobListRequestDto,
   JobApplicantRequestDto,
   JobUpdateRequestDto,
+  UpdateJobApplicantStatusRequestDto,
 } from '../application/dtos/job.request.dto';
 import {
   JobApplicantItemResponseDto,
@@ -28,6 +29,9 @@ import { IJobApplicantService } from '../application/interfaces/job-applicant.se
 import { ICategoryService } from '../application/interfaces/category.service.interface';
 import { IArrangementService } from '../application/interfaces/arrangement.service.interface';
 import { PageResult, PaginationQueryDto } from 'src/shared/common/pagination';
+import { Roles } from 'src/shared/common/roles.decorator';
+import { RolesGuard } from 'src/shared/common/roles.guard';
+import { CommonUserRole } from 'src/shared/domain/enum';
 
 @ApiTags('job')
 @Controller('/api/job')
@@ -101,6 +105,30 @@ export class JobController {
     if (result.isErr()) {
       throw toHttpException(result.error);
     }
+  }
+
+  @Patch('applicants/:jobApplicantPublicId/status')
+  @Auth(RolesGuard)
+  @Roles([CommonUserRole.ROLE_COMPANY])
+  @ApiOperation({ summary: 'Update a job applicant status' })
+  async updateJobApplicantStatus(
+    @User() user: JwtPayload,
+    @Param('jobApplicantPublicId') jobApplicantPublicId: string,
+    @Body() request: UpdateJobApplicantStatusRequestDto,
+  ): Promise<JobApplicantResponseDto> {
+    const result = await this.jobApplicantService.confirmJobApplicantAsync(
+      user.sub,
+      jobApplicantPublicId,
+      request.status,
+    );
+    return result.match(
+      () => ({
+        message: 'Job applicant status updated successfully',
+      }),
+      (error) => {
+        throw toHttpException(error);
+      },
+    );
   }
 
   @Post(':jobPublicId/apply')

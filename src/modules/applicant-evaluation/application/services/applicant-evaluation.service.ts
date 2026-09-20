@@ -14,17 +14,93 @@ import {
   CommonResumeIngestionStatus,
 } from 'src/shared/domain/enum';
 import { APPLICANT_EVALUATION_PROMPT_VERSION } from '../constants/applicant-evaluation.constants';
-import { ApplicantEvaluationResponseDto } from '../dtos/applicant-evaluation.response.dto';
+import {
+  ApplicantEvaluationDetailDto,
+  ApplicantEvaluationResponseDto,
+} from '../dtos/applicant-evaluation.response.dto';
+import { Logger } from '@nestjs/common';
+import { IApplicationCache } from 'src/shared/application/cache/application-cache.interface';
 
 @Injectable()
 export class ApplicantEvaluationService implements IApplicantEvaluationService {
+  private readonly logger = new Logger(ApplicantEvaluationService.name);
   constructor(
     private readonly resumeContentRepository: IResumeContentRepository,
     private readonly jobRepository: IJobRepository,
     private readonly applicantEvaluationRepository: IApplicantEvaluationRepository,
     private readonly applicantEvaluationQueue: IApplicantEvaluationQueueInterface,
     private readonly configService: ConfigService,
+    private readonly cacheManager: IApplicationCache,
   ) {}
+  async getApplicantEvaluationDetailAsync(
+    applicantPublicId: string,
+    evaluationPublicId: string,
+  ): Promise<Result<ApplicantEvaluationDetailDto, AppError>> {
+    try {
+      const cacheResult =
+        await this.cacheManager.get<ApplicantEvaluationDetailDto>(
+          this.buildCacheKey(applicantPublicId, evaluationPublicId),
+        );
+      if (cacheResult !== undefined) {
+        return ok(cacheResult);
+      }
+    } catch (error) {
+      this.logger.error(
+        `Failed to get cached result at ${ApplicantEvaluationService.name}: ${error}`,
+      );
+    }
+    const result =
+      await this.applicantEvaluationRepository.getApplicantEvaluationDetail(
+        applicantPublicId,
+        evaluationPublicId,
+      );
+    if (result.isErr()) {
+      return err(
+        new AppError(
+          ErrorCode.InternalServerError,
+          'Failed to get applicant evaluation detail',
+        ),
+      );
+    }
+    if (!result.value) {
+      return err(
+        new AppError(ErrorCode.NotFound, 'Applicant evaluation not found'),
+      );
+    }
+    if (
+      result.value.overallScore === null ||
+      result.value.scoreBreakdown === null ||
+      result.value.evidence === null
+    ) {
+      return err(
+        new AppError(
+          ErrorCode.Conflict,
+          'Applicant evaluation is not completed',
+        ),
+      );
+    }
+    try {
+      await this.cacheManager.set(
+        this.buildCacheKey(applicantPublicId, result.value.evaluationPublicId),
+        {
+          publicId: result.value.evaluationPublicId,
+          overallScore: result.value.overallScore,
+          scoreBreakdown: result.value.scoreBreakdown,
+          evidence: result.value.evidence,
+        },
+      );
+    } catch (error) {
+      this.logger.error(`Failed to cache evaluation ${error}`);
+    }
+
+    return ok({
+      publicId: result.value.evaluationPublicId,
+      overallScore: result.value.overallScore,
+      scoreBreakdown: result.value.scoreBreakdown,
+      evidence: result.value.evidence,
+    });
+  }
+
   async evaluateApplicantAsync(
     applicantPublicId: string,
     data: CreateApplicantEvaluationRequestDto,
@@ -128,5 +204,12 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
       );
     }
     return ok({ publicId: prepareResult.value.publicId });
+  }
+
+  private buildCacheKey(
+    applicantPublicId: string,
+    evaluationPublicId: string,
+  ): string {
+    return `applicant:${applicantPublicId}:${evaluationPublicId}`;
   }
 }

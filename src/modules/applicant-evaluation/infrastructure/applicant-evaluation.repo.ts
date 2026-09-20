@@ -13,11 +13,47 @@ import {
   IApplicantEvaluationRepository,
   PreparedApplicantEvaluation,
   PrepareApplicantEvaluationInput,
+  ApplicantEvaluationDetail,
 } from '../domain/repositories/applicant-evaluation.repo.interface';
+import {
+  mapEvaluationBreakdown,
+  mapEvaluationEvidence,
+} from './applicant-evaluation.mapper';
 
 @Injectable()
 export class ApplicantEvaluationRepository implements IApplicantEvaluationRepository {
   constructor(private readonly prismaService: PrismaService) {}
+  async getApplicantEvaluationDetail(
+    applicantPublicId: string,
+    evaluationPublicId: string,
+  ): Promise<Result<ApplicantEvaluationDetail | null, Error>> {
+    try {
+      const evaluation =
+        await this.prismaService.applicantEvaluation.findUnique({
+          where: {
+            publicId: evaluationPublicId,
+            jobApplicant: { applicant: { publicId: applicantPublicId } },
+          },
+          select: {
+            publicId: true,
+            overallScore: true,
+            scoreBreakdown: true,
+            evidence: true,
+          },
+        });
+      if (!evaluation) return ok(null);
+      return ok({
+        evaluationPublicId: evaluation.publicId,
+        overallScore: evaluation.overallScore,
+        scoreBreakdown: mapEvaluationBreakdown(evaluation.scoreBreakdown),
+        evidence: mapEvaluationEvidence(evaluation.evidence),
+      });
+    } catch (error) {
+      return err(
+        new Error(`Failed to get applicant evaluation detail: ${error}`),
+      );
+    }
+  }
 
   async getRealtimeStateForApplicant(
     evaluationPublicId: string,
