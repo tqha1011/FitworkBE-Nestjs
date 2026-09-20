@@ -40,6 +40,6 @@ import { TokenProvider } from './infrastructure/tokenProvider';
     { provide: IRefreshTokenProvider, useClass: RefreshTokenProvider },
     { provide: IRefreshTokenRepository, useClass: RefreshTokenRepository },
   ],
-  exports: [],
+  exports: [JwtModule],
 })
 export class AuthModule {}

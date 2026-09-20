@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { IApplicantEvaluationService } from '../interfaces/applicant-evaluation.service.interface';
 import { err, ok, Result } from 'neverthrow';
@@ -18,26 +18,87 @@ import {
   ApplicantEvaluationDetailDto,
   ApplicantEvaluationResponseDto,
 } from '../dtos/applicant-evaluation.response.dto';
+import { Cache, CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Logger } from '@nestjs/common';
 
 @Injectable()
 export class ApplicantEvaluationService implements IApplicantEvaluationService {
+  private readonly logger = new Logger(ApplicantEvaluationService.name);
   constructor(
     private readonly resumeContentRepository: IResumeContentRepository,
     private readonly jobRepository: IJobRepository,
     private readonly applicantEvaluationRepository: IApplicantEvaluationRepository,
     private readonly applicantEvaluationQueue: IApplicantEvaluationQueueInterface,
     private readonly configService: ConfigService,
+    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
   ) {}
   async getApplicantEvaluationDetailAsync(
     applicantPublicId: string,
     evaluationPublicId: string,
   ): Promise<Result<ApplicantEvaluationDetailDto, AppError>> {
-    const result =
-      await this.applicantEvaluationRepository.getApplicantEvaluationDetail(
-        applicantPublicId,
-        evaluationPublicId,
-      );
-    if (result.isErr()) {
+    try {
+      const cacheResult =
+        await this.cacheManager.get<ApplicantEvaluationDetailDto>(
+          this.buildCacheKey(applicantPublicId, evaluationPublicId),
+        );
+      if (cacheResult !== undefined) {
+        return ok(cacheResult);
+      }
+      const result =
+        await this.applicantEvaluationRepository.getApplicantEvaluationDetail(
+          applicantPublicId,
+          evaluationPublicId,
+        );
+      if (result.isErr()) {
+        return err(
+          new AppError(
+            ErrorCode.InternalServerError,
+            'Failed to get applicant evaluation detail',
+          ),
+        );
+      }
+      if (!result.value) {
+        return err(
+          new AppError(ErrorCode.NotFound, 'Applicant evaluation not found'),
+        );
+      }
+      if (
+        result.value.overallScore === null ||
+        result.value.scoreBreakdown === null ||
+        result.value.evidence === null
+      ) {
+        return err(
+          new AppError(
+            ErrorCode.Conflict,
+            'Applicant evaluation is not completed',
+          ),
+        );
+      }
+      try {
+        await this.cacheManager.set(
+          this.buildCacheKey(
+            applicantPublicId,
+            result.value.evaluationPublicId,
+          ),
+          {
+            publicId: result.value.evaluationPublicId,
+            overallScore: result.value.overallScore,
+            scoreBreakdown: result.value.scoreBreakdown,
+            evidence: result.value.evidence,
+          },
+        );
+      } catch (error) {
+        this.logger.error(`Failed to cache evaluation ${error}`);
+      }
+
+      return ok({
+        publicId: result.value.evaluationPublicId,
+        overallScore: result.value.overallScore,
+        scoreBreakdown: result.value.scoreBreakdown,
+        evidence: result.value.evidence,
+      });
+    } catch (error) {
+      this.logger.error(`Failed to get evaluation ${error}`);
       return err(
         new AppError(
           ErrorCode.InternalServerError,
@@ -45,30 +106,6 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
         ),
       );
     }
-    if (!result.value) {
-      return err(
-        new AppError(ErrorCode.NotFound, 'Applicant evaluation not found'),
-      );
-    }
-    if (
-      result.value.overallScore === null ||
-      result.value.scoreBreakdown === null ||
-      result.value.evidence === null
-    ) {
-      return err(
-        new AppError(
-          ErrorCode.Conflict,
-          'Applicant evaluation is not completed',
-        ),
-      );
-    }
-
-    return ok({
-      publicId: result.value.evaluationPublicId,
-      overallScore: result.value.overallScore,
-      scoreBreakdown: result.value.scoreBreakdown,
-      evidence: result.value.evidence,
-    });
   }
 
   async evaluateApplicantAsync(
@@ -174,5 +211,12 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
       );
     }
     return ok({ publicId: prepareResult.value.publicId });
+  }
+
+  private buildCacheKey(
+    applicantPublicId: string,
+    evaluationPublicId: string,
+  ): string {
+    return `applicant:${applicantPublicId}:${evaluationPublicId}`;
   }
 }
