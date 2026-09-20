@@ -1,4 +1,5 @@
 import { err, ok, Result } from 'neverthrow';
+import { Injectable } from '@nestjs/common';
 import { IJobApplicantService } from '../interfaces/job-applicant.service.interface';
 import { AppError, ErrorCode } from 'src/shared/common/errorCode';
 import { JobApplicantRequestDto } from '../dtos/job.request.dto';
@@ -7,7 +8,10 @@ import { IJobApplicantRepository } from '../../domain/repositories/job-applicant
 import { IUserRepository } from 'src/modules/users/domain/repositories/users.repo.interface';
 import { IResumeRepository } from 'src/modules/resume/domain/repositories/resume.repo.interface';
 import { JobApplicant } from '../../domain/entities/job-applicant.entity';
+import { CommonJobApplicantStatus } from 'src/shared/domain/enum';
+import { canTransitionJobApplicantStatus } from '../../domain/value-objects/job-applicant-status-transition';
 
+@Injectable()
 export class JobApplicantService implements IJobApplicantService {
   constructor(
     private readonly jobRepository: IJobRepository,
@@ -15,6 +19,80 @@ export class JobApplicantService implements IJobApplicantService {
     private readonly userRepository: IUserRepository,
     private readonly resumeRepository: IResumeRepository,
   ) {}
+  async confirmJobApplicantAsync(
+    actorPublicId: string,
+    jobApplicantPublicId: string,
+    nextStatus: CommonJobApplicantStatus,
+  ): Promise<Result<undefined, AppError>> {
+    const [actorIdResult, contextResult] = await Promise.all([
+      this.userRepository.resolvePublicIdToId(actorPublicId),
+      this.jobApplicantRepository.getStatusContext(jobApplicantPublicId),
+    ]);
+
+    if (actorIdResult.isErr())
+      return err(
+        new AppError(
+          ErrorCode.InternalServerError,
+          actorIdResult.error.message,
+        ),
+      );
+    if (!actorIdResult.value)
+      return err(new AppError(ErrorCode.NotFound, 'User not found'));
+    if (contextResult.isErr())
+      return err(
+        new AppError(
+          ErrorCode.InternalServerError,
+          contextResult.error.message,
+        ),
+      );
+    if (!contextResult.value)
+      return err(
+        new AppError(ErrorCode.NotFound, 'Job applicant was not found'),
+      );
+    if (contextResult.value.jobOwnerId !== actorIdResult.value)
+      return err(
+        new AppError(
+          ErrorCode.Forbidden,
+          'Only the job owner can change applicant status',
+        ),
+      );
+
+    const currentStatus = contextResult.value.status;
+    if (currentStatus === nextStatus)
+      return err(
+        new AppError(ErrorCode.BadRequest, 'No need to change status'),
+      );
+    if (!canTransitionJobApplicantStatus(currentStatus, nextStatus))
+      return err(
+        new AppError(
+          ErrorCode.BadRequest,
+          `Cannot change ${currentStatus} to ${nextStatus}`,
+        ),
+      );
+
+    const transitionResult = await this.jobApplicantRepository.transitionStatus(
+      jobApplicantPublicId,
+      contextResult.value.jobId,
+      currentStatus,
+      nextStatus,
+    );
+    if (transitionResult.isErr())
+      return err(
+        new AppError(
+          ErrorCode.InternalServerError,
+          transitionResult.error.message,
+        ),
+      );
+    if (!transitionResult.value)
+      return err(
+        new AppError(
+          ErrorCode.Conflict,
+          'Job applicant status changed; retry the request',
+        ),
+      );
+
+    return ok(undefined);
+  }
   async applyJobAsync(
     userPublicId: string,
     jobPublicId: string,

@@ -1,4 +1,4 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
   IsArray,
@@ -13,7 +13,11 @@ import {
 } from 'class-validator';
 import { PaginationQueryDto } from 'src/shared/common/pagination';
 import { IsGreaterThanOrEqual } from 'src/shared/common/validators/is-greater-than-or-equal.validator';
-import { CommonCurrency, CommonJobStatus } from 'src/shared/domain/enum';
+import {
+  CommonCurrency,
+  CommonJobApplicantStatus,
+  CommonJobStatus,
+} from 'src/shared/domain/enum';
 
 export class CreateJobRequestDto {
   @ApiPropertyOptional({ description: '' })
@@ -135,6 +139,12 @@ export class JobApplicantRequestDto {
   @ApiPropertyOptional({ description: 'Resume public id' })
   @IsString()
   resumePublicId: string;
+}
+
+export class UpdateJobApplicantStatusRequestDto {
+  @ApiProperty({ enum: CommonJobApplicantStatus })
+  @IsEnum(CommonJobApplicantStatus)
+  status: CommonJobApplicantStatus;
 }
 
 export class JobUpdateRequestDto {

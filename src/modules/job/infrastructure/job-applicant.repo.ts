@@ -1,8 +1,11 @@
 import { err, ok, Result } from 'neverthrow';
-import { JobApplicantStatus, Prisma } from 'generated/prisma/client';
+import { Prisma } from 'generated/prisma/client';
 import { IJobApplicantQueryRepo } from '../application/interfaces/job-applicant.query-repo.interface';
 import { JobApplicantItemResponseDto } from '../application/dtos/job.response.dto';
-import { IJobApplicantRepository } from '../domain/repositories/job-applicant.repo.interface';
+import {
+  IJobApplicantRepository,
+  JobApplicantStatusContext,
+} from '../domain/repositories/job-applicant.repo.interface';
 import { PrismaService } from 'src/shared/infrastructure/database/prisma.service';
 import { JobApplicant } from '../domain/entities/job-applicant.entity';
 import { PageResult } from 'src/shared/common/pagination';
@@ -10,27 +13,60 @@ import {
   mapJobApplicantStatusToDomain,
   mapJobApplicantStatusToPrisma,
 } from './job-applicant.mapper';
+import { CommonJobApplicantStatus } from 'src/shared/domain/enum';
 
 export class JobApplicantRepository
   implements IJobApplicantRepository, IJobApplicantQueryRepo
 {
   constructor(private readonly prismaService: PrismaService) {}
-  async acceptJobApplicant(
+
+  async getStatusContext(
     jobApplicantPublicId: string,
-    jobId: number,
-    resumeId: number,
-    applicantId: number,
-  ): Promise<Result<undefined, Error>> {
+  ): Promise<Result<JobApplicantStatusContext | null, Error>> {
     try {
-      await this.prismaService.jobApplicant.update({
-        where: { publicId: jobApplicantPublicId, jobId, resumeId, applicantId },
-        data: {
-          status: JobApplicantStatus.ACCEPTED,
+      const jobApplicant = await this.prismaService.jobApplicant.findUnique({
+        where: { publicId: jobApplicantPublicId },
+        select: {
+          jobId: true,
+          status: true,
+          job: { select: { postedBy: true } },
         },
       });
-      return ok(undefined);
+
+      if (!jobApplicant) return ok(null);
+      return ok({
+        jobId: jobApplicant.jobId,
+        jobOwnerId: jobApplicant.job.postedBy,
+        status: mapJobApplicantStatusToDomain(jobApplicant.status),
+      });
     } catch (error) {
-      return err(new Error(`Failed to accept job applicant: ${error}`));
+      return err(
+        new Error(`Failed to get job applicant status context: ${error}`),
+      );
+    }
+  }
+
+  async transitionStatus(
+    jobApplicantPublicId: string,
+    jobId: number,
+    expectedStatus: CommonJobApplicantStatus,
+    nextStatus: CommonJobApplicantStatus,
+  ): Promise<Result<boolean, Error>> {
+    try {
+      const result = await this.prismaService.jobApplicant.updateMany({
+        where: {
+          publicId: jobApplicantPublicId,
+          jobId,
+          status: mapJobApplicantStatusToPrisma(expectedStatus),
+        },
+        data: { status: mapJobApplicantStatusToPrisma(nextStatus) },
+      });
+
+      return ok(result.count === 1);
+    } catch (error) {
+      return err(
+        new Error(`Failed to transition job applicant status: ${error}`),
+      );
     }
   }
 

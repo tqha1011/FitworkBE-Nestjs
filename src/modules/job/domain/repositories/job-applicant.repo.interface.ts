@@ -1,15 +1,26 @@
 import { Result } from 'neverthrow';
 import { JobApplicant } from '../entities/job-applicant.entity';
+import { CommonJobApplicantStatus } from 'src/shared/domain/enum';
+
+export type JobApplicantStatusContext = {
+  jobId: number;
+  jobOwnerId: number;
+  status: CommonJobApplicantStatus;
+};
 
 export abstract class IJobApplicantRepository {
   abstract addJobApplicant(
     jobApplicant: JobApplicant,
   ): Promise<Result<undefined, Error>>;
 
-  abstract acceptJobApplicant(
+  abstract transitionStatus(
     jobApplicantPublicId: string,
     jobId: number,
-    resumeId: number,
-    applicantId: number,
-  ): Promise<Result<undefined, Error>>;
+    expectedStatus: CommonJobApplicantStatus,
+    nextStatus: CommonJobApplicantStatus,
+  ): Promise<Result<boolean, Error>>;
+
+  abstract getStatusContext(
+    jobApplicantPublicId: string,
+  ): Promise<Result<JobApplicantStatusContext | null, Error>>;
 }
