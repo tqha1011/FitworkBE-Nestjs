@@ -18,7 +18,8 @@ import {
   ApplicantEvaluationDetailDto,
   ApplicantEvaluationResponseDto,
 } from '../dtos/applicant-evaluation.response.dto';
-import { Cache, CACHE_MANAGER } from '@nestjs/cache-manager';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import type { Cache } from '@nestjs/cache-manager';
 import { Logger } from '@nestjs/common';
 
 @Injectable()
@@ -44,61 +45,17 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
       if (cacheResult !== undefined) {
         return ok(cacheResult);
       }
-      const result =
-        await this.applicantEvaluationRepository.getApplicantEvaluationDetail(
-          applicantPublicId,
-          evaluationPublicId,
-        );
-      if (result.isErr()) {
-        return err(
-          new AppError(
-            ErrorCode.InternalServerError,
-            'Failed to get applicant evaluation detail',
-          ),
-        );
-      }
-      if (!result.value) {
-        return err(
-          new AppError(ErrorCode.NotFound, 'Applicant evaluation not found'),
-        );
-      }
-      if (
-        result.value.overallScore === null ||
-        result.value.scoreBreakdown === null ||
-        result.value.evidence === null
-      ) {
-        return err(
-          new AppError(
-            ErrorCode.Conflict,
-            'Applicant evaluation is not completed',
-          ),
-        );
-      }
-      try {
-        await this.cacheManager.set(
-          this.buildCacheKey(
-            applicantPublicId,
-            result.value.evaluationPublicId,
-          ),
-          {
-            publicId: result.value.evaluationPublicId,
-            overallScore: result.value.overallScore,
-            scoreBreakdown: result.value.scoreBreakdown,
-            evidence: result.value.evidence,
-          },
-        );
-      } catch (error) {
-        this.logger.error(`Failed to cache evaluation ${error}`);
-      }
-
-      return ok({
-        publicId: result.value.evaluationPublicId,
-        overallScore: result.value.overallScore,
-        scoreBreakdown: result.value.scoreBreakdown,
-        evidence: result.value.evidence,
-      });
     } catch (error) {
-      this.logger.error(`Failed to get evaluation ${error}`);
+      this.logger.error(
+        `Failed to get cached result at ${ApplicantEvaluationService.name}: ${error}`,
+      );
+    }
+    const result =
+      await this.applicantEvaluationRepository.getApplicantEvaluationDetail(
+        applicantPublicId,
+        evaluationPublicId,
+      );
+    if (result.isErr()) {
       return err(
         new AppError(
           ErrorCode.InternalServerError,
@@ -106,6 +63,43 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
         ),
       );
     }
+    if (!result.value) {
+      return err(
+        new AppError(ErrorCode.NotFound, 'Applicant evaluation not found'),
+      );
+    }
+    if (
+      result.value.overallScore === null ||
+      result.value.scoreBreakdown === null ||
+      result.value.evidence === null
+    ) {
+      return err(
+        new AppError(
+          ErrorCode.Conflict,
+          'Applicant evaluation is not completed',
+        ),
+      );
+    }
+    try {
+      await this.cacheManager.set(
+        this.buildCacheKey(applicantPublicId, result.value.evaluationPublicId),
+        {
+          publicId: result.value.evaluationPublicId,
+          overallScore: result.value.overallScore,
+          scoreBreakdown: result.value.scoreBreakdown,
+          evidence: result.value.evidence,
+        },
+      );
+    } catch (error) {
+      this.logger.error(`Failed to cache evaluation ${error}`);
+    }
+
+    return ok({
+      publicId: result.value.evaluationPublicId,
+      overallScore: result.value.overallScore,
+      scoreBreakdown: result.value.scoreBreakdown,
+      evidence: result.value.evidence,
+    });
   }
 
   async evaluateApplicantAsync(

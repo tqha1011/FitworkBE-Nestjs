@@ -17,6 +17,7 @@ import { QueueModule } from './shared/infrastructure/queue/queue.module';
 import { RealtimeModule } from './modules/realtime/realtime.module';
 import { ApplicantEvaluationModule } from './modules/applicant-evaluation/applicant-evaluation.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { CachingModule } from './shared/infrastructure/cache/cache.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
     ResumeModule,
     RealtimeModule,
     ApplicantEvaluationModule,
+    CachingModule,
   ],
   providers: [
     {

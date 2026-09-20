@@ -10,7 +10,6 @@ import {
   ApplicantEvaluationResponseDto,
 } from '../application/dtos/applicant-evaluation.response.dto';
 import { IApplicantEvaluationService } from '../application/interfaces/applicant-evaluation.service.interface';
-import { Cache } from 'src/shared/common/swagger/cache.decorator';
 
 @ApiTags('applicant-evaluation')
 @Controller('/api/applicant-evaluation')
