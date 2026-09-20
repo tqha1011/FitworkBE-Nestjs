@@ -2,8 +2,8 @@ import { Global, Module } from '@nestjs/common';
 import { CacheModule } from '@nestjs/cache-manager';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { createKeyv } from '@keyv/redis';
-import { IApplicationCache } from './application-cache.interface';
-import { ApplicationCache } from './application-cache';
+import { IApplicationCache } from 'src/shared/application/cache/application-cache.interface';
+import { RedisApplicationCache } from './redis-application-cache';
 
 @Global()
 @Module({
@@ -20,7 +20,7 @@ import { ApplicationCache } from './application-cache';
   providers: [
     {
       provide: IApplicationCache,
-      useClass: ApplicationCache,
+      useClass: RedisApplicationCache,
     },
   ],
   exports: [CacheModule, IApplicationCache],

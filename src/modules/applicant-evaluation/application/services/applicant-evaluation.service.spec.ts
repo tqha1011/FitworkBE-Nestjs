@@ -48,6 +48,11 @@ describe('ApplicantEvaluationService', () => {
     getApplicantEvaluationDetail: jest.Mock;
   };
   let applicantEvaluationQueue: { enqueue: jest.Mock; retry: jest.Mock };
+  let applicationCache: {
+    get: jest.Mock;
+    set: jest.Mock;
+    delete: jest.Mock;
+  };
   let configService: { get: jest.Mock };
   let service: ApplicantEvaluationService;
 
@@ -82,6 +87,11 @@ describe('ApplicantEvaluationService', () => {
       enqueue: jest.fn().mockResolvedValue(undefined),
       retry: jest.fn().mockResolvedValue(undefined),
     };
+    applicationCache = {
+      get: jest.fn().mockResolvedValue(undefined),
+      set: jest.fn().mockResolvedValue(undefined),
+      delete: jest.fn().mockResolvedValue(undefined),
+    };
     configService = {
       get: jest.fn().mockReturnValue('evaluation-model'),
     };
@@ -91,6 +101,7 @@ describe('ApplicantEvaluationService', () => {
       applicantEvaluationRepository,
       applicantEvaluationQueue,
       configService as unknown as ConfigService,
+      applicationCache,
     );
   });
 
@@ -132,6 +143,67 @@ describe('ApplicantEvaluationService', () => {
         scoreBreakdown: detail.scoreBreakdown,
         evidence: detail.evidence,
       });
+      expect(applicationCache.set).toHaveBeenCalledWith(
+        'applicant:applicant-id:evaluation-id',
+        {
+          publicId: 'evaluation-id',
+          overallScore: 88,
+          scoreBreakdown: detail.scoreBreakdown,
+          evidence: detail.evidence,
+        },
+      );
+    });
+
+    it('returns cached detail without querying the repository', async () => {
+      const cachedDetail = {
+        publicId: 'evaluation-id',
+        overallScore: 88,
+        scoreBreakdown: detail.scoreBreakdown,
+        evidence: detail.evidence,
+      };
+      applicationCache.get.mockResolvedValue(cachedDetail);
+
+      const result = await service.getApplicantEvaluationDetailAsync(
+        'applicant-id',
+        'evaluation-id',
+      );
+
+      expect(result._unsafeUnwrap()).toEqual(cachedDetail);
+      expect(
+        applicantEvaluationRepository.getApplicantEvaluationDetail,
+      ).not.toHaveBeenCalled();
+      expect(applicationCache.set).not.toHaveBeenCalled();
+    });
+
+    it('falls back to the repository when reading cache fails', async () => {
+      applicationCache.get.mockRejectedValue(new Error('Redis unavailable'));
+      applicantEvaluationRepository.getApplicantEvaluationDetail.mockResolvedValue(
+        ok(detail),
+      );
+
+      const result = await service.getApplicantEvaluationDetailAsync(
+        'applicant-id',
+        'evaluation-id',
+      );
+
+      expect(result._unsafeUnwrap().publicId).toBe('evaluation-id');
+      expect(
+        applicantEvaluationRepository.getApplicantEvaluationDetail,
+      ).toHaveBeenCalled();
+    });
+
+    it('returns repository detail when writing cache fails', async () => {
+      applicationCache.set.mockRejectedValue(new Error('Redis unavailable'));
+      applicantEvaluationRepository.getApplicantEvaluationDetail.mockResolvedValue(
+        ok(detail),
+      );
+
+      const result = await service.getApplicantEvaluationDetailAsync(
+        'applicant-id',
+        'evaluation-id',
+      );
+
+      expect(result._unsafeUnwrap().publicId).toBe('evaluation-id');
     });
 
     it('returns not found when evaluation does not exist', async () => {

@@ -19,7 +19,7 @@ import {
   ApplicantEvaluationResponseDto,
 } from '../dtos/applicant-evaluation.response.dto';
 import { Logger } from '@nestjs/common';
-import { IApplicationCache } from 'src/shared/infrastructure/cache/application-cache.interface';
+import { IApplicationCache } from 'src/shared/application/cache/application-cache.interface';
 
 @Injectable()
 export class ApplicantEvaluationService implements IApplicantEvaluationService {
