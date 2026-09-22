@@ -15,6 +15,8 @@ import {
 } from './job-applicant.mapper';
 import { CommonJobApplicantStatus } from 'src/shared/domain/enum';
 
+const optimisticLockConflict = new Error('Optimistic lock conflict');
+
 export class JobApplicantRepository
   implements IJobApplicantRepository, IJobApplicantQueryRepo
 {
@@ -23,19 +25,28 @@ export class JobApplicantRepository
     jobApplicantPublicId: string,
     jobId: number,
     expectedStatus: CommonJobApplicantStatus,
-    presentVersion: number,
+    expectedVersion: number,
   ): Promise<Result<boolean, Error>> {
     try {
       const transitioned = await this.prismaService.$transaction(
         async (transaction) => {
+          const claimedJob = await transaction.job.updateMany({
+            where: {
+              id: jobId,
+              version: expectedVersion,
+            },
+            data: {
+              version: { increment: 1 },
+            },
+          });
+
+          if (claimedJob.count !== 1) return false;
+
           const acceptedApplicant = await transaction.jobApplicant.updateMany({
             where: {
               publicId: jobApplicantPublicId,
               jobId,
               status: mapJobApplicantStatusToPrisma(expectedStatus),
-              job: {
-                version: presentVersion,
-              },
             },
             data: {
               status: mapJobApplicantStatusToPrisma(
@@ -44,16 +55,13 @@ export class JobApplicantRepository
             },
           });
 
-          if (acceptedApplicant.count !== 1) return false;
+          if (acceptedApplicant.count !== 1) throw optimisticLockConflict;
 
           await transaction.jobApplicant.updateMany({
             where: {
               publicId: { not: jobApplicantPublicId },
               jobId,
               status: mapJobApplicantStatusToPrisma(expectedStatus),
-              job: {
-                version: presentVersion,
-              },
             },
             data: {
               status: mapJobApplicantStatusToPrisma(
@@ -62,25 +70,13 @@ export class JobApplicantRepository
             },
           });
 
-          const claimedJob = await transaction.job.updateMany({
-            where: {
-              id: jobId,
-              version: presentVersion,
-            },
-            data: {
-              version: { increment: 1 },
-            },
-          });
-          if (claimedJob.count != 1) return false;
           return true;
-        },
-        {
-          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
         },
       );
 
       return ok(transitioned);
     } catch (error) {
+      if (error === optimisticLockConflict) return ok(false);
       return err(
         new Error(`Failed to accept applicant and reject others: ${error}`),
       );

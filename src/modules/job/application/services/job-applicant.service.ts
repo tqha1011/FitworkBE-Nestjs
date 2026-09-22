@@ -77,10 +77,18 @@ export class JobApplicantService implements IJobApplicantService {
           jobApplicantPublicId,
           contextResult.value.jobId,
           currentStatus,
+          contextResult.value.version,
         );
       if (result.isErr())
         return err(
           new AppError(ErrorCode.InternalServerError, result.error.message),
+        );
+      if (!result.value)
+        return err(
+          new AppError(
+            ErrorCode.Conflict,
+            'Job applicant status changed; retry the request',
+          ),
         );
       return ok(undefined);
     }

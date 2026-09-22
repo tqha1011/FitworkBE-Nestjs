@@ -35,7 +35,7 @@ describe('JobApplicantRepository', () => {
       prismaService.jobApplicant.findUnique.mockResolvedValue({
         jobId: 10,
         status: JobApplicantStatus.PENDING,
-        job: { postedBy: 20 },
+        job: { postedBy: 20, version: 3 },
       });
 
       const result = await repository.getStatusContext('application-id');
@@ -44,13 +44,14 @@ describe('JobApplicantRepository', () => {
         jobId: 10,
         jobOwnerId: 20,
         status: CommonJobApplicantStatus.PENDING,
+        version: 3,
       });
       expect(prismaService.jobApplicant.findUnique).toHaveBeenCalledWith({
         where: { publicId: 'application-id' },
         select: {
           jobId: true,
           status: true,
-          job: { select: { postedBy: true } },
+          job: { select: { postedBy: true, version: true } },
         },
       });
     });

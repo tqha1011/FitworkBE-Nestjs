@@ -33,6 +33,6 @@ export abstract class IJobApplicantRepository {
     jobApplicantPublicId: string,
     jobId: number,
     expectedStatus: CommonJobApplicantStatus,
-    presentVersion: number,
+    expectedVersion: number,
   ): Promise<Result<boolean, Error>>;
 }

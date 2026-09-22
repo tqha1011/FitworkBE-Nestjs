@@ -12,6 +12,7 @@ describe('JobApplicantService confirmJobApplicantAsync', () => {
   let jobApplicantRepository: {
     getStatusContext: jest.Mock;
     transitionStatus: jest.Mock;
+    acceptApplicantAndRejectOthers: jest.Mock;
   };
   let service: JobApplicantService;
 
@@ -25,9 +26,11 @@ describe('JobApplicantService confirmJobApplicantAsync', () => {
           jobId: 10,
           jobOwnerId: 20,
           status: CommonJobApplicantStatus.PENDING,
+          version: 3,
         }),
       ),
       transitionStatus: jest.fn().mockResolvedValue(ok(true)),
+      acceptApplicantAndRejectOthers: jest.fn().mockResolvedValue(ok(true)),
     };
     service = new JobApplicantService(
       {} as IJobRepository,
@@ -37,7 +40,7 @@ describe('JobApplicantService confirmJobApplicantAsync', () => {
     );
   });
 
-  it('transitions status when actor owns the job', async () => {
+  it('accepts the applicant and rejects the others when actor owns the job', async () => {
     const result = await service.confirmJobApplicantAsync(
       'actor-id',
       'application-id',
@@ -45,12 +48,34 @@ describe('JobApplicantService confirmJobApplicantAsync', () => {
     );
 
     expect(result.isOk()).toBe(true);
+    expect(
+      jobApplicantRepository.acceptApplicantAndRejectOthers,
+    ).toHaveBeenCalledWith(
+      'application-id',
+      10,
+      CommonJobApplicantStatus.PENDING,
+      3,
+    );
+    expect(jobApplicantRepository.transitionStatus).not.toHaveBeenCalled();
+  });
+
+  it('uses the regular transition for a rejected applicant', async () => {
+    const result = await service.confirmJobApplicantAsync(
+      'actor-id',
+      'application-id',
+      CommonJobApplicantStatus.REJECTED,
+    );
+
+    expect(result.isOk()).toBe(true);
     expect(jobApplicantRepository.transitionStatus).toHaveBeenCalledWith(
       'application-id',
       10,
       CommonJobApplicantStatus.PENDING,
-      CommonJobApplicantStatus.ACCEPTED,
+      CommonJobApplicantStatus.REJECTED,
     );
+    expect(
+      jobApplicantRepository.acceptApplicantAndRejectOthers,
+    ).not.toHaveBeenCalled();
   });
 
   it('maps actor lookup failure to internal server error', async () => {
@@ -143,7 +168,7 @@ describe('JobApplicantService confirmJobApplicantAsync', () => {
   });
 
   it('maps transition failure to internal server error', async () => {
-    jobApplicantRepository.transitionStatus.mockResolvedValue(
+    jobApplicantRepository.acceptApplicantAndRejectOthers.mockResolvedValue(
       err(new Error('database unavailable')),
     );
 
@@ -157,7 +182,9 @@ describe('JobApplicantService confirmJobApplicantAsync', () => {
   });
 
   it('returns conflict when status changed concurrently', async () => {
-    jobApplicantRepository.transitionStatus.mockResolvedValue(ok(false));
+    jobApplicantRepository.acceptApplicantAndRejectOthers.mockResolvedValue(
+      ok(false),
+    );
 
     const result = await service.confirmJobApplicantAsync(
       'actor-id',
