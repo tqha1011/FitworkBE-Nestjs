@@ -23,6 +23,7 @@ export class JobApplicantRepository
     jobApplicantPublicId: string,
     jobId: number,
     expectedStatus: CommonJobApplicantStatus,
+    presentVersion: number,
   ): Promise<Result<boolean, Error>> {
     try {
       const transitioned = await this.prismaService.$transaction(
@@ -32,6 +33,9 @@ export class JobApplicantRepository
               publicId: jobApplicantPublicId,
               jobId,
               status: mapJobApplicantStatusToPrisma(expectedStatus),
+              job: {
+                version: presentVersion,
+              },
             },
             data: {
               status: mapJobApplicantStatusToPrisma(
@@ -47,6 +51,9 @@ export class JobApplicantRepository
               publicId: { not: jobApplicantPublicId },
               jobId,
               status: mapJobApplicantStatusToPrisma(expectedStatus),
+              job: {
+                version: presentVersion,
+              },
             },
             data: {
               status: mapJobApplicantStatusToPrisma(
@@ -55,6 +62,15 @@ export class JobApplicantRepository
             },
           });
 
+          await transaction.job.update({
+            where: {
+              id: jobId,
+              version: presentVersion,
+            },
+            data: {
+              version: { increment: 1 },
+            },
+          });
           return true;
         },
         {
