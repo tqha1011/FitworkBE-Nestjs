@@ -62,7 +62,7 @@ export class JobApplicantRepository
             },
           });
 
-          await transaction.job.update({
+          const claimedJob = await transaction.job.updateMany({
             where: {
               id: jobId,
               version: presentVersion,
@@ -71,6 +71,7 @@ export class JobApplicantRepository
               version: { increment: 1 },
             },
           });
+          if (claimedJob.count != 1) return false;
           return true;
         },
         {
