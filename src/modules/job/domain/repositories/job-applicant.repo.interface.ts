@@ -6,6 +6,7 @@ export type JobApplicantStatusContext = {
   jobId: number;
   jobOwnerId: number;
   status: CommonJobApplicantStatus;
+  version: number;
 };
 
 export abstract class IJobApplicantRepository {

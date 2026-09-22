@@ -1,6 +1,7 @@
 model Job {
   id                   Int            @id @default(autoincrement())
   publicId             String         @unique @default(uuid()) @map("public_id")
+  version              Int            @default(0)
   title                String
   description          String
   requirements         String

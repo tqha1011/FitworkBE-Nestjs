@@ -94,7 +94,7 @@ export class JobApplicantRepository
         select: {
           jobId: true,
           status: true,
-          job: { select: { postedBy: true } },
+          job: { select: { postedBy: true, version: true } },
         },
       });
 
@@ -103,6 +103,7 @@ export class JobApplicantRepository
         jobId: jobApplicant.jobId,
         jobOwnerId: jobApplicant.job.postedBy,
         status: mapJobApplicantStatusToDomain(jobApplicant.status),
+        version: jobApplicant.job.version,
       });
     } catch (error) {
       return err(
