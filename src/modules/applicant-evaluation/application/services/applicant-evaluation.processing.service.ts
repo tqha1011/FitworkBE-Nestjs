@@ -70,6 +70,7 @@ export class ApplicantEvaluationProcessingService implements IApplicantEvaluatio
       return ok(undefined);
     }
 
+    // call socket.io to notify the client.
     await this.notifier.notify({
       evaluationPublicId,
       status: CommonEvaluationStatus.COMPLETED,

@@ -23,4 +23,14 @@ export abstract class IJobApplicantRepository {
   abstract getStatusContext(
     jobApplicantPublicId: string,
   ): Promise<Result<JobApplicantStatusContext | null, Error>>;
+
+  abstract rejectAllApplicants(
+    jobId: number,
+  ): Promise<Result<undefined, Error>>;
+
+  abstract acceptApplicantAndRejectOthers(
+    jobApplicantPublicId: string,
+    jobId: number,
+    expectedStatus: CommonJobApplicantStatus,
+  ): Promise<Result<boolean, Error>>;
 }

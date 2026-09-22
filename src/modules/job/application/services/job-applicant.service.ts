@@ -70,6 +70,20 @@ export class JobApplicantService implements IJobApplicantService {
         ),
       );
 
+    // automatically reject the others applicant if the applicant is accepted
+    if (nextStatus === CommonJobApplicantStatus.ACCEPTED) {
+      const result =
+        await this.jobApplicantRepository.acceptApplicantAndRejectOthers(
+          jobApplicantPublicId,
+          contextResult.value.jobId,
+          currentStatus,
+        );
+      if (result.isErr())
+        return err(
+          new AppError(ErrorCode.InternalServerError, result.error.message),
+        );
+      return ok(undefined);
+    }
     const transitionResult = await this.jobApplicantRepository.transitionStatus(
       jobApplicantPublicId,
       contextResult.value.jobId,

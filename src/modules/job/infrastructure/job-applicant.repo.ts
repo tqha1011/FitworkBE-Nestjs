@@ -19,6 +19,71 @@ export class JobApplicantRepository
   implements IJobApplicantRepository, IJobApplicantQueryRepo
 {
   constructor(private readonly prismaService: PrismaService) {}
+  async acceptApplicantAndRejectOthers(
+    jobApplicantPublicId: string,
+    jobId: number,
+    expectedStatus: CommonJobApplicantStatus,
+  ): Promise<Result<boolean, Error>> {
+    try {
+      const transitioned = await this.prismaService.$transaction(
+        async (transaction) => {
+          const acceptedApplicant = await transaction.jobApplicant.updateMany({
+            where: {
+              publicId: jobApplicantPublicId,
+              jobId,
+              status: mapJobApplicantStatusToPrisma(expectedStatus),
+            },
+            data: {
+              status: mapJobApplicantStatusToPrisma(
+                CommonJobApplicantStatus.ACCEPTED,
+              ),
+            },
+          });
+
+          if (acceptedApplicant.count !== 1) return false;
+
+          await transaction.jobApplicant.updateMany({
+            where: {
+              publicId: { not: jobApplicantPublicId },
+              jobId,
+              status: mapJobApplicantStatusToPrisma(expectedStatus),
+            },
+            data: {
+              status: mapJobApplicantStatusToPrisma(
+                CommonJobApplicantStatus.REJECTED,
+              ),
+            },
+          });
+
+          return true;
+        },
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        },
+      );
+
+      return ok(transitioned);
+    } catch (error) {
+      return err(
+        new Error(`Failed to accept applicant and reject others: ${error}`),
+      );
+    }
+  }
+  async rejectAllApplicants(jobId: number): Promise<Result<undefined, Error>> {
+    try {
+      await this.prismaService.jobApplicant.updateMany({
+        where: { jobId },
+        data: {
+          status: mapJobApplicantStatusToPrisma(
+            CommonJobApplicantStatus.REJECTED,
+          ),
+        },
+      });
+      return ok(undefined);
+    } catch (error) {
+      return err(error);
+    }
+  }
 
   async getStatusContext(
     jobApplicantPublicId: string,
