@@ -1,5 +1,4 @@
 import { Result } from 'neverthrow';
-import { AppError } from 'src/shared/common/errorCode';
 
 export type ResumeEvaluationSnapshot = {
   text: string;
@@ -9,6 +8,6 @@ export type ResumeEvaluationSnapshot = {
 
 export abstract class IResumeRedactEvaluation {
   abstract redactResumeAsync(
-    extractedText: string,
-  ): Promise<Result<ResumeEvaluationSnapshot, AppError>>;
+    resumeContentPublicId: string,
+  ): Promise<Result<ResumeEvaluationSnapshot, Error>>;
 }
