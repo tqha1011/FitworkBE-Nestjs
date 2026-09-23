@@ -20,6 +20,7 @@ import {
 } from '../dtos/applicant-evaluation.response.dto';
 import { Logger } from '@nestjs/common';
 import { IApplicationCache } from 'src/shared/application/cache/application-cache.interface';
+import { buildJobSnapshotV2 } from 'src/modules/job/domain/value-objects/job-snapshot';
 
 @Injectable()
 export class ApplicantEvaluationService implements IApplicantEvaluationService {
@@ -154,7 +155,9 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
       );
     }
 
-    const jobSnapshot = jobResult.value.snapshot;
+    const jobSnapshot = jobResult.value.snapshot.skills.length
+      ? buildJobSnapshotV2(jobResult.value.snapshot)
+      : jobResult.value.snapshot;
     const jobContentHash = hashCanonicalJson(jobSnapshot);
     const prepareResult = await this.applicantEvaluationRepository.prepare({
       applicantPublicId,

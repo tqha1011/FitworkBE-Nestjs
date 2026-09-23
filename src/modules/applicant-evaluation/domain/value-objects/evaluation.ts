@@ -1,3 +1,5 @@
+import { JobSnapshotV2 } from 'src/modules/job/domain/value-objects/job-snapshot';
+
 export type EvaluationBreakdown = {
   schemaVersion: 1;
   skills: number;
@@ -11,4 +13,35 @@ export type EvaluationEvidenceV1 = {
   strengths: string[];
   gaps: string[];
   explanation: string;
+};
+
+export type EvaluationEvidenceV2 = {
+  schemaVersion: 2;
+  criteria: EvaluationCriterionResult[];
+  strengths: string[];
+  gaps: string[];
+  explanation: string;
+};
+
+export type EvaluationVerdict = 'MATCHED' | 'PARTIAL' | 'MISSING';
+
+export type EvaluationEvidenceReference = {
+  snippet: string;
+  section: string;
+  startOffset: number;
+  endOffset: number;
+};
+
+export type EvaluationCriterionResult = {
+  criterionId: string;
+  criterionText: string;
+  verdict: EvaluationVerdict;
+  scoreContribution: number;
+  explanation: string;
+  evidence: EvaluationEvidenceReference[];
+};
+
+export type ApplicantEvaluationV2Input = {
+  jobSnapshot: JobSnapshotV2;
+  resumeText: string;
 };

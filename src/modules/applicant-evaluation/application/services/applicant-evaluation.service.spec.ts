@@ -10,6 +10,7 @@ import {
 } from 'src/shared/domain/enum';
 import { APPLICANT_EVALUATION_PROMPT_VERSION } from '../constants/applicant-evaluation.constants';
 import { ApplicantEvaluationService } from './applicant-evaluation.service';
+import { buildJobSnapshotV2 } from 'src/modules/job/domain/value-objects/job-snapshot';
 
 describe('ApplicantEvaluationService', () => {
   const request = {
@@ -260,13 +261,14 @@ describe('ApplicantEvaluationService', () => {
       request.resumePublicId,
       'applicant-id',
     );
+    const jobSnapshotV2 = buildJobSnapshotV2(jobSnapshot);
     expect(applicantEvaluationRepository.prepare).toHaveBeenCalledWith({
       applicantPublicId: 'applicant-id',
       jobId: 10,
       resumeId: resumeContent.resumeId,
       resumeContentId: resumeContent.id,
-      jobSnapshot,
-      jobContentHash: hashCanonicalJson(jobSnapshot),
+      jobSnapshot: jobSnapshotV2,
+      jobContentHash: hashCanonicalJson(jobSnapshotV2),
       resumeContentHash: resumeContent.contentHash,
       parserVersion: resumeContent.parserVersion,
       model: 'evaluation-model',
@@ -276,6 +278,26 @@ describe('ApplicantEvaluationService', () => {
       evaluationPublicId: 'evaluation-id',
     });
     expect(applicantEvaluationQueue.retry).not.toHaveBeenCalled();
+  });
+
+  it('keeps V1 evaluation for a job without structured skills', async () => {
+    const noSkillsSnapshot = { ...jobSnapshot, skills: [] };
+    jobRepository.getJobDataForSnapshot.mockResolvedValue(
+      ok({ jobId: 10, snapshot: noSkillsSnapshot }),
+    );
+
+    const result = await service.evaluateApplicantAsync(
+      'applicant-id',
+      request,
+    );
+
+    expect(result.isOk()).toBe(true);
+    expect(applicantEvaluationRepository.prepare).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jobSnapshot: noSkillsSnapshot,
+        jobContentHash: hashCanonicalJson(noSkillsSnapshot),
+      }),
+    );
   });
 
   it('retries the same BullMQ job after resetting a failed evaluation', async () => {

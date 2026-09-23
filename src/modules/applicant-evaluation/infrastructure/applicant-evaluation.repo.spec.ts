@@ -274,6 +274,26 @@ describe('ApplicantEvaluationRepository', () => {
   });
 
   describe('claimForProcessing', () => {
+    it('returns an error when legacy evaluation input is unavailable', async () => {
+      tx.applicantEvaluation.findUnique
+        .mockResolvedValueOnce({
+          ...createProcessingEvaluation(),
+          jobSnapshot: null,
+          resumeContent: null,
+        })
+        .mockResolvedValueOnce({
+          jobApplicant: { jobSnapshot: null, resumeContent: null },
+        });
+
+      const result = await repository.claimForProcessing('evaluation-id');
+
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr().message).toContain(
+        'Evaluation input is unavailable',
+      );
+      expect(tx.applicantEvaluation.updateMany).not.toHaveBeenCalled();
+    });
+
     it('validates persisted inputs and claims an evaluation', async () => {
       const result = await repository.claimForProcessing('evaluation-id');
 

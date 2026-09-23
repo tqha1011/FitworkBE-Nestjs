@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { EvaluationStatus } from 'generated/prisma/enums';
 import { Prisma } from 'generated/prisma/client';
 import { err, ok, Result } from 'neverthrow';
-import { JobSnapshotV1 } from 'src/modules/job/domain/value-objects/job-snapshot';
+import { JobSnapshot } from 'src/modules/job/domain/value-objects/job-snapshot';
 import { hashCanonicalJson } from 'src/shared/common/canonical-json';
 import { CommonEvaluationStatus } from 'src/shared/domain/enum';
 import { PrismaService } from 'src/shared/infrastructure/database/prisma.service';
@@ -134,7 +134,11 @@ export class ApplicantEvaluationRepository implements IApplicantEvaluationReposi
               uniqueInput,
           },
           update: {},
-          create: uniqueInput,
+          create: {
+            ...uniqueInput,
+            jobSnapshot: input.jobSnapshot,
+            resumeContentId: input.resumeContentId,
+          },
           select: { publicId: true, status: true },
         });
 
@@ -186,16 +190,12 @@ export class ApplicantEvaluationRepository implements IApplicantEvaluationReposi
               parserVersion: true,
               model: true,
               promptVersion: true,
-              jobApplicant: {
+              jobSnapshot: true,
+              resumeContent: {
                 select: {
-                  jobSnapshot: true,
-                  resumeContent: {
-                    select: {
-                      extractedText: true,
-                      contentHash: true,
-                      parserVersion: true,
-                    },
-                  },
+                  extractedText: true,
+                  contentHash: true,
+                  parserVersion: true,
                 },
               },
             },
@@ -209,11 +209,41 @@ export class ApplicantEvaluationRepository implements IApplicantEvaluationReposi
           ) {
             return null;
           }
+          if (
+            evaluation.jobSnapshot === null &&
+            evaluation.resumeContent === null
+          ) {
+            const result = await tx.applicantEvaluation.findUnique({
+              where: {
+                publicId: evaluationPublicId,
+              },
+              select: {
+                jobApplicant: {
+                  select: {
+                    jobSnapshot: true,
+                    resumeContent: {
+                      select: {
+                        extractedText: true,
+                        contentHash: true,
+                        parserVersion: true,
+                      },
+                    },
+                  },
+                },
+              },
+            });
+            if (
+              !result?.jobApplicant.resumeContent ||
+              !result.jobApplicant.jobSnapshot
+            ) {
+              throw new Error('Evaluation input is unavailable');
+            }
+            evaluation.jobSnapshot = result.jobApplicant.jobSnapshot;
+            evaluation.resumeContent = result.jobApplicant.resumeContent;
+          }
 
-          const jobSnapshot = this.toJobSnapshot(
-            evaluation.jobApplicant.jobSnapshot,
-          );
-          const resumeContent = evaluation.jobApplicant.resumeContent;
+          const jobSnapshot = this.toJobSnapshot(evaluation.jobSnapshot);
+          const resumeContent = evaluation.resumeContent;
           if (!resumeContent?.extractedText || !resumeContent.contentHash) {
             throw new Error('Evaluation resume content is incomplete');
           }
@@ -347,12 +377,12 @@ export class ApplicantEvaluationRepository implements IApplicantEvaluationReposi
     }
   }
 
-  private toJobSnapshot(value: Prisma.JsonValue | null): JobSnapshotV1 {
+  private toJobSnapshot(value: Prisma.JsonValue | null): JobSnapshot {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
       throw new Error('Evaluation job snapshot is missing or invalid');
     }
 
-    return value as JobSnapshotV1;
+    return value as JobSnapshot;
   }
 
   private toCommonStatus(status: EvaluationStatus): CommonEvaluationStatus {

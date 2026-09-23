@@ -1,12 +1,12 @@
 import { Result } from 'neverthrow';
-import { JobSnapshotV1 } from 'src/modules/job/domain/value-objects/job-snapshot';
+import { JobSnapshot } from 'src/modules/job/domain/value-objects/job-snapshot';
 import {
   EvaluationBreakdown,
   EvaluationEvidenceV1,
 } from '../../domain/value-objects/evaluation';
 
 export type ApplicantEvaluationLlmInput = {
-  jobSnapshot: JobSnapshotV1;
+  jobSnapshot: JobSnapshot;
   resumeText: string;
   model: string;
 };
