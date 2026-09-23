@@ -32,6 +32,7 @@ model ResumeContent {
   structuredData       Json?                 @map("structured_data")
   contentHash          String?               @map("content_hash") @db.VarChar(64)
   parserVersion        String                @map("parser_version")
+  redactionVersion     String?               @map("redaction_version")
   startedAt            DateTime?             @map("started_at")
   completedAt          DateTime?             @map("completed_at")
   createdAt            DateTime              @default(now()) @map("created_at")
