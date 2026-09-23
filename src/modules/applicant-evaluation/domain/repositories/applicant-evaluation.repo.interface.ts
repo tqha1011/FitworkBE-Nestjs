@@ -1,5 +1,5 @@
 import { Result } from 'neverthrow';
-import { JobSnapshotV1 } from 'src/modules/job/domain/value-objects/job-snapshot';
+import { JobSnapshot } from 'src/modules/job/domain/value-objects/job-snapshot';
 import { CommonEvaluationStatus } from 'src/shared/domain/enum';
 import {
   EvaluationBreakdown,
@@ -11,12 +11,15 @@ export type PrepareApplicantEvaluationInput = {
   jobId: number;
   resumeId: number;
   resumeContentId: number;
-  jobSnapshot: JobSnapshotV1;
+  jobSnapshot: JobSnapshot;
   jobContentHash: string;
   resumeContentHash: string;
   parserVersion: string;
   model: string;
   promptVersion: string;
+  redactedResumeText: string;
+  redactedResumeHash: string;
+  redactionVersion: string;
 };
 
 export type PreparedApplicantEvaluation = {
@@ -27,7 +30,7 @@ export type PreparedApplicantEvaluation = {
 
 export type ApplicantEvaluationProcessingData = {
   publicId: string;
-  jobSnapshot: JobSnapshotV1;
+  jobSnapshot: JobSnapshot;
   resumeText: string;
   model: string;
   promptVersion: string;

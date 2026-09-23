@@ -20,6 +20,8 @@ import {
 } from '../dtos/applicant-evaluation.response.dto';
 import { Logger } from '@nestjs/common';
 import { IApplicationCache } from 'src/shared/application/cache/application-cache.interface';
+import { buildJobSnapshotV2 } from 'src/modules/job/domain/value-objects/job-snapshot';
+import { IResumeRedactEvaluation } from '../interfaces/resume-redact-evaluation.interface';
 
 @Injectable()
 export class ApplicantEvaluationService implements IApplicantEvaluationService {
@@ -31,6 +33,7 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
     private readonly applicantEvaluationQueue: IApplicantEvaluationQueueInterface,
     private readonly configService: ConfigService,
     private readonly cacheManager: IApplicationCache,
+    private readonly resumeRedaction: IResumeRedactEvaluation,
   ) {}
   async getApplicantEvaluationDetailAsync(
     applicantPublicId: string,
@@ -105,12 +108,13 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
     applicantPublicId: string,
     data: CreateApplicantEvaluationRequestDto,
   ): Promise<Result<ApplicantEvaluationResponseDto, AppError>> {
-    const [jobResult, resumeResult] = await Promise.all([
+    const [jobResult, resumeResult, redactionResult] = await Promise.all([
       this.jobRepository.getJobDataForSnapshot(data.jobPublicId),
       this.resumeContentRepository.getCurrentForOwner(
         data.resumePublicId,
         applicantPublicId,
       ),
+      this.resumeRedaction.redactResumeAsync(data.resumePublicId),
     ]);
     if (jobResult.isErr() || resumeResult.isErr()) {
       return err(
@@ -141,6 +145,15 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
         ),
       );
     }
+    if (redactionResult.isErr()) {
+      return err(
+        new AppError(ErrorCode.InternalServerError, 'Failed to redact resume'),
+      );
+    }
+
+    if (!redactionResult.value) {
+      return err(new AppError(ErrorCode.BadRequest, 'Can not redact resume'));
+    }
 
     const model = this.configService
       .get<string>('LLM_EVALUATION_MODEL')
@@ -154,7 +167,9 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
       );
     }
 
-    const jobSnapshot = jobResult.value.snapshot;
+    const jobSnapshot = jobResult.value.snapshot.skills.length
+      ? buildJobSnapshotV2(jobResult.value.snapshot)
+      : jobResult.value.snapshot;
     const jobContentHash = hashCanonicalJson(jobSnapshot);
     const prepareResult = await this.applicantEvaluationRepository.prepare({
       applicantPublicId,
@@ -167,6 +182,9 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
       parserVersion: resumeResult.value.parserVersion,
       model,
       promptVersion: APPLICANT_EVALUATION_PROMPT_VERSION,
+      redactedResumeHash: redactionResult.value.hash,
+      redactedResumeText: redactionResult.value.text,
+      redactionVersion: redactionResult.value.redactionVersion,
     });
     if (prepareResult.isErr()) {
       return err(

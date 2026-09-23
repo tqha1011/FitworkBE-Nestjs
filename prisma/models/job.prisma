@@ -106,23 +106,29 @@ model Category {
 }
 
 model ApplicantEvaluation {
-  id                Int              @id @default(autoincrement())
-  publicId          String           @unique @default(uuid()) @map("public_id")
-  jobApplicant      JobApplicant     @relation(fields: [jobApplicantId], references: [id])
-  jobApplicantId    Int              @map("job_applicant_id")
-  status            EvaluationStatus @default(PENDING)
-  overallScore      Int?             @map("overall_score")
-  scoreBreakdown    Json?            @map("score_breakdown")
-  evidence          Json?
-  resumeContentHash String           @map("resume_content_hash") @db.VarChar(64)
-  jobContentHash    String           @map("job_content_hash") @db.VarChar(64)
-  parserVersion     String           @map("parser_version")
-  model             String
-  promptVersion     String           @map("prompt_version")
-  errorMessage      String?          @map("error_message") @db.Text
-  createdAt         DateTime         @default(now()) @map("created_at")
-  evaluatedAt       DateTime?        @map("evaluated_at")
-  updatedAt         DateTime         @updatedAt @map("updated_at")
+  id                 Int              @id @default(autoincrement())
+  publicId           String           @unique @default(uuid()) @map("public_id")
+  jobApplicant       JobApplicant     @relation(fields: [jobApplicantId], references: [id])
+  jobApplicantId     Int              @map("job_applicant_id")
+  resumeContentId    Int?             @map("resume_content_id")
+  resumeContent      ResumeContent?   @relation(fields: [resumeContentId], references: [id])
+  status             EvaluationStatus @default(PENDING)
+  overallScore       Int?             @map("overall_score")
+  scoreBreakdown     Json?            @map("score_breakdown")
+  evidence           Json?
+  resumeContentHash  String           @map("resume_content_hash") @db.VarChar(64)
+  jobContentHash     String           @map("job_content_hash") @db.VarChar(64)
+  jobSnapshot        Json?            @map("job_snapshot")
+  parserVersion      String           @map("parser_version")
+  redactedResumeText String?          @map("redacted_resume_text")
+  redactedResumeHash String?          @map("redacted_resume_hash")
+  redactionVersion   String?          @map("redaction_version")
+  model              String
+  promptVersion      String           @map("prompt_version")
+  errorMessage       String?          @map("error_message") @db.Text
+  createdAt          DateTime         @default(now()) @map("created_at")
+  evaluatedAt        DateTime?        @map("evaluated_at")
+  updatedAt          DateTime         @updatedAt @map("updated_at")
 
   @@unique([jobApplicantId, resumeContentHash, jobContentHash, parserVersion, model, promptVersion], map: "applicant_evaluation_input_version_key")
   @@index([jobApplicantId, status])

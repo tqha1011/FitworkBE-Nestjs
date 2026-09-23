@@ -5,8 +5,11 @@ receivers:
         endpoint: 0.0.0.0:4317
 
 processors:
+  memory_limiter:
+    check_interval: 5s
+    limit_mib: 4000
+    spike_limit_mib: 500
   batch:
-
 exporters:
   debug:
     verbosity: basic
