@@ -17,6 +17,9 @@ export type PrepareApplicantEvaluationInput = {
   parserVersion: string;
   model: string;
   promptVersion: string;
+  redactedResumeText: string;
+  redactedResumeHash: string;
+  redactionVersion: string;
 };
 
 export type PreparedApplicantEvaluation = {

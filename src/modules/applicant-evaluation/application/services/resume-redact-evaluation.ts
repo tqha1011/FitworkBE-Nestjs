@@ -7,6 +7,7 @@ import {
 } from '../interfaces/resume-redact-evaluation.interface';
 import { IResumeContentRepository } from 'src/modules/resume/domain/repositories/resume-content.repo.interface';
 import { CommonResumeIngestionStatus } from 'src/shared/domain/enum';
+import { IApplicantEvaluationRepository } from '../../domain/repositories/applicant-evaluation.repo.interface';
 
 const REDACTION_VERSION = 'resume-redaction-v1' as const;
 const REDACTED_NAME = '[REDACTED NAME]';
@@ -105,19 +106,24 @@ export function createResumeEvaluationSnapshot(
 
 @Injectable()
 export class ResumeRedactEvaluation implements IResumeRedactEvaluation {
-  constructor(private readonly resumeRepository: IResumeContentRepository) {}
+  constructor(
+    private readonly resumeRepository: IResumeContentRepository,
+    private readonly evaluationRepository: IApplicantEvaluationRepository,
+  ) {}
 
   async redactResumeAsync(
     resumeContentPublicId: string,
-  ): Promise<Result<ResumeEvaluationSnapshot, Error>> {
+  ): Promise<Result<ResumeEvaluationSnapshot | null, Error>> {
     const result = await this.resumeRepository.getByPublicId(
       resumeContentPublicId,
     );
     if (result.isErr()) {
       return err(new Error('Failed to load resume content for evaluation'));
     }
+    if (!result.value) {
+      return ok(null);
+    }
     if (
-      !result.value ||
       result.value.status !== CommonResumeIngestionStatus.COMPLETED ||
       !result.value.extractedText
     ) {

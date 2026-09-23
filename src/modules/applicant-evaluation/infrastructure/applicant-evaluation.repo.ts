@@ -138,6 +138,9 @@ export class ApplicantEvaluationRepository implements IApplicantEvaluationReposi
             ...uniqueInput,
             jobSnapshot: input.jobSnapshot,
             resumeContentId: input.resumeContentId,
+            redactedResumeText: input.redactedResumeText,
+            redactedResumeHash: input.redactedResumeHash,
+            redactionVersion: input.redactionVersion,
           },
           select: { publicId: true, status: true },
         });

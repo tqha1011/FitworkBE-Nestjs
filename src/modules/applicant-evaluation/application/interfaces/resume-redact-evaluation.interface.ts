@@ -9,5 +9,5 @@ export type ResumeEvaluationSnapshot = {
 export abstract class IResumeRedactEvaluation {
   abstract redactResumeAsync(
     resumeContentPublicId: string,
-  ): Promise<Result<ResumeEvaluationSnapshot, Error>>;
+  ): Promise<Result<ResumeEvaluationSnapshot | null, Error>>;
 }
