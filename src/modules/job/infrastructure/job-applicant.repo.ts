@@ -15,10 +15,88 @@ import {
 } from './job-applicant.mapper';
 import { CommonJobApplicantStatus } from 'src/shared/domain/enum';
 
+const optimisticLockConflict = new Error('Optimistic lock conflict');
+
 export class JobApplicantRepository
   implements IJobApplicantRepository, IJobApplicantQueryRepo
 {
   constructor(private readonly prismaService: PrismaService) {}
+  async acceptApplicantAndRejectOthers(
+    jobApplicantPublicId: string,
+    jobId: number,
+    expectedStatus: CommonJobApplicantStatus,
+    expectedVersion: number,
+  ): Promise<Result<boolean, Error>> {
+    try {
+      const transitioned = await this.prismaService.$transaction(
+        async (transaction) => {
+          const claimedJob = await transaction.job.updateMany({
+            where: {
+              id: jobId,
+              version: expectedVersion,
+            },
+            data: {
+              version: { increment: 1 },
+            },
+          });
+
+          if (claimedJob.count !== 1) return false;
+
+          const acceptedApplicant = await transaction.jobApplicant.updateMany({
+            where: {
+              publicId: jobApplicantPublicId,
+              jobId,
+              status: mapJobApplicantStatusToPrisma(expectedStatus),
+            },
+            data: {
+              status: mapJobApplicantStatusToPrisma(
+                CommonJobApplicantStatus.ACCEPTED,
+              ),
+            },
+          });
+
+          if (acceptedApplicant.count !== 1) throw optimisticLockConflict;
+
+          await transaction.jobApplicant.updateMany({
+            where: {
+              publicId: { not: jobApplicantPublicId },
+              jobId,
+              status: mapJobApplicantStatusToPrisma(expectedStatus),
+            },
+            data: {
+              status: mapJobApplicantStatusToPrisma(
+                CommonJobApplicantStatus.REJECTED,
+              ),
+            },
+          });
+
+          return true;
+        },
+      );
+
+      return ok(transitioned);
+    } catch (error) {
+      if (error === optimisticLockConflict) return ok(false);
+      return err(
+        new Error(`Failed to accept applicant and reject others: ${error}`),
+      );
+    }
+  }
+  async rejectAllApplicants(jobId: number): Promise<Result<undefined, Error>> {
+    try {
+      await this.prismaService.jobApplicant.updateMany({
+        where: { jobId },
+        data: {
+          status: mapJobApplicantStatusToPrisma(
+            CommonJobApplicantStatus.REJECTED,
+          ),
+        },
+      });
+      return ok(undefined);
+    } catch (error) {
+      return err(error);
+    }
+  }
 
   async getStatusContext(
     jobApplicantPublicId: string,
@@ -29,7 +107,7 @@ export class JobApplicantRepository
         select: {
           jobId: true,
           status: true,
-          job: { select: { postedBy: true } },
+          job: { select: { postedBy: true, version: true } },
         },
       });
 
@@ -38,6 +116,7 @@ export class JobApplicantRepository
         jobId: jobApplicant.jobId,
         jobOwnerId: jobApplicant.job.postedBy,
         status: mapJobApplicantStatusToDomain(jobApplicant.status),
+        version: jobApplicant.job.version,
       });
     } catch (error) {
       return err(

@@ -6,6 +6,7 @@ export type JobApplicantStatusContext = {
   jobId: number;
   jobOwnerId: number;
   status: CommonJobApplicantStatus;
+  version: number;
 };
 
 export abstract class IJobApplicantRepository {
@@ -23,4 +24,15 @@ export abstract class IJobApplicantRepository {
   abstract getStatusContext(
     jobApplicantPublicId: string,
   ): Promise<Result<JobApplicantStatusContext | null, Error>>;
+
+  abstract rejectAllApplicants(
+    jobId: number,
+  ): Promise<Result<undefined, Error>>;
+
+  abstract acceptApplicantAndRejectOthers(
+    jobApplicantPublicId: string,
+    jobId: number,
+    expectedStatus: CommonJobApplicantStatus,
+    expectedVersion: number,
+  ): Promise<Result<boolean, Error>>;
 }
