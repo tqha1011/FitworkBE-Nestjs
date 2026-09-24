@@ -108,13 +108,12 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
     applicantPublicId: string,
     data: CreateApplicantEvaluationRequestDto,
   ): Promise<Result<ApplicantEvaluationResponseDto, AppError>> {
-    const [jobResult, resumeResult, redactionResult] = await Promise.all([
+    const [jobResult, resumeResult] = await Promise.all([
       this.jobRepository.getJobDataForSnapshot(data.jobPublicId),
       this.resumeContentRepository.getCurrentForOwner(
         data.resumePublicId,
         applicantPublicId,
       ),
-      this.resumeRedaction.redactResumeAsync(data.resumePublicId),
     ]);
     if (jobResult.isErr() || resumeResult.isErr()) {
       return err(
@@ -145,6 +144,9 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
         ),
       );
     }
+    const redactionResult = await this.resumeRedaction.redactResumeAsync(
+      resumeResult.value.publicId,
+    );
     if (redactionResult.isErr()) {
       return err(
         new AppError(ErrorCode.InternalServerError, 'Failed to redact resume'),

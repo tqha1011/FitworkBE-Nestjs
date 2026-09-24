@@ -17,6 +17,8 @@ import { GeminiEvaluateApplicant } from './infrastructure/llm/providers/applican
 import { IApplicantEvaluationNotifier } from './application/interfaces/applicant-evaluation-notifier.interface';
 import { ApplicantEvaluationEventPublisher } from './infrastructure/applicant-evaluation-event.publisher';
 import { ApplicantEvaluationProcessor } from './infrastructure/applicant-evaluation.processor';
+import { IResumeRedactEvaluation } from './application/interfaces/resume-redact-evaluation.interface';
+import { ResumeRedactEvaluation } from './application/services/resume-redact-evaluation';
 
 @Module({
   imports: [
@@ -38,6 +40,11 @@ import { ApplicantEvaluationProcessor } from './infrastructure/applicant-evaluat
   controllers: [ApplicantEvaluationController],
   providers: [
     ApplicantEvaluationRepository,
+    ResumeRedactEvaluation,
+    {
+      provide: IResumeRedactEvaluation,
+      useExisting: ResumeRedactEvaluation,
+    },
     {
       provide: IApplicantEvaluationRepository,
       useExisting: ApplicantEvaluationRepository,

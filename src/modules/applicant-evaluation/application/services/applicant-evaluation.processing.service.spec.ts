@@ -49,7 +49,10 @@ describe('ApplicantEvaluationProcessingService', () => {
         ok({
           publicId: 'evaluation-id',
           jobSnapshot,
-          resumeText: 'Experienced TypeScript engineer',
+          resumeRedactedText:
+            'Experienced TypeScript engineer [REDACTED CONTACT]',
+          resumeRedactedHash: 'redacted-hash',
+          resumeRedactionVersion: 'resume-redaction-v1',
           model: 'gemini-model',
           promptVersion: 'v1',
         }),
@@ -79,7 +82,7 @@ describe('ApplicantEvaluationProcessingService', () => {
     });
     expect(llm.evaluate).toHaveBeenCalledWith({
       jobSnapshot,
-      resumeText: 'Experienced TypeScript engineer',
+      resumeText: 'Experienced TypeScript engineer [REDACTED CONTACT]',
       model: 'gemini-model',
     });
     expect(notifier.notify).toHaveBeenCalledWith({

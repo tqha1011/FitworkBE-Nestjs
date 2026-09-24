@@ -9,6 +9,7 @@ import {
   PrepareApplicantEvaluationInput,
 } from '../domain/repositories/applicant-evaluation.repo.interface';
 import { ApplicantEvaluationRepository } from './applicant-evaluation.repo';
+import { createResumeEvaluationSnapshot } from '../application/services/resume-redact-evaluation';
 
 jest.mock('generated/prisma/client', () => ({
   PrismaClient: class {},
@@ -38,6 +39,12 @@ describe('ApplicantEvaluationRepository', () => {
     parserVersion: 'parser-v1',
     model: 'evaluation-model',
     promptVersion: 'applicant-match-v1',
+    redactedResumeText:
+      'Five years of TypeScript experience. [REDACTED CONTACT]',
+    redactedResumeHash: createResumeEvaluationSnapshot(
+      'Five years of TypeScript experience. [REDACTED CONTACT]',
+    ).hash,
+    redactionVersion: 'resume-redaction-v1',
   };
   const createProcessingEvaluation = () => ({
     publicId: 'evaluation-id',
@@ -47,10 +54,19 @@ describe('ApplicantEvaluationRepository', () => {
     parserVersion: input.parserVersion,
     model: input.model,
     promptVersion: input.promptVersion,
+    jobSnapshot,
+    resumeContent: {
+      extractedText: 'Five years of TypeScript experience. jane@example.com',
+      contentHash: input.resumeContentHash,
+      parserVersion: input.parserVersion,
+    },
+    redactedResumeText: input.redactedResumeText,
+    redactedResumeHash: input.redactedResumeHash,
+    redactionVersion: input.redactionVersion,
     jobApplicant: {
       jobSnapshot,
       resumeContent: {
-        extractedText: 'Five years of TypeScript experience.',
+        extractedText: 'Five years of TypeScript experience. jane@example.com',
         contentHash: input.resumeContentHash,
         parserVersion: input.parserVersion,
       },
@@ -205,6 +221,11 @@ describe('ApplicantEvaluationRepository', () => {
         parserVersion: input.parserVersion,
         model: input.model,
         promptVersion: input.promptVersion,
+        jobSnapshot,
+        resumeContentId: input.resumeContentId,
+        redactedResumeText: input.redactedResumeText,
+        redactedResumeHash: input.redactedResumeHash,
+        redactionVersion: input.redactionVersion,
       },
       select: { publicId: true, status: true },
     });
@@ -300,10 +321,15 @@ describe('ApplicantEvaluationRepository', () => {
       expect(result._unsafeUnwrap()).toEqual({
         publicId: 'evaluation-id',
         jobSnapshot,
-        resumeText: 'Five years of TypeScript experience.',
+        resumeRedactedText: input.redactedResumeText,
+        resumeRedactedHash: input.redactedResumeHash,
+        resumeRedactionVersion: input.redactionVersion,
         model: input.model,
         promptVersion: input.promptVersion,
       });
+      expect(result._unsafeUnwrap().resumeRedactedText).not.toContain(
+        'jane@example.com',
+      );
       expect(tx.applicantEvaluation.updateMany).toHaveBeenCalledWith({
         where: {
           publicId: 'evaluation-id',
@@ -344,10 +370,7 @@ describe('ApplicantEvaluationRepository', () => {
     it('returns an error when resume content is incomplete', async () => {
       tx.applicantEvaluation.findUnique.mockResolvedValue({
         ...createProcessingEvaluation(),
-        jobApplicant: {
-          jobSnapshot,
-          resumeContent: null,
-        },
+        resumeContent: null,
       });
 
       const result = await repository.claimForProcessing('evaluation-id');
@@ -355,6 +378,53 @@ describe('ApplicantEvaluationRepository', () => {
       expect(result.isErr()).toBe(true);
       expect(result._unsafeUnwrapErr().message).toContain(
         'Evaluation resume content is incomplete',
+      );
+    });
+
+    it('rejects a redacted snapshot whose hash does not match', async () => {
+      tx.applicantEvaluation.findUnique.mockResolvedValue({
+        ...createProcessingEvaluation(),
+        redactedResumeHash: 'wrong-hash',
+      });
+
+      const result = await repository.claimForProcessing('evaluation-id');
+
+      expect(result._unsafeUnwrapErr().message).toContain(
+        'Evaluation redacted resume hash does not match',
+      );
+      expect(tx.applicantEvaluation.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('creates and persists a redacted snapshot for a legacy row', async () => {
+      const rawText =
+        'Jane Doe\nEmail: jane@example.com\nExperience\nBuilt NestJS APIs.';
+      tx.applicantEvaluation.findUnique.mockResolvedValue({
+        ...createProcessingEvaluation(),
+        resumeContent: {
+          extractedText: rawText,
+          contentHash: input.resumeContentHash,
+          parserVersion: input.parserVersion,
+        },
+        redactedResumeText: null,
+        redactedResumeHash: null,
+        redactionVersion: null,
+      });
+
+      const result = await repository.claimForProcessing('evaluation-id');
+      const snapshot = createResumeEvaluationSnapshot(rawText);
+
+      expect(result._unsafeUnwrap().resumeRedactedText).toBe(snapshot.text);
+      expect(result._unsafeUnwrap().resumeRedactedText).not.toContain(
+        'jane@example.com',
+      );
+      expect(tx.applicantEvaluation.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            redactedResumeText: snapshot.text,
+            redactedResumeHash: snapshot.hash,
+            redactionVersion: snapshot.redactionVersion,
+          }) as unknown,
+        }),
       );
     });
 

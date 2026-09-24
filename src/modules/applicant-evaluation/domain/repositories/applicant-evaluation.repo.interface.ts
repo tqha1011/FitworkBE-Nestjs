@@ -31,9 +31,11 @@ export type PreparedApplicantEvaluation = {
 export type ApplicantEvaluationProcessingData = {
   publicId: string;
   jobSnapshot: JobSnapshot;
-  resumeText: string;
   model: string;
   promptVersion: string;
+  resumeRedactedText: string;
+  resumeRedactedHash: string;
+  resumeRedactionVersion: string;
 };
 
 export type CompleteApplicantEvaluationInput = {

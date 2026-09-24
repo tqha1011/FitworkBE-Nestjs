@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { createHash } from 'crypto';
 import { EvaluationStatus } from 'generated/prisma/enums';
 import { Prisma } from 'generated/prisma/client';
 import { err, ok, Result } from 'neverthrow';
@@ -6,6 +7,7 @@ import { JobSnapshot } from 'src/modules/job/domain/value-objects/job-snapshot';
 import { hashCanonicalJson } from 'src/shared/common/canonical-json';
 import { CommonEvaluationStatus } from 'src/shared/domain/enum';
 import { PrismaService } from 'src/shared/infrastructure/database/prisma.service';
+import { createResumeEvaluationSnapshot } from '../application/services/resume-redact-evaluation';
 import {
   ApplicantEvaluationProcessingData,
   ApplicantEvaluationRealtimeState,
@@ -201,6 +203,9 @@ export class ApplicantEvaluationRepository implements IApplicantEvaluationReposi
                   parserVersion: true,
                 },
               },
+              redactedResumeHash: true,
+              redactedResumeText: true,
+              redactionVersion: true,
             },
           });
           if (!evaluation) {
@@ -247,7 +252,7 @@ export class ApplicantEvaluationRepository implements IApplicantEvaluationReposi
 
           const jobSnapshot = this.toJobSnapshot(evaluation.jobSnapshot);
           const resumeContent = evaluation.resumeContent;
-          if (!resumeContent?.extractedText || !resumeContent.contentHash) {
+          if (!resumeContent?.contentHash) {
             throw new Error('Evaluation resume content is incomplete');
           }
           if (hashCanonicalJson(jobSnapshot) !== evaluation.jobContentHash) {
@@ -260,6 +265,37 @@ export class ApplicantEvaluationRepository implements IApplicantEvaluationReposi
             throw new Error('Evaluation parser version does not match');
           }
 
+          // check if missing one of the redacted resume snapshot fields
+          const hasRedactedSnapshot =
+            evaluation.redactedResumeText != null ||
+            evaluation.redactedResumeHash != null ||
+            evaluation.redactionVersion != null;
+          if (
+            hasRedactedSnapshot &&
+            (!evaluation.redactedResumeText ||
+              !evaluation.redactedResumeHash ||
+              !evaluation.redactionVersion)
+          ) {
+            throw new Error(
+              'Evaluation redacted resume snapshot is incomplete',
+            );
+          }
+
+          // if dont have snapshot, create it
+          const snapshot = hasRedactedSnapshot
+            ? {
+                text: evaluation.redactedResumeText!,
+                hash: evaluation.redactedResumeHash!,
+                redactionVersion: evaluation.redactionVersion!,
+              }
+            : createResumeEvaluationSnapshot(resumeContent.extractedText ?? '');
+          if (
+            createHash('sha256').update(snapshot.text, 'utf8').digest('hex') !==
+            snapshot.hash
+          ) {
+            throw new Error('Evaluation redacted resume hash does not match');
+          }
+
           const claimed = await tx.applicantEvaluation.updateMany({
             where: {
               publicId: evaluationPublicId,
@@ -270,6 +306,11 @@ export class ApplicantEvaluationRepository implements IApplicantEvaluationReposi
             data: {
               status: EvaluationStatus.PROCESSING,
               errorMessage: null,
+              ...(!hasRedactedSnapshot && {
+                redactedResumeText: snapshot.text,
+                redactedResumeHash: snapshot.hash,
+                redactionVersion: snapshot.redactionVersion,
+              }),
             },
           });
           if (claimed.count === 0) {
@@ -279,7 +320,9 @@ export class ApplicantEvaluationRepository implements IApplicantEvaluationReposi
           return {
             publicId: evaluation.publicId,
             jobSnapshot,
-            resumeText: resumeContent.extractedText,
+            resumeRedactedText: snapshot.text,
+            resumeRedactedHash: snapshot.hash,
+            resumeRedactionVersion: snapshot.redactionVersion,
             model: evaluation.model,
             promptVersion: evaluation.promptVersion,
           };

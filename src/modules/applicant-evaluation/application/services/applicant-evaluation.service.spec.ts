@@ -11,6 +11,7 @@ import {
 import { APPLICANT_EVALUATION_PROMPT_VERSION } from '../constants/applicant-evaluation.constants';
 import { ApplicantEvaluationService } from './applicant-evaluation.service';
 import { buildJobSnapshotV2 } from 'src/modules/job/domain/value-objects/job-snapshot';
+import { createResumeEvaluationSnapshot } from './resume-redact-evaluation';
 
 describe('ApplicantEvaluationService', () => {
   const request = {
@@ -30,6 +31,7 @@ describe('ApplicantEvaluationService', () => {
   };
   const resumeContent = {
     id: 30,
+    publicId: 'resume-content-id',
     resumeId: 20,
     status: CommonResumeIngestionStatus.COMPLETED,
     extractedText: 'Experienced TypeScript engineer',
@@ -56,6 +58,7 @@ describe('ApplicantEvaluationService', () => {
   };
   let configService: { get: jest.Mock };
   let service: ApplicantEvaluationService;
+  let resumeRedaction: { redactResumeAsync: jest.Mock };
 
   beforeEach(() => {
     resumeContentRepository = {
@@ -96,6 +99,13 @@ describe('ApplicantEvaluationService', () => {
     configService = {
       get: jest.fn().mockReturnValue('evaluation-model'),
     };
+    resumeRedaction = {
+      redactResumeAsync: jest
+        .fn()
+        .mockResolvedValue(
+          ok(createResumeEvaluationSnapshot(resumeContent.extractedText)),
+        ),
+    };
     service = new ApplicantEvaluationService(
       resumeContentRepository as unknown as IResumeContentRepository,
       jobRepository as unknown as IJobRepository,
@@ -103,6 +113,7 @@ describe('ApplicantEvaluationService', () => {
       applicantEvaluationQueue,
       configService as unknown as ConfigService,
       applicationCache,
+      resumeRedaction,
     );
   });
 
@@ -261,6 +272,9 @@ describe('ApplicantEvaluationService', () => {
       request.resumePublicId,
       'applicant-id',
     );
+    expect(resumeRedaction.redactResumeAsync).toHaveBeenCalledWith(
+      resumeContent.publicId,
+    );
     const jobSnapshotV2 = buildJobSnapshotV2(jobSnapshot);
     expect(applicantEvaluationRepository.prepare).toHaveBeenCalledWith({
       applicantPublicId: 'applicant-id',
@@ -273,6 +287,11 @@ describe('ApplicantEvaluationService', () => {
       parserVersion: resumeContent.parserVersion,
       model: 'evaluation-model',
       promptVersion: APPLICANT_EVALUATION_PROMPT_VERSION,
+      redactedResumeText: resumeContent.extractedText,
+      redactedResumeHash: createResumeEvaluationSnapshot(
+        resumeContent.extractedText,
+      ).hash,
+      redactionVersion: 'resume-redaction-v1',
     });
     expect(applicantEvaluationQueue.enqueue).toHaveBeenCalledWith({
       evaluationPublicId: 'evaluation-id',

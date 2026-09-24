@@ -37,7 +37,7 @@ export class ApplicantEvaluationProcessingService implements IApplicantEvaluatio
 
     const llmResponse = await this.llmEvaluator.evaluate({
       jobSnapshot: evaluationData.value.jobSnapshot,
-      resumeText: evaluationData.value.resumeText,
+      resumeText: evaluationData.value.resumeRedactedText,
       model: evaluationData.value.model,
     });
     if (llmResponse.isErr()) {
