@@ -8,7 +8,10 @@ import {
   CommonEvaluationStatus,
   CommonResumeIngestionStatus,
 } from 'src/shared/domain/enum';
-import { APPLICANT_EVALUATION_PROMPT_VERSION } from '../constants/applicant-evaluation.constants';
+import {
+  APPLICANT_EVALUATION_PROMPT_VERSION,
+  APPLICANT_EVALUATION_PROMPT_VERSION_V2,
+} from '../constants/applicant-evaluation.constants';
 import { ApplicantEvaluationService } from './applicant-evaluation.service';
 import { buildJobSnapshotV2 } from 'src/modules/job/domain/value-objects/job-snapshot';
 import { createResumeEvaluationSnapshot } from './resume-redact-evaluation';
@@ -286,7 +289,7 @@ describe('ApplicantEvaluationService', () => {
       resumeContentHash: resumeContent.contentHash,
       parserVersion: resumeContent.parserVersion,
       model: 'evaluation-model',
-      promptVersion: APPLICANT_EVALUATION_PROMPT_VERSION,
+      promptVersion: APPLICANT_EVALUATION_PROMPT_VERSION_V2,
       redactedResumeText: resumeContent.extractedText,
       redactedResumeHash: createResumeEvaluationSnapshot(
         resumeContent.extractedText,
@@ -315,6 +318,7 @@ describe('ApplicantEvaluationService', () => {
       expect.objectContaining({
         jobSnapshot: noSkillsSnapshot,
         jobContentHash: hashCanonicalJson(noSkillsSnapshot),
+        promptVersion: APPLICANT_EVALUATION_PROMPT_VERSION,
       }),
     );
   });

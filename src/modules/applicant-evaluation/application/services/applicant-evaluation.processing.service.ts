@@ -39,6 +39,7 @@ export class ApplicantEvaluationProcessingService implements IApplicantEvaluatio
       jobSnapshot: evaluationData.value.jobSnapshot,
       resumeText: evaluationData.value.resumeRedactedText,
       model: evaluationData.value.model,
+      promptVersion: evaluationData.value.promptVersion,
     });
     if (llmResponse.isErr()) {
       return this.handleFailure(
@@ -50,6 +51,14 @@ export class ApplicantEvaluationProcessingService implements IApplicantEvaluatio
     }
 
     const output = llmResponse.value;
+    if (output.schemaVersion === 2) {
+      return this.handleFailure(
+        evaluationPublicId,
+        new Error('Evaluation V2 output is not supported yet'),
+        attemptsMade,
+        maxAttempts,
+      );
+    }
     const completed = await this.applicantEvaluationRepo.markCompleted({
       evaluationPublicId,
       overallScore: output.overallScore,

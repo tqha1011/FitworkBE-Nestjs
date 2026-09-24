@@ -27,7 +27,7 @@ export type EvaluationVerdict = 'MATCHED' | 'PARTIAL' | 'MISSING';
 
 export type EvaluationEvidenceReference = {
   snippet: string;
-  section: string;
+  section: 'resume';
   startOffset: number;
   endOffset: number;
 };

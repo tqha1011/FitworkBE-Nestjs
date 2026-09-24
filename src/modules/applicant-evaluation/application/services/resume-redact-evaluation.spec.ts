@@ -88,8 +88,8 @@ describe('ResumeRedactEvaluation', () => {
     const result = await service.redactResumeAsync('resume-content-id');
 
     expect(getByPublicId).toHaveBeenCalledWith('resume-content-id');
-    expect(result._unsafeUnwrap().text).not.toContain('jane@example.com');
-    expect(result._unsafeUnwrap().text).toContain('Built NestJS APIs.');
+    expect(result._unsafeUnwrap()?.text).not.toContain('jane@example.com');
+    expect(result._unsafeUnwrap()?.text).toContain('Built NestJS APIs.');
   });
 
   it('returns a safe error when content lookup fails', async () => {

@@ -13,7 +13,10 @@ import {
   CommonEvaluationStatus,
   CommonResumeIngestionStatus,
 } from 'src/shared/domain/enum';
-import { APPLICANT_EVALUATION_PROMPT_VERSION } from '../constants/applicant-evaluation.constants';
+import {
+  APPLICANT_EVALUATION_PROMPT_VERSION,
+  APPLICANT_EVALUATION_PROMPT_VERSION_V2,
+} from '../constants/applicant-evaluation.constants';
 import {
   ApplicantEvaluationDetailDto,
   ApplicantEvaluationResponseDto,
@@ -183,7 +186,10 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
       resumeContentHash: resumeResult.value.contentHash,
       parserVersion: resumeResult.value.parserVersion,
       model,
-      promptVersion: APPLICANT_EVALUATION_PROMPT_VERSION,
+      promptVersion:
+        jobSnapshot.schemaVersion === 2
+          ? APPLICANT_EVALUATION_PROMPT_VERSION_V2
+          : APPLICANT_EVALUATION_PROMPT_VERSION,
       redactedResumeHash: redactionResult.value.hash,
       redactedResumeText: redactionResult.value.text,
       redactionVersion: redactionResult.value.redactionVersion,

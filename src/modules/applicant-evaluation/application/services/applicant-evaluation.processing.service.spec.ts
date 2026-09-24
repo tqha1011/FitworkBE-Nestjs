@@ -84,6 +84,7 @@ describe('ApplicantEvaluationProcessingService', () => {
       jobSnapshot,
       resumeText: 'Experienced TypeScript engineer [REDACTED CONTACT]',
       model: 'gemini-model',
+      promptVersion: 'v1',
     });
     expect(notifier.notify).toHaveBeenCalledWith({
       evaluationPublicId: 'evaluation-id',
@@ -91,6 +92,24 @@ describe('ApplicantEvaluationProcessingService', () => {
       overallScore: output.overallScore,
       updatedAt: expect.any(String) as string,
     });
+  });
+
+  it('does not complete a V2 output before its validator is available', async () => {
+    llm.evaluate.mockResolvedValue(ok({ schemaVersion: 2, criteria: [] }));
+
+    const result = await service.process('evaluation-id', 0, 3);
+
+    expect(result._unsafeUnwrapErr().message).toBe(
+      'Evaluation V2 output is not supported yet',
+    );
+    expect(repository.markPending).toHaveBeenCalledWith(
+      'evaluation-id',
+      'Evaluation V2 output is not supported yet',
+    );
+    expect(repository.markCompleted).not.toHaveBeenCalled();
+    expect(notifier.notify).toHaveBeenCalledWith(
+      expect.objectContaining({ status: CommonEvaluationStatus.PENDING }),
+    );
   });
 
   it('treats a terminal or concurrently handled evaluation idempotently', async () => {

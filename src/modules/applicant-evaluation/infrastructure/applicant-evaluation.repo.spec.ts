@@ -327,7 +327,7 @@ describe('ApplicantEvaluationRepository', () => {
         model: input.model,
         promptVersion: input.promptVersion,
       });
-      expect(result._unsafeUnwrap().resumeRedactedText).not.toContain(
+      expect(result._unsafeUnwrap()?.resumeRedactedText).not.toContain(
         'jane@example.com',
       );
       expect(tx.applicantEvaluation.updateMany).toHaveBeenCalledWith({
@@ -413,8 +413,8 @@ describe('ApplicantEvaluationRepository', () => {
       const result = await repository.claimForProcessing('evaluation-id');
       const snapshot = createResumeEvaluationSnapshot(rawText);
 
-      expect(result._unsafeUnwrap().resumeRedactedText).toBe(snapshot.text);
-      expect(result._unsafeUnwrap().resumeRedactedText).not.toContain(
+      expect(result._unsafeUnwrap()?.resumeRedactedText).toBe(snapshot.text);
+      expect(result._unsafeUnwrap()?.resumeRedactedText).not.toContain(
         'jane@example.com',
       );
       expect(tx.applicantEvaluation.updateMany).toHaveBeenCalledWith(
