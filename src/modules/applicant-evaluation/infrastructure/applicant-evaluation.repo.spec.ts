@@ -512,6 +512,52 @@ describe('ApplicantEvaluationRepository', () => {
       );
     });
 
+    it('stores V2 evidence and its computed breakdown', async () => {
+      const v2Input: CompleteApplicantEvaluationInput = {
+        evaluationPublicId: 'evaluation-id',
+        overallScore: 42,
+        scoreBreakdown: {
+          schemaVersion: 2,
+          criteria: [{ criterionId: 'skill:1', scoreContribution: 42 }],
+        },
+        evidence: {
+          schemaVersion: 2,
+          strengths: ['TypeScript'],
+          gaps: [],
+          explanation: 'Relevant skill found.',
+          criteria: [
+            {
+              criterionId: 'skill:1',
+              criterionText: 'TypeScript',
+              verdict: 'PARTIAL',
+              scoreContribution: 42,
+              explanation: 'Skill is mentioned.',
+              evidence: [
+                {
+                  snippet: 'TypeScript',
+                  section: 'resume',
+                  startOffset: 0,
+                  endOffset: 10,
+                },
+              ],
+            },
+          ],
+        },
+      };
+
+      expect((await repository.markCompleted(v2Input))._unsafeUnwrap()).toBe(
+        true,
+      );
+      expect(prismaService.applicantEvaluation.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            scoreBreakdown: v2Input.scoreBreakdown,
+            evidence: v2Input.evidence,
+          }) as object,
+        }),
+      );
+    });
+
     it('releases a processing evaluation for retry', async () => {
       const result = await repository.markPending(
         'evaluation-id',

@@ -50,23 +50,29 @@ describe('validateApplicantEvaluationOutput', () => {
 describe('validateApplicantEvaluationOutputV2', () => {
   const validOutput: ApplicantEvaluationLlmOutputV2 = {
     schemaVersion: 2,
-    criteria: [
-      {
-        criterionId: 'skill:1',
-        criterionText: 'Experience with TypeScript',
-        verdict: 'MATCHED',
-        scoreContribution: 50,
-        explanation: 'Built TypeScript services.',
-        evidence: [
-          {
-            snippet: 'Built TypeScript services.',
-            section: 'resume',
-            startOffset: 0,
-            endOffset: 26,
-          },
-        ],
-      },
-    ],
+    evidence: {
+      schemaVersion: 2,
+      strengths: ['TypeScript experience'],
+      gaps: [],
+      explanation: 'The resume supports the criterion.',
+      criteria: [
+        {
+          criterionId: 'skill:1',
+          criterionText: 'Experience with TypeScript',
+          verdict: 'MATCHED',
+          scoreContribution: 50,
+          explanation: 'Built TypeScript services.',
+          evidence: [
+            {
+              snippet: 'Built TypeScript services.',
+              section: 'resume',
+              startOffset: 0,
+              endOffset: 26,
+            },
+          ],
+        },
+      ],
+    },
   };
 
   it('accepts a criterion-level response without an overall score', () => {
@@ -75,41 +81,59 @@ describe('validateApplicantEvaluationOutputV2', () => {
   });
 
   it.each([
-    ['missing criteria', { schemaVersion: 2 }],
+    ['missing evidence', { schemaVersion: 2 }],
+    ['missing criteria', { ...validOutput, evidence: { schemaVersion: 2 } }],
     ['unexpected overall score', { ...validOutput, overallScore: 50 }],
     [
       'wrong verdict',
       {
         ...validOutput,
-        criteria: [{ ...validOutput.criteria[0], verdict: 'UNKNOWN' }],
+        evidence: {
+          ...validOutput.evidence,
+          criteria: [
+            { ...validOutput.evidence.criteria[0], verdict: 'UNKNOWN' },
+          ],
+        },
       },
     ],
     [
       'wrong evidence section',
       {
         ...validOutput,
-        criteria: [
-          {
-            ...validOutput.criteria[0],
-            evidence: [
-              { ...validOutput.criteria[0].evidence[0], section: 'job' },
-            ],
-          },
-        ],
+        evidence: {
+          ...validOutput.evidence,
+          criteria: [
+            {
+              ...validOutput.evidence.criteria[0],
+              evidence: [
+                {
+                  ...validOutput.evidence.criteria[0].evidence[0],
+                  section: 'job',
+                },
+              ],
+            },
+          ],
+        },
       },
     ],
     [
       'negative offset',
       {
         ...validOutput,
-        criteria: [
-          {
-            ...validOutput.criteria[0],
-            evidence: [
-              { ...validOutput.criteria[0].evidence[0], startOffset: -1 },
-            ],
-          },
-        ],
+        evidence: {
+          ...validOutput.evidence,
+          criteria: [
+            {
+              ...validOutput.evidence.criteria[0],
+              evidence: [
+                {
+                  ...validOutput.evidence.criteria[0].evidence[0],
+                  startOffset: -1,
+                },
+              ],
+            },
+          ],
+        },
       },
     ],
   ])('rejects %s', (_caseName, output) => {

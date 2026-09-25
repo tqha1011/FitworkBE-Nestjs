@@ -5,6 +5,11 @@ import { IApplicantEvaluationRepository } from '../../domain/repositories/applic
 import { IApplicantEvaluationLlm } from '../interfaces/applicant-evaluation-llm.interface';
 import { IApplicantEvaluationNotifier } from '../interfaces/applicant-evaluation-notifier.interface';
 import { IApplicantEvaluationProcessingService } from '../interfaces/applicant-evaluation-processing.service.interface';
+import {
+  validateApplicantEvaluationOutput,
+  validateApplicantEvaluationOutputV2,
+} from '../../infrastructure/llm/applicant-evaluation-response.validator';
+import { validateEvaluationV2 } from './evaluation-v2-validator';
 
 @Injectable()
 export class ApplicantEvaluationProcessingService implements IApplicantEvaluationProcessingService {
@@ -51,20 +56,56 @@ export class ApplicantEvaluationProcessingService implements IApplicantEvaluatio
     }
 
     const output = llmResponse.value;
-    if (output.schemaVersion === 2) {
+    const validate =
+      output.schemaVersion === 2
+        ? validateApplicantEvaluationOutputV2(output)
+        : validateApplicantEvaluationOutput(output);
+    if (!validate) {
       return this.handleFailure(
         evaluationPublicId,
-        new Error('Evaluation V2 output is not supported yet'),
+        new Error('LLM returned an invalid evaluation response'),
         attemptsMade,
         maxAttempts,
       );
     }
-    const completed = await this.applicantEvaluationRepo.markCompleted({
-      evaluationPublicId,
-      overallScore: output.overallScore,
-      scoreBreakdown: output.scoreBreakdown,
-      evidence: output.evidence,
-    });
+
+    let completion;
+    if (output.schemaVersion === 2) {
+      const snapshot = evaluationData.value.jobSnapshot;
+      if (snapshot.schemaVersion !== 2) {
+        return this.handleFailure(
+          evaluationPublicId,
+          new Error('Invalid evaluation V2 response'),
+          attemptsMade,
+          maxAttempts,
+        );
+      }
+      try {
+        const validated = validateEvaluationV2(
+          snapshot.criteria,
+          evaluationData.value.resumeRedactedText,
+          output.evidence,
+        );
+        completion = { evaluationPublicId, ...validated };
+      } catch {
+        return this.handleFailure(
+          evaluationPublicId,
+          new Error('Invalid evaluation V2 response'),
+          attemptsMade,
+          maxAttempts,
+        );
+      }
+    } else {
+      completion = {
+        evaluationPublicId,
+        overallScore: output.overallScore,
+        scoreBreakdown: output.scoreBreakdown,
+        evidence: output.evidence,
+      };
+    }
+
+    const completed =
+      await this.applicantEvaluationRepo.markCompleted(completion);
     if (completed.isErr()) {
       return this.handleFailure(
         evaluationPublicId,
@@ -83,7 +124,7 @@ export class ApplicantEvaluationProcessingService implements IApplicantEvaluatio
     await this.notifier.notify({
       evaluationPublicId,
       status: CommonEvaluationStatus.COMPLETED,
-      overallScore: output.overallScore,
+      overallScore: completion.overallScore,
       updatedAt: new Date().toISOString(),
     });
     return ok(undefined);

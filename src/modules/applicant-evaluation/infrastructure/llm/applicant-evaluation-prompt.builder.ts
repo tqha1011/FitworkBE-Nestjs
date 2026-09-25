@@ -49,6 +49,7 @@ export function buildApplicantEvaluationPrompt(
       'Evidence offsets are zero-based JavaScript string offsets into resumeText; endOffset is exclusive.',
       'Score contribution must be between zero and the criterion weight. MISSING must score zero.',
       'MATCHED and PARTIAL require resume evidence. Do not return an overall score.',
+      'Return an evidence object with schemaVersion 2, one result per criterion, strengths, gaps, and an overall explanation.',
     ].join(' '),
     user: JSON.stringify({
       job: { title, description, requirements, criteria },

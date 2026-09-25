@@ -106,23 +106,29 @@ describe('GeminiEvaluateApplicant', () => {
     };
     const v2Output: ApplicantEvaluationLlmOutputV2 = {
       schemaVersion: 2,
-      criteria: [
-        {
-          criterionId: 'skill:1',
-          criterionText: 'Experience with TypeScript',
-          verdict: 'MATCHED',
-          scoreContribution: 100,
-          explanation: 'TypeScript work is present.',
-          evidence: [
-            {
-              snippet: 'TypeScript',
-              section: 'resume',
-              startOffset: 14,
-              endOffset: 24,
-            },
-          ],
-        },
-      ],
+      evidence: {
+        schemaVersion: 2,
+        strengths: ['TypeScript experience'],
+        gaps: [],
+        explanation: 'The resume supports the criterion.',
+        criteria: [
+          {
+            criterionId: 'skill:1',
+            criterionText: 'Experience with TypeScript',
+            verdict: 'MATCHED',
+            scoreContribution: 100,
+            explanation: 'TypeScript work is present.',
+            evidence: [
+              {
+                snippet: 'TypeScript',
+                section: 'resume',
+                startOffset: 14,
+                endOffset: 24,
+              },
+            ],
+          },
+        ],
+      },
     };
     mockGenerateContent.mockResolvedValue({ text: JSON.stringify(v2Output) });
 

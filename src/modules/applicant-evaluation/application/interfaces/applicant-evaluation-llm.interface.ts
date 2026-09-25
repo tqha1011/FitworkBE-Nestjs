@@ -1,9 +1,9 @@
 import { Result } from 'neverthrow';
 import { JobSnapshot } from 'src/modules/job/domain/value-objects/job-snapshot';
 import {
-  EvaluationBreakdown,
-  EvaluationCriterionResult,
+  EvaluationBreakdownV1,
   EvaluationEvidenceV1,
+  EvaluationEvidenceV2,
 } from '../../domain/value-objects/evaluation';
 
 export type ApplicantEvaluationLlmInput = {
@@ -16,13 +16,13 @@ export type ApplicantEvaluationLlmInput = {
 export type ApplicantEvaluationLlmOutput = {
   schemaVersion: 1;
   overallScore: number;
-  scoreBreakdown: EvaluationBreakdown;
+  scoreBreakdown: EvaluationBreakdownV1;
   evidence: EvaluationEvidenceV1;
 };
 
 export type ApplicantEvaluationLlmOutputV2 = {
   schemaVersion: 2;
-  criteria: EvaluationCriterionResult[];
+  evidence: EvaluationEvidenceV2;
 };
 
 export abstract class IApplicantEvaluationLlm {

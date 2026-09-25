@@ -4,6 +4,7 @@ import { CommonEvaluationStatus } from 'src/shared/domain/enum';
 import {
   EvaluationBreakdown,
   EvaluationEvidenceV1,
+  EvaluationEvidenceV2,
 } from '../value-objects/evaluation';
 
 export type PrepareApplicantEvaluationInput = {
@@ -42,7 +43,7 @@ export type CompleteApplicantEvaluationInput = {
   evaluationPublicId: string;
   overallScore: number;
   scoreBreakdown: EvaluationBreakdown;
-  evidence: EvaluationEvidenceV1;
+  evidence: EvaluationEvidenceV1 | EvaluationEvidenceV2;
 };
 
 export type ApplicantEvaluationRealtimeState = {
@@ -57,7 +58,7 @@ export type ApplicantEvaluationDetail = {
   evaluationPublicId: string;
   overallScore: number | null;
   scoreBreakdown: EvaluationBreakdown | null;
-  evidence: EvaluationEvidenceV1 | null;
+  evidence: EvaluationEvidenceV1 | EvaluationEvidenceV2 | null;
 };
 
 export abstract class IApplicantEvaluationRepository {
