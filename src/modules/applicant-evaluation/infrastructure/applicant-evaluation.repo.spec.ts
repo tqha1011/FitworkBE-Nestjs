@@ -122,6 +122,111 @@ describe('ApplicantEvaluationRepository', () => {
     );
   });
 
+  describe('getApplicantEvaluationForJobOwner', () => {
+    it('filters by evaluation and job and returns V2 result metadata', async () => {
+      const scoreBreakdown = {
+        schemaVersion: 2,
+        criteria: [{ criterionId: 'skill:1', scoreContribution: 42 }],
+      };
+      const evidence = {
+        schemaVersion: 2,
+        strengths: ['TypeScript'],
+        gaps: [],
+        explanation: 'Relevant skill found.',
+        criteria: [
+          {
+            criterionId: 'skill:1',
+            criterionText: 'TypeScript',
+            verdict: 'PARTIAL',
+            scoreContribution: 42,
+            explanation: 'Skill is mentioned.',
+            evidence: [
+              {
+                snippet: 'TypeScript',
+                section: 'resume',
+                startOffset: 0,
+                endOffset: 10,
+              },
+            ],
+          },
+        ],
+      };
+      prismaService.applicantEvaluation.findUnique.mockResolvedValue({
+        publicId: 'evaluation-id',
+        overallScore: 42,
+        scoreBreakdown,
+        evidence,
+        redactedResumeText: 'TypeScript',
+        redactedResumeHash: 'redacted-hash',
+        redactionVersion: 'resume-redaction-v1',
+        jobContentHash: 'job-hash',
+        resumeContentHash: 'resume-hash',
+        parserVersion: 'parser-v1',
+        model: 'gemini-model',
+        promptVersion: 'applicant-match-v2',
+      });
+
+      const result = await repository.getApplicantEvaluationForJobOwner(
+        'evaluation-id',
+        'job-id',
+      );
+
+      expect(prismaService.applicantEvaluation.findUnique).toHaveBeenCalledWith(
+        {
+          where: {
+            publicId: 'evaluation-id',
+            jobApplicant: { job: { publicId: 'job-id' } },
+          },
+          select: {
+            publicId: true,
+            overallScore: true,
+            scoreBreakdown: true,
+            evidence: true,
+            redactedResumeText: true,
+            redactedResumeHash: true,
+            redactionVersion: true,
+            jobContentHash: true,
+            resumeContentHash: true,
+            parserVersion: true,
+            model: true,
+            promptVersion: true,
+          },
+        },
+      );
+      expect(result._unsafeUnwrap()).toEqual({
+        publicId: 'evaluation-id',
+        overallScore: 42,
+        scoreBreakdown,
+        evidence,
+        decisionSupportOnly: true,
+        resumeRedaction: {
+          redactedResumeText: 'TypeScript',
+          redactedResumeVersion: 'resume-redaction-v1',
+        },
+        metadata: {
+          jobContentHash: 'job-hash',
+          resumeContentHash: 'resume-hash',
+          redactedResumeHash: 'redacted-hash',
+          parserVersion: 'parser-v1',
+          redactionVersion: 'resume-redaction-v1',
+          model: 'gemini-model',
+          promptVersion: 'applicant-match-v2',
+        },
+      });
+    });
+
+    it('returns null when evaluation is absent or belongs to another job', async () => {
+      prismaService.applicantEvaluation.findUnique.mockResolvedValue(null);
+
+      const result = await repository.getApplicantEvaluationForJobOwner(
+        'other-evaluation-id',
+        'job-id',
+      );
+
+      expect(result._unsafeUnwrap()).toBeNull();
+    });
+  });
+
   describe('getRealtimeStateForApplicant', () => {
     it('returns the current state only for the owning applicant', async () => {
       const updatedAt = new Date('2026-09-19T00:00:00.000Z');

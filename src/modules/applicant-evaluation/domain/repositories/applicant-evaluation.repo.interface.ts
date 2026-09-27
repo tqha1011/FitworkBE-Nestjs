@@ -61,6 +61,27 @@ export type ApplicantEvaluationDetail = {
   evidence: EvaluationEvidenceV1 | EvaluationEvidenceV2 | null;
 };
 
+export type ApplicantEvaluationForJobOwner = {
+  publicId: string;
+  overallScore: number | null;
+  scoreBreakdown: EvaluationBreakdown | null;
+  evidence: EvaluationEvidenceV1 | EvaluationEvidenceV2 | null;
+  decisionSupportOnly: true;
+  resumeRedaction: {
+    redactedResumeText: string | null;
+    redactedResumeVersion: string | null;
+  };
+  metadata: {
+    jobContentHash: string;
+    resumeContentHash: string;
+    redactedResumeHash: string | null;
+    parserVersion: string;
+    redactionVersion: string | null;
+    model: string;
+    promptVersion: string;
+  };
+};
+
 export abstract class IApplicantEvaluationRepository {
   abstract prepare(
     input: PrepareApplicantEvaluationInput,
@@ -93,4 +114,9 @@ export abstract class IApplicantEvaluationRepository {
     applicantPublicId: string,
     evaluationPublicId: string,
   ): Promise<Result<ApplicantEvaluationDetail | null, Error>>;
+
+  abstract getApplicantEvaluationForJobOwner(
+    evaluationPublicId: string,
+    jobPublicId: string,
+  ): Promise<Result<ApplicantEvaluationForJobOwner | null, Error>>;
 }

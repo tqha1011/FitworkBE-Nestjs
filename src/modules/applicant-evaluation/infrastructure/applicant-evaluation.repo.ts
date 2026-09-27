@@ -16,6 +16,7 @@ import {
   PreparedApplicantEvaluation,
   PrepareApplicantEvaluationInput,
   ApplicantEvaluationDetail,
+  ApplicantEvaluationForJobOwner,
 } from '../domain/repositories/applicant-evaluation.repo.interface';
 import {
   mapEvaluationBreakdown,
@@ -25,6 +26,64 @@ import {
 @Injectable()
 export class ApplicantEvaluationRepository implements IApplicantEvaluationRepository {
   constructor(private readonly prismaService: PrismaService) {}
+  async getApplicantEvaluationForJobOwner(
+    evaluationPublicId: string,
+    jobPublicId: string,
+  ): Promise<Result<ApplicantEvaluationForJobOwner | null, Error>> {
+    try {
+      const evaluation =
+        await this.prismaService.applicantEvaluation.findUnique({
+          where: {
+            publicId: evaluationPublicId,
+            jobApplicant: {
+              job: {
+                publicId: jobPublicId,
+              },
+            },
+          },
+          select: {
+            publicId: true,
+            overallScore: true,
+            scoreBreakdown: true,
+            evidence: true,
+            redactedResumeText: true,
+            redactedResumeHash: true,
+            redactionVersion: true,
+            jobContentHash: true,
+            resumeContentHash: true,
+            parserVersion: true,
+            model: true,
+            promptVersion: true,
+          },
+        });
+      if (!evaluation) return ok(null);
+      const resumeRedaction = {
+        redactedResumeText: evaluation.redactedResumeText,
+        redactedResumeVersion: evaluation.redactionVersion,
+      };
+      return ok({
+        publicId: evaluation.publicId,
+        overallScore: evaluation.overallScore,
+        scoreBreakdown: mapEvaluationBreakdown(evaluation.scoreBreakdown),
+        evidence: mapEvaluationEvidence(evaluation.evidence),
+        resumeRedaction,
+        decisionSupportOnly: true,
+        metadata: {
+          jobContentHash: evaluation.jobContentHash,
+          resumeContentHash: evaluation.resumeContentHash,
+          redactedResumeHash: evaluation.redactedResumeHash,
+          parserVersion: evaluation.parserVersion,
+          redactionVersion: evaluation.redactionVersion,
+          model: evaluation.model,
+          promptVersion: evaluation.promptVersion,
+        },
+      });
+    } catch (error) {
+      return err(
+        new Error(`Failed to get applicant evaluation for job owner: ${error}`),
+      );
+    }
+  }
   async getApplicantEvaluationDetail(
     applicantPublicId: string,
     evaluationPublicId: string,

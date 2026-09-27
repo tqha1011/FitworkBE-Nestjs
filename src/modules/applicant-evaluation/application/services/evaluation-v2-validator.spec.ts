@@ -95,8 +95,12 @@ describe('validateEvaluationV2', () => {
       [{ ...evidence.criteria[0], verdict: 'UNKNOWN' }, evidence.criteria[1]],
     ],
     [
-      'positive verdict without evidence',
+      'MATCHED without evidence',
       [{ ...evidence.criteria[0], evidence: [] }, evidence.criteria[1]],
+    ],
+    [
+      'PARTIAL without evidence',
+      [evidence.criteria[0], { ...evidence.criteria[1], evidence: [] }],
     ],
     [
       'missing verdict with a score',

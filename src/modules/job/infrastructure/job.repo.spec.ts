@@ -1,5 +1,6 @@
 import { PrismaService } from 'src/shared/infrastructure/database/prisma.service';
 import { JobRepository } from './job.repo';
+import { ok } from 'neverthrow';
 
 describe('JobRepository getJobsAppliedAsync', () => {
   let prismaService: {
@@ -16,6 +17,30 @@ describe('JobRepository getJobsAppliedAsync', () => {
       },
     };
     repository = new JobRepository(prismaService as unknown as PrismaService);
+  });
+
+  describe('authorizeJobOwner', () => {
+    it('checks the job public ID and owner public ID', async () => {
+      prismaService.job.findUnique.mockResolvedValue({ id: 10 });
+
+      const result = await repository.authorizeJobOwner('owner-id', 'job-id');
+
+      expect(result).toEqual(ok(undefined));
+      expect(prismaService.job.findUnique).toHaveBeenCalledWith({
+        where: { publicId: 'job-id', user: { publicId: 'owner-id' } },
+        select: { id: true },
+      });
+    });
+
+    it('returns null for a different owner', async () => {
+      prismaService.job.findUnique.mockResolvedValue(null);
+
+      expect(
+        (
+          await repository.authorizeJobOwner('other-owner', 'job-id')
+        )._unsafeUnwrap(),
+      ).toBeNull();
+    });
   });
 
   describe('getJobDataForSnapshot', () => {

@@ -7,9 +7,13 @@ import { User } from 'src/shared/common/user.decorator';
 import { CreateApplicantEvaluationRequestDto } from '../application/dtos/applicant-evaluation.request.dto';
 import {
   ApplicantEvaluationDetailDto,
+  ApplicantEvaluationForJobOwnerDto,
   ApplicantEvaluationResponseDto,
 } from '../application/dtos/applicant-evaluation.response.dto';
 import { IApplicantEvaluationService } from '../application/interfaces/applicant-evaluation.service.interface';
+import { RolesGuard } from 'src/shared/common/roles.guard';
+import { Roles } from 'src/shared/common/roles.decorator';
+import { CommonUserRole } from 'src/shared/domain/enum';
 
 @ApiTags('applicant-evaluation')
 @Controller('/api/applicant-evaluation')
@@ -19,7 +23,8 @@ export class ApplicantEvaluationController {
   ) {}
 
   @Get(':evaluationPublicId')
-  @Auth()
+  @Auth(RolesGuard)
+  @Roles([CommonUserRole.ROLE_APPLICANT, CommonUserRole.ROLE_COMPANY])
   @ApiOperation({ summary: 'Get an applicant evaluation result' })
   async getApplicantEvaluationDetail(
     @User() user: JwtPayload,
@@ -28,6 +33,30 @@ export class ApplicantEvaluationController {
     const result =
       await this.applicantEvaluationService.getApplicantEvaluationDetailAsync(
         user.sub,
+        evaluationPublicId,
+      );
+
+    return result.match(
+      (value) => value,
+      (error) => {
+        throw toHttpException(error);
+      },
+    );
+  }
+
+  @Get('jobs/:jobPublicId/:evaluationPublicId')
+  @Auth(RolesGuard)
+  @Roles([CommonUserRole.ROLE_COMPANY])
+  @ApiOperation({ summary: 'Get an applicant evaluation for the job owner' })
+  async getApplicantEvaluationForJobOwner(
+    @User() user: JwtPayload,
+    @Param('jobPublicId') jobPublicId: string,
+    @Param('evaluationPublicId') evaluationPublicId: string,
+  ): Promise<ApplicantEvaluationForJobOwnerDto> {
+    const result =
+      await this.applicantEvaluationService.getApplicantEvaluationForJobOwnerAsync(
+        user.sub,
+        jobPublicId,
         evaluationPublicId,
       );
 
