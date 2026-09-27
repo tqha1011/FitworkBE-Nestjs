@@ -22,4 +22,9 @@ export abstract class IJobRepository {
     jobPublicId: string,
   ): Promise<Result<JobSnapshotData | null, Error>>;
   abstract updateJob(job: Job): Promise<Result<undefined, Error>>;
+
+  abstract authorizeJobOwner(
+    jobOwnerPublicId: string,
+    jobPublicId: string,
+  ): Promise<Result<undefined | null, Error>>;
 }

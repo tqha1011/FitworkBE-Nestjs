@@ -13,9 +13,13 @@ import {
   CommonEvaluationStatus,
   CommonResumeIngestionStatus,
 } from 'src/shared/domain/enum';
-import { APPLICANT_EVALUATION_PROMPT_VERSION } from '../constants/applicant-evaluation.constants';
+import {
+  APPLICANT_EVALUATION_PROMPT_VERSION,
+  APPLICANT_EVALUATION_PROMPT_VERSION_V2,
+} from '../constants/applicant-evaluation.constants';
 import {
   ApplicantEvaluationDetailDto,
+  ApplicantEvaluationForJobOwnerDto,
   ApplicantEvaluationResponseDto,
 } from '../dtos/applicant-evaluation.response.dto';
 import { Logger } from '@nestjs/common';
@@ -35,6 +39,93 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
     private readonly cacheManager: IApplicationCache,
     private readonly resumeRedaction: IResumeRedactEvaluation,
   ) {}
+  async getApplicantEvaluationForJobOwnerAsync(
+    jobOwnerPublicId: string,
+    jobPublicId: string,
+    evaluationPublicId: string,
+  ): Promise<Result<ApplicantEvaluationForJobOwnerDto, AppError>> {
+    const isOwner = await this.jobRepository.authorizeJobOwner(
+      jobOwnerPublicId,
+      jobPublicId,
+    );
+    if (isOwner.isErr()) {
+      return err(
+        new AppError(
+          ErrorCode.InternalServerError,
+          'Failed to authorize job owner',
+        ),
+      );
+    }
+    if (isOwner.value === null) {
+      return err(
+        new AppError(
+          ErrorCode.Forbidden,
+          'Job owner is not authorized to view this evaluation',
+        ),
+      );
+    }
+    const cacheKey = this.buildJobOwnerCacheKey(
+      jobOwnerPublicId,
+      jobPublicId,
+      evaluationPublicId,
+    );
+    try {
+      const cached =
+        await this.cacheManager.get<ApplicantEvaluationForJobOwnerDto>(
+          cacheKey,
+        );
+      if (cached !== undefined) {
+        return ok(cached);
+      }
+    } catch {
+      this.logger.warn('Failed to read cached job owner evaluation');
+    }
+    const result =
+      await this.applicantEvaluationRepository.getApplicantEvaluationForJobOwner(
+        evaluationPublicId,
+        jobPublicId,
+      );
+    if (result.isErr()) {
+      return err(
+        new AppError(
+          ErrorCode.InternalServerError,
+          'Failed to get applicant evaluation for job owner',
+        ),
+      );
+    }
+    if (!result.value) {
+      return err(
+        new AppError(ErrorCode.NotFound, 'Applicant evaluation not found'),
+      );
+    }
+    if (
+      result.value.overallScore === null ||
+      result.value.scoreBreakdown === null ||
+      result.value.evidence === null
+    ) {
+      return err(
+        new AppError(
+          ErrorCode.Conflict,
+          'Applicant evaluation is not completed',
+        ),
+      );
+    }
+    const detail: ApplicantEvaluationForJobOwnerDto = {
+      publicId: result.value.publicId,
+      overallScore: result.value.overallScore,
+      scoreBreakdown: result.value.scoreBreakdown,
+      evidence: result.value.evidence,
+      decisionSupportOnly: true,
+      resumeRedaction: result.value.resumeRedaction,
+      metadata: result.value.metadata,
+    };
+    try {
+      await this.cacheManager.set(cacheKey, detail);
+    } catch {
+      this.logger.warn('Failed to cache job owner evaluation');
+    }
+    return ok(detail);
+  }
   async getApplicantEvaluationDetailAsync(
     applicantPublicId: string,
     evaluationPublicId: string,
@@ -108,13 +199,12 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
     applicantPublicId: string,
     data: CreateApplicantEvaluationRequestDto,
   ): Promise<Result<ApplicantEvaluationResponseDto, AppError>> {
-    const [jobResult, resumeResult, redactionResult] = await Promise.all([
+    const [jobResult, resumeResult] = await Promise.all([
       this.jobRepository.getJobDataForSnapshot(data.jobPublicId),
       this.resumeContentRepository.getCurrentForOwner(
         data.resumePublicId,
         applicantPublicId,
       ),
-      this.resumeRedaction.redactResumeAsync(data.resumePublicId),
     ]);
     if (jobResult.isErr() || resumeResult.isErr()) {
       return err(
@@ -145,6 +235,9 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
         ),
       );
     }
+    const redactionResult = await this.resumeRedaction.redactResumeAsync(
+      resumeResult.value.publicId,
+    );
     if (redactionResult.isErr()) {
       return err(
         new AppError(ErrorCode.InternalServerError, 'Failed to redact resume'),
@@ -181,7 +274,10 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
       resumeContentHash: resumeResult.value.contentHash,
       parserVersion: resumeResult.value.parserVersion,
       model,
-      promptVersion: APPLICANT_EVALUATION_PROMPT_VERSION,
+      promptVersion:
+        jobSnapshot.schemaVersion === 2
+          ? APPLICANT_EVALUATION_PROMPT_VERSION_V2
+          : APPLICANT_EVALUATION_PROMPT_VERSION,
       redactedResumeHash: redactionResult.value.hash,
       redactedResumeText: redactionResult.value.text,
       redactionVersion: redactionResult.value.redactionVersion,
@@ -229,5 +325,13 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
     evaluationPublicId: string,
   ): string {
     return `applicant:${applicantPublicId}:${evaluationPublicId}`;
+  }
+
+  private buildJobOwnerCacheKey(
+    jobOwnerPublicId: string,
+    jobPublicId: string,
+    evaluationPublicId: string,
+  ): string {
+    return `job-owner:${jobOwnerPublicId}:${jobPublicId}:${evaluationPublicId}`;
   }
 }

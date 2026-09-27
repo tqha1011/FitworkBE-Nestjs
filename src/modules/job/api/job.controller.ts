@@ -2,12 +2,13 @@ import {
   Body,
   Controller,
   Get,
+  HttpStatus,
   Param,
   Patch,
   Post,
   Query,
 } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { toHttpException } from 'src/shared/common/app-error.mapper';
 import { Auth } from 'src/shared/common/swagger/auth-swagger.decorator';
 import { User } from 'src/shared/common/user.decorator';
@@ -32,6 +33,10 @@ import { PageResult, PaginationQueryDto } from 'src/shared/common/pagination';
 import { Roles } from 'src/shared/common/roles.decorator';
 import { RolesGuard } from 'src/shared/common/roles.guard';
 import { CommonUserRole } from 'src/shared/domain/enum';
+import {
+  ApiPaginatedResponse,
+  ApiStandardResponse,
+} from 'src/shared/common/swagger/api-standard-response.decorator';
 
 @ApiTags('job')
 @Controller('/api/job')
@@ -46,6 +51,7 @@ export class JobController {
   @Post()
   @Auth()
   @ApiOperation({ summary: 'Create a new job posting' })
+  @ApiResponse({ status: HttpStatus.CREATED, description: 'Job created' })
   async createJob(
     @User() user: JwtPayload,
     @Body() dto: CreateJobRequestDto,
@@ -58,6 +64,7 @@ export class JobController {
 
   @Get()
   @ApiOperation({ summary: 'Search job postings' })
+  @ApiPaginatedResponse(JobItemResponseDto)
   async searchJobs(
     @Query() query: GetJobListRequestDto,
   ): Promise<PageResult<JobItemResponseDto>> {
@@ -76,6 +83,7 @@ export class JobController {
   @Get('applied')
   @Auth()
   @ApiOperation({ summary: 'Get jobs applied by the current user' })
+  @ApiPaginatedResponse(JobApplicantItemResponseDto)
   async getJobsApplied(
     @User() user: JwtPayload,
     @Query() query: PaginationQueryDto,
@@ -92,6 +100,7 @@ export class JobController {
   @Patch(':jobPublicId')
   @Auth()
   @ApiOperation({ summary: 'Update a job posting' })
+  @ApiResponse({ status: HttpStatus.OK, description: 'Job updated' })
   async updateJob(
     @User() user: JwtPayload,
     @Param('jobPublicId') jobPublicId: string,
@@ -111,6 +120,7 @@ export class JobController {
   @Auth(RolesGuard)
   @Roles([CommonUserRole.ROLE_COMPANY])
   @ApiOperation({ summary: 'Update a job applicant status' })
+  @ApiStandardResponse(JobApplicantResponseDto)
   async updateJobApplicantStatus(
     @User() user: JwtPayload,
     @Param('jobApplicantPublicId') jobApplicantPublicId: string,
@@ -134,6 +144,7 @@ export class JobController {
   @Post(':jobPublicId/apply')
   @Auth()
   @ApiOperation({ summary: 'Apply for a job' })
+  @ApiStandardResponse(JobApplicantResponseDto, { status: HttpStatus.CREATED })
   async applyForJob(
     @User() user: JwtPayload,
     @Body() request: JobApplicantRequestDto,

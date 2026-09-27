@@ -26,6 +26,26 @@ import {
 
 export class JobRepository implements IJobRepository, IJobQueryRepository {
   constructor(private readonly prismaService: PrismaService) {}
+  async authorizeJobOwner(
+    jobOwnerPublicId: string,
+    jobPublicId: string,
+  ): Promise<Result<undefined | null, Error>> {
+    try {
+      const owner = await this.prismaService.job.findUnique({
+        where: {
+          publicId: jobPublicId,
+          user: {
+            publicId: jobOwnerPublicId,
+          },
+        },
+        select: { id: true },
+      });
+      if (!owner) return ok(null);
+      return ok(undefined);
+    } catch (error) {
+      return err(new Error(`Failed to authorize job owner: ${error}`));
+    }
+  }
 
   async getJobDataForSnapshot(
     jobPublicId: string,

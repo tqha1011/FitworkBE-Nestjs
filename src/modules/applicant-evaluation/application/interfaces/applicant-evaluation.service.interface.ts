@@ -3,6 +3,7 @@ import { CreateApplicantEvaluationRequestDto } from '../dtos/applicant-evaluatio
 import { AppError } from 'src/shared/common/errorCode';
 import {
   ApplicantEvaluationDetailDto,
+  ApplicantEvaluationForJobOwnerDto,
   ApplicantEvaluationResponseDto,
 } from '../dtos/applicant-evaluation.response.dto';
 
@@ -17,4 +18,10 @@ export abstract class IApplicantEvaluationService {
     applicantPublicId: string,
     evaluationPublicId: string,
   ): Promise<Result<ApplicantEvaluationDetailDto, AppError>>;
+
+  abstract getApplicantEvaluationForJobOwnerAsync(
+    jobOwnerPublicId: string,
+    jobPublicId: string,
+    evaluationPublicId: string,
+  ): Promise<Result<ApplicantEvaluationForJobOwnerDto, AppError>>;
 }

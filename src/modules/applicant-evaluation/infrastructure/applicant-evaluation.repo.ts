@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { createHash } from 'crypto';
 import { EvaluationStatus } from 'generated/prisma/enums';
 import { Prisma } from 'generated/prisma/client';
 import { err, ok, Result } from 'neverthrow';
@@ -6,6 +7,7 @@ import { JobSnapshot } from 'src/modules/job/domain/value-objects/job-snapshot';
 import { hashCanonicalJson } from 'src/shared/common/canonical-json';
 import { CommonEvaluationStatus } from 'src/shared/domain/enum';
 import { PrismaService } from 'src/shared/infrastructure/database/prisma.service';
+import { createResumeEvaluationSnapshot } from '../application/services/resume-redact-evaluation';
 import {
   ApplicantEvaluationProcessingData,
   ApplicantEvaluationRealtimeState,
@@ -14,6 +16,7 @@ import {
   PreparedApplicantEvaluation,
   PrepareApplicantEvaluationInput,
   ApplicantEvaluationDetail,
+  ApplicantEvaluationForJobOwner,
 } from '../domain/repositories/applicant-evaluation.repo.interface';
 import {
   mapEvaluationBreakdown,
@@ -23,6 +26,64 @@ import {
 @Injectable()
 export class ApplicantEvaluationRepository implements IApplicantEvaluationRepository {
   constructor(private readonly prismaService: PrismaService) {}
+  async getApplicantEvaluationForJobOwner(
+    evaluationPublicId: string,
+    jobPublicId: string,
+  ): Promise<Result<ApplicantEvaluationForJobOwner | null, Error>> {
+    try {
+      const evaluation =
+        await this.prismaService.applicantEvaluation.findUnique({
+          where: {
+            publicId: evaluationPublicId,
+            jobApplicant: {
+              job: {
+                publicId: jobPublicId,
+              },
+            },
+          },
+          select: {
+            publicId: true,
+            overallScore: true,
+            scoreBreakdown: true,
+            evidence: true,
+            redactedResumeText: true,
+            redactedResumeHash: true,
+            redactionVersion: true,
+            jobContentHash: true,
+            resumeContentHash: true,
+            parserVersion: true,
+            model: true,
+            promptVersion: true,
+          },
+        });
+      if (!evaluation) return ok(null);
+      const resumeRedaction = {
+        redactedResumeText: evaluation.redactedResumeText,
+        redactedResumeVersion: evaluation.redactionVersion,
+      };
+      return ok({
+        publicId: evaluation.publicId,
+        overallScore: evaluation.overallScore,
+        scoreBreakdown: mapEvaluationBreakdown(evaluation.scoreBreakdown),
+        evidence: mapEvaluationEvidence(evaluation.evidence),
+        resumeRedaction,
+        decisionSupportOnly: true,
+        metadata: {
+          jobContentHash: evaluation.jobContentHash,
+          resumeContentHash: evaluation.resumeContentHash,
+          redactedResumeHash: evaluation.redactedResumeHash,
+          parserVersion: evaluation.parserVersion,
+          redactionVersion: evaluation.redactionVersion,
+          model: evaluation.model,
+          promptVersion: evaluation.promptVersion,
+        },
+      });
+    } catch (error) {
+      return err(
+        new Error(`Failed to get applicant evaluation for job owner: ${error}`),
+      );
+    }
+  }
   async getApplicantEvaluationDetail(
     applicantPublicId: string,
     evaluationPublicId: string,
@@ -201,6 +262,9 @@ export class ApplicantEvaluationRepository implements IApplicantEvaluationReposi
                   parserVersion: true,
                 },
               },
+              redactedResumeHash: true,
+              redactedResumeText: true,
+              redactionVersion: true,
             },
           });
           if (!evaluation) {
@@ -247,7 +311,7 @@ export class ApplicantEvaluationRepository implements IApplicantEvaluationReposi
 
           const jobSnapshot = this.toJobSnapshot(evaluation.jobSnapshot);
           const resumeContent = evaluation.resumeContent;
-          if (!resumeContent?.extractedText || !resumeContent.contentHash) {
+          if (!resumeContent?.contentHash) {
             throw new Error('Evaluation resume content is incomplete');
           }
           if (hashCanonicalJson(jobSnapshot) !== evaluation.jobContentHash) {
@@ -260,6 +324,37 @@ export class ApplicantEvaluationRepository implements IApplicantEvaluationReposi
             throw new Error('Evaluation parser version does not match');
           }
 
+          // check if missing one of the redacted resume snapshot fields
+          const hasRedactedSnapshot =
+            evaluation.redactedResumeText != null ||
+            evaluation.redactedResumeHash != null ||
+            evaluation.redactionVersion != null;
+          if (
+            hasRedactedSnapshot &&
+            (!evaluation.redactedResumeText ||
+              !evaluation.redactedResumeHash ||
+              !evaluation.redactionVersion)
+          ) {
+            throw new Error(
+              'Evaluation redacted resume snapshot is incomplete',
+            );
+          }
+
+          // if dont have snapshot, create it
+          const snapshot = hasRedactedSnapshot
+            ? {
+                text: evaluation.redactedResumeText!,
+                hash: evaluation.redactedResumeHash!,
+                redactionVersion: evaluation.redactionVersion!,
+              }
+            : createResumeEvaluationSnapshot(resumeContent.extractedText ?? '');
+          if (
+            createHash('sha256').update(snapshot.text, 'utf8').digest('hex') !==
+            snapshot.hash
+          ) {
+            throw new Error('Evaluation redacted resume hash does not match');
+          }
+
           const claimed = await tx.applicantEvaluation.updateMany({
             where: {
               publicId: evaluationPublicId,
@@ -270,6 +365,11 @@ export class ApplicantEvaluationRepository implements IApplicantEvaluationReposi
             data: {
               status: EvaluationStatus.PROCESSING,
               errorMessage: null,
+              ...(!hasRedactedSnapshot && {
+                redactedResumeText: snapshot.text,
+                redactedResumeHash: snapshot.hash,
+                redactionVersion: snapshot.redactionVersion,
+              }),
             },
           });
           if (claimed.count === 0) {
@@ -279,7 +379,9 @@ export class ApplicantEvaluationRepository implements IApplicantEvaluationReposi
           return {
             publicId: evaluation.publicId,
             jobSnapshot,
-            resumeText: resumeContent.extractedText,
+            resumeRedactedText: snapshot.text,
+            resumeRedactedHash: snapshot.hash,
+            resumeRedactionVersion: snapshot.redactionVersion,
             model: evaluation.model,
             promptVersion: evaluation.promptVersion,
           };

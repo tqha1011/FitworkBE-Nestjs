@@ -8,9 +8,13 @@ import {
   CommonEvaluationStatus,
   CommonResumeIngestionStatus,
 } from 'src/shared/domain/enum';
-import { APPLICANT_EVALUATION_PROMPT_VERSION } from '../constants/applicant-evaluation.constants';
+import {
+  APPLICANT_EVALUATION_PROMPT_VERSION,
+  APPLICANT_EVALUATION_PROMPT_VERSION_V2,
+} from '../constants/applicant-evaluation.constants';
 import { ApplicantEvaluationService } from './applicant-evaluation.service';
 import { buildJobSnapshotV2 } from 'src/modules/job/domain/value-objects/job-snapshot';
+import { createResumeEvaluationSnapshot } from './resume-redact-evaluation';
 
 describe('ApplicantEvaluationService', () => {
   const request = {
@@ -30,6 +34,7 @@ describe('ApplicantEvaluationService', () => {
   };
   const resumeContent = {
     id: 30,
+    publicId: 'resume-content-id',
     resumeId: 20,
     status: CommonResumeIngestionStatus.COMPLETED,
     extractedText: 'Experienced TypeScript engineer',
@@ -38,7 +43,10 @@ describe('ApplicantEvaluationService', () => {
   };
 
   let resumeContentRepository: { getCurrentForOwner: jest.Mock };
-  let jobRepository: { getJobDataForSnapshot: jest.Mock };
+  let jobRepository: {
+    getJobDataForSnapshot: jest.Mock;
+    authorizeJobOwner: jest.Mock;
+  };
   let applicantEvaluationRepository: {
     prepare: jest.Mock;
     claimForProcessing: jest.Mock;
@@ -47,6 +55,7 @@ describe('ApplicantEvaluationService', () => {
     markFailed: jest.Mock;
     getRealtimeStateForApplicant: jest.Mock;
     getApplicantEvaluationDetail: jest.Mock;
+    getApplicantEvaluationForJobOwner: jest.Mock;
   };
   let applicantEvaluationQueue: { enqueue: jest.Mock; retry: jest.Mock };
   let applicationCache: {
@@ -56,12 +65,14 @@ describe('ApplicantEvaluationService', () => {
   };
   let configService: { get: jest.Mock };
   let service: ApplicantEvaluationService;
+  let resumeRedaction: { redactResumeAsync: jest.Mock };
 
   beforeEach(() => {
     resumeContentRepository = {
       getCurrentForOwner: jest.fn().mockResolvedValue(ok(resumeContent)),
     };
     jobRepository = {
+      authorizeJobOwner: jest.fn().mockResolvedValue(ok(undefined)),
       getJobDataForSnapshot: jest.fn().mockResolvedValue(
         ok({
           jobId: 10,
@@ -83,6 +94,7 @@ describe('ApplicantEvaluationService', () => {
       markFailed: jest.fn(),
       getRealtimeStateForApplicant: jest.fn(),
       getApplicantEvaluationDetail: jest.fn(),
+      getApplicantEvaluationForJobOwner: jest.fn(),
     };
     applicantEvaluationQueue = {
       enqueue: jest.fn().mockResolvedValue(undefined),
@@ -96,6 +108,13 @@ describe('ApplicantEvaluationService', () => {
     configService = {
       get: jest.fn().mockReturnValue('evaluation-model'),
     };
+    resumeRedaction = {
+      redactResumeAsync: jest
+        .fn()
+        .mockResolvedValue(
+          ok(createResumeEvaluationSnapshot(resumeContent.extractedText)),
+        ),
+    };
     service = new ApplicantEvaluationService(
       resumeContentRepository as unknown as IResumeContentRepository,
       jobRepository as unknown as IJobRepository,
@@ -103,7 +122,259 @@ describe('ApplicantEvaluationService', () => {
       applicantEvaluationQueue,
       configService as unknown as ConfigService,
       applicationCache,
+      resumeRedaction,
     );
+  });
+
+  describe('getApplicantEvaluationForJobOwnerAsync', () => {
+    const ownerDetail = {
+      publicId: 'evaluation-id',
+      overallScore: 42,
+      scoreBreakdown: {
+        schemaVersion: 2 as const,
+        criteria: [{ criterionId: 'skill:1', scoreContribution: 42 }],
+      },
+      evidence: {
+        schemaVersion: 2 as const,
+        criteria: [
+          {
+            criterionId: 'skill:1',
+            criterionText: 'TypeScript',
+            verdict: 'PARTIAL' as const,
+            scoreContribution: 42,
+            explanation: 'Skill is mentioned.',
+            evidence: [
+              {
+                snippet: 'TypeScript',
+                section: 'resume' as const,
+                startOffset: 0,
+                endOffset: 10,
+              },
+            ],
+          },
+        ],
+        strengths: ['TypeScript'],
+        gaps: [],
+        explanation: 'Relevant skill found.',
+      },
+      decisionSupportOnly: true as const,
+      resumeRedaction: {
+        redactedResumeText: 'TypeScript',
+        redactedResumeVersion: 'resume-redaction-v1',
+      },
+      metadata: {
+        jobContentHash: 'job-hash',
+        resumeContentHash: 'resume-hash',
+        redactedResumeHash: 'redacted-hash',
+        parserVersion: 'parser-v1',
+        redactionVersion: 'resume-redaction-v1',
+        model: 'gemini-model',
+        promptVersion: 'applicant-match-v2',
+      },
+    };
+
+    it('returns V2 detail only after checking job ownership and job binding', async () => {
+      applicantEvaluationRepository.getApplicantEvaluationForJobOwner.mockResolvedValue(
+        ok(ownerDetail),
+      );
+
+      const result = await service.getApplicantEvaluationForJobOwnerAsync(
+        'owner-id',
+        'job-id',
+        'evaluation-id',
+      );
+
+      expect(result._unsafeUnwrap()).toEqual(ownerDetail);
+      expect(jobRepository.authorizeJobOwner).toHaveBeenCalledWith(
+        'owner-id',
+        'job-id',
+      );
+      expect(
+        applicantEvaluationRepository.getApplicantEvaluationForJobOwner,
+      ).toHaveBeenCalledWith('evaluation-id', 'job-id');
+      expect(applicationCache.get).toHaveBeenCalledWith(
+        'job-owner:owner-id:job-id:evaluation-id',
+      );
+      expect(applicationCache.set).toHaveBeenCalledWith(
+        'job-owner:owner-id:job-id:evaluation-id',
+        ownerDetail,
+      );
+    });
+
+    it('uses cached owner detail only after checking job ownership', async () => {
+      applicationCache.get.mockResolvedValue(ownerDetail);
+
+      const result = await service.getApplicantEvaluationForJobOwnerAsync(
+        'owner-id',
+        'job-id',
+        'evaluation-id',
+      );
+
+      expect(result._unsafeUnwrap()).toEqual(ownerDetail);
+      expect(jobRepository.authorizeJobOwner).toHaveBeenCalledWith(
+        'owner-id',
+        'job-id',
+      );
+      expect(applicationCache.get).toHaveBeenCalledWith(
+        'job-owner:owner-id:job-id:evaluation-id',
+      );
+      expect(
+        applicantEvaluationRepository.getApplicantEvaluationForJobOwner,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('denies a user who does not own the job', async () => {
+      jobRepository.authorizeJobOwner.mockResolvedValue(ok(null));
+      applicationCache.get.mockResolvedValue(ownerDetail);
+
+      const result = await service.getApplicantEvaluationForJobOwnerAsync(
+        'other-user',
+        'job-id',
+        'evaluation-id',
+      );
+
+      expect(result._unsafeUnwrapErr().code).toBe(ErrorCode.Forbidden);
+      expect(applicationCache.get).not.toHaveBeenCalled();
+      expect(
+        applicantEvaluationRepository.getApplicantEvaluationForJobOwner,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('keeps owner cache entries separate by job', async () => {
+      applicantEvaluationRepository.getApplicantEvaluationForJobOwner.mockResolvedValue(
+        ok(ownerDetail),
+      );
+
+      await service.getApplicantEvaluationForJobOwnerAsync(
+        'owner-id',
+        'another-job-id',
+        'evaluation-id',
+      );
+
+      expect(applicationCache.get).toHaveBeenCalledWith(
+        'job-owner:owner-id:another-job-id:evaluation-id',
+      );
+      expect(
+        applicantEvaluationRepository.getApplicantEvaluationForJobOwner,
+      ).toHaveBeenCalledWith('evaluation-id', 'another-job-id');
+    });
+
+    it('falls back to the repository when the owner cache fails', async () => {
+      applicationCache.get.mockRejectedValue(new Error('Redis unavailable'));
+      applicationCache.set.mockRejectedValue(new Error('Redis unavailable'));
+      applicantEvaluationRepository.getApplicantEvaluationForJobOwner.mockResolvedValue(
+        ok(ownerDetail),
+      );
+
+      const result = await service.getApplicantEvaluationForJobOwnerAsync(
+        'owner-id',
+        'job-id',
+        'evaluation-id',
+      );
+
+      expect(result._unsafeUnwrap()).toEqual(ownerDetail);
+      expect(
+        applicantEvaluationRepository.getApplicantEvaluationForJobOwner,
+      ).toHaveBeenCalledWith('evaluation-id', 'job-id');
+    });
+
+    it('hides evaluations belonging to another job', async () => {
+      applicantEvaluationRepository.getApplicantEvaluationForJobOwner.mockResolvedValue(
+        ok(null),
+      );
+
+      const result = await service.getApplicantEvaluationForJobOwnerAsync(
+        'owner-id',
+        'job-id',
+        'other-job-evaluation-id',
+      );
+
+      expect(result._unsafeUnwrapErr().code).toBe(ErrorCode.NotFound);
+    });
+
+    it('does not expose a pending evaluation as a result', async () => {
+      applicantEvaluationRepository.getApplicantEvaluationForJobOwner.mockResolvedValue(
+        ok({ ...ownerDetail, overallScore: null }),
+      );
+
+      const result = await service.getApplicantEvaluationForJobOwnerAsync(
+        'owner-id',
+        'job-id',
+        'evaluation-id',
+      );
+
+      expect(result._unsafeUnwrapErr().code).toBe(ErrorCode.Conflict);
+    });
+
+    it('allows a completed V1 result without redaction fields', async () => {
+      const v1Detail = {
+        ...ownerDetail,
+        overallScore: 88,
+        scoreBreakdown: {
+          schemaVersion: 1 as const,
+          skills: 90,
+          experience: 85,
+          education: 75,
+          overallFit: 88,
+        },
+        evidence: {
+          schemaVersion: 1 as const,
+          strengths: ['TypeScript'],
+          gaps: [],
+          explanation: 'Relevant skill found.',
+        },
+        resumeRedaction: {
+          redactedResumeText: null,
+          redactedResumeVersion: null,
+        },
+      };
+      applicantEvaluationRepository.getApplicantEvaluationForJobOwner.mockResolvedValue(
+        ok(v1Detail),
+      );
+
+      const result = await service.getApplicantEvaluationForJobOwnerAsync(
+        'owner-id',
+        'job-id',
+        'evaluation-id',
+      );
+
+      expect(result._unsafeUnwrap()).toEqual(v1Detail);
+    });
+
+    it('returns a safe error when ownership or evaluation lookup fails', async () => {
+      jobRepository.authorizeJobOwner.mockResolvedValue(
+        err(new Error('database credentials leaked')),
+      );
+
+      const ownerError = await service.getApplicantEvaluationForJobOwnerAsync(
+        'owner-id',
+        'job-id',
+        'evaluation-id',
+      );
+      expect(ownerError._unsafeUnwrapErr().code).toBe(
+        ErrorCode.InternalServerError,
+      );
+      expect(ownerError._unsafeUnwrapErr().message).not.toContain(
+        'credentials',
+      );
+
+      jobRepository.authorizeJobOwner.mockResolvedValue(ok(undefined));
+      applicantEvaluationRepository.getApplicantEvaluationForJobOwner.mockResolvedValue(
+        err(new Error('database credentials leaked')),
+      );
+      const evaluationError =
+        await service.getApplicantEvaluationForJobOwnerAsync(
+          'owner-id',
+          'job-id',
+          'evaluation-id',
+        );
+      expect(evaluationError._unsafeUnwrapErr().code).toBe(
+        ErrorCode.InternalServerError,
+      );
+      expect(evaluationError._unsafeUnwrapErr().message).not.toContain(
+        'credentials',
+      );
+    });
   });
 
   describe('getApplicantEvaluationDetailAsync', () => {
@@ -261,6 +532,9 @@ describe('ApplicantEvaluationService', () => {
       request.resumePublicId,
       'applicant-id',
     );
+    expect(resumeRedaction.redactResumeAsync).toHaveBeenCalledWith(
+      resumeContent.publicId,
+    );
     const jobSnapshotV2 = buildJobSnapshotV2(jobSnapshot);
     expect(applicantEvaluationRepository.prepare).toHaveBeenCalledWith({
       applicantPublicId: 'applicant-id',
@@ -272,7 +546,12 @@ describe('ApplicantEvaluationService', () => {
       resumeContentHash: resumeContent.contentHash,
       parserVersion: resumeContent.parserVersion,
       model: 'evaluation-model',
-      promptVersion: APPLICANT_EVALUATION_PROMPT_VERSION,
+      promptVersion: APPLICANT_EVALUATION_PROMPT_VERSION_V2,
+      redactedResumeText: resumeContent.extractedText,
+      redactedResumeHash: createResumeEvaluationSnapshot(
+        resumeContent.extractedText,
+      ).hash,
+      redactionVersion: 'resume-redaction-v1',
     });
     expect(applicantEvaluationQueue.enqueue).toHaveBeenCalledWith({
       evaluationPublicId: 'evaluation-id',
@@ -296,6 +575,7 @@ describe('ApplicantEvaluationService', () => {
       expect.objectContaining({
         jobSnapshot: noSkillsSnapshot,
         jobContentHash: hashCanonicalJson(noSkillsSnapshot),
+        promptVersion: APPLICANT_EVALUATION_PROMPT_VERSION,
       }),
     );
   });

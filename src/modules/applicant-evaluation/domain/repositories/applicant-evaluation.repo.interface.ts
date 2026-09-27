@@ -4,6 +4,7 @@ import { CommonEvaluationStatus } from 'src/shared/domain/enum';
 import {
   EvaluationBreakdown,
   EvaluationEvidenceV1,
+  EvaluationEvidenceV2,
 } from '../value-objects/evaluation';
 
 export type PrepareApplicantEvaluationInput = {
@@ -31,16 +32,18 @@ export type PreparedApplicantEvaluation = {
 export type ApplicantEvaluationProcessingData = {
   publicId: string;
   jobSnapshot: JobSnapshot;
-  resumeText: string;
   model: string;
   promptVersion: string;
+  resumeRedactedText: string;
+  resumeRedactedHash: string;
+  resumeRedactionVersion: string;
 };
 
 export type CompleteApplicantEvaluationInput = {
   evaluationPublicId: string;
   overallScore: number;
   scoreBreakdown: EvaluationBreakdown;
-  evidence: EvaluationEvidenceV1;
+  evidence: EvaluationEvidenceV1 | EvaluationEvidenceV2;
 };
 
 export type ApplicantEvaluationRealtimeState = {
@@ -55,7 +58,28 @@ export type ApplicantEvaluationDetail = {
   evaluationPublicId: string;
   overallScore: number | null;
   scoreBreakdown: EvaluationBreakdown | null;
-  evidence: EvaluationEvidenceV1 | null;
+  evidence: EvaluationEvidenceV1 | EvaluationEvidenceV2 | null;
+};
+
+export type ApplicantEvaluationForJobOwner = {
+  publicId: string;
+  overallScore: number | null;
+  scoreBreakdown: EvaluationBreakdown | null;
+  evidence: EvaluationEvidenceV1 | EvaluationEvidenceV2 | null;
+  decisionSupportOnly: true;
+  resumeRedaction: {
+    redactedResumeText: string | null;
+    redactedResumeVersion: string | null;
+  };
+  metadata: {
+    jobContentHash: string;
+    resumeContentHash: string;
+    redactedResumeHash: string | null;
+    parserVersion: string;
+    redactionVersion: string | null;
+    model: string;
+    promptVersion: string;
+  };
 };
 
 export abstract class IApplicantEvaluationRepository {
@@ -90,4 +114,9 @@ export abstract class IApplicantEvaluationRepository {
     applicantPublicId: string,
     evaluationPublicId: string,
   ): Promise<Result<ApplicantEvaluationDetail | null, Error>>;
+
+  abstract getApplicantEvaluationForJobOwner(
+    evaluationPublicId: string,
+    jobPublicId: string,
+  ): Promise<Result<ApplicantEvaluationForJobOwner | null, Error>>;
 }

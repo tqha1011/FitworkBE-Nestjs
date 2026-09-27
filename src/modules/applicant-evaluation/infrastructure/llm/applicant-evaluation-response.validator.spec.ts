@@ -1,5 +1,11 @@
-import { ApplicantEvaluationLlmOutput } from '../../application/interfaces/applicant-evaluation-llm.interface';
-import { validateApplicantEvaluationOutput } from './applicant-evaluation-response.validator';
+import {
+  ApplicantEvaluationLlmOutput,
+  ApplicantEvaluationLlmOutputV2,
+} from '../../application/interfaces/applicant-evaluation-llm.interface';
+import {
+  validateApplicantEvaluationOutput,
+  validateApplicantEvaluationOutputV2,
+} from './applicant-evaluation-response.validator';
 
 describe('validateApplicantEvaluationOutput', () => {
   const validOutput: ApplicantEvaluationLlmOutput = {
@@ -38,5 +44,99 @@ describe('validateApplicantEvaluationOutput', () => {
     ],
   ])('rejects output when %s', (_caseName, output) => {
     expect(validateApplicantEvaluationOutput(output)).toBe(false);
+  });
+});
+
+describe('validateApplicantEvaluationOutputV2', () => {
+  const validOutput: ApplicantEvaluationLlmOutputV2 = {
+    schemaVersion: 2,
+    evidence: {
+      schemaVersion: 2,
+      strengths: ['TypeScript experience'],
+      gaps: [],
+      explanation: 'The resume supports the criterion.',
+      criteria: [
+        {
+          criterionId: 'skill:1',
+          criterionText: 'Experience with TypeScript',
+          verdict: 'MATCHED',
+          scoreContribution: 50,
+          explanation: 'Built TypeScript services.',
+          evidence: [
+            {
+              snippet: 'Built TypeScript services.',
+              section: 'resume',
+              startOffset: 0,
+              endOffset: 26,
+            },
+          ],
+        },
+      ],
+    },
+  };
+
+  it('accepts a criterion-level response without an overall score', () => {
+    expect(validateApplicantEvaluationOutputV2(validOutput)).toBe(true);
+    expect(validateApplicantEvaluationOutput(validOutput)).toBe(false);
+  });
+
+  it.each([
+    ['missing evidence', { schemaVersion: 2 }],
+    ['missing criteria', { ...validOutput, evidence: { schemaVersion: 2 } }],
+    ['unexpected overall score', { ...validOutput, overallScore: 50 }],
+    [
+      'wrong verdict',
+      {
+        ...validOutput,
+        evidence: {
+          ...validOutput.evidence,
+          criteria: [
+            { ...validOutput.evidence.criteria[0], verdict: 'UNKNOWN' },
+          ],
+        },
+      },
+    ],
+    [
+      'wrong evidence section',
+      {
+        ...validOutput,
+        evidence: {
+          ...validOutput.evidence,
+          criteria: [
+            {
+              ...validOutput.evidence.criteria[0],
+              evidence: [
+                {
+                  ...validOutput.evidence.criteria[0].evidence[0],
+                  section: 'job',
+                },
+              ],
+            },
+          ],
+        },
+      },
+    ],
+    [
+      'negative offset',
+      {
+        ...validOutput,
+        evidence: {
+          ...validOutput.evidence,
+          criteria: [
+            {
+              ...validOutput.evidence.criteria[0],
+              evidence: [
+                {
+                  ...validOutput.evidence.criteria[0].evidence[0],
+                  startOffset: -1,
+                },
+              ],
+            },
+          ],
+        },
+      },
+    ],
+  ])('rejects %s', (_caseName, output) => {
+    expect(validateApplicantEvaluationOutputV2(output)).toBe(false);
   });
 });

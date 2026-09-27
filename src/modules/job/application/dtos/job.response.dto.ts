@@ -1,88 +1,151 @@
+import { ApiProperty } from '@nestjs/swagger';
 import {
   CommonCurrency,
   CommonJobApplicantStatus,
   CommonJobStatus,
 } from 'src/shared/domain/enum';
 
-export type JobItemResponseDto = {
-  publicId: string;
-  title: string;
-  description: string;
-  location: string;
-  budget: number;
-  currency: CommonCurrency;
-  skills: {
-    id: number;
-    name: string;
-  }[];
-  category: {
-    id: number;
-    name: string;
-  };
-  arrangement: {
-    id: number;
-    name: string;
-  };
-  dueAt: Date;
-  totalApplicants: number;
-};
+export class SkillResponseDto {
+  @ApiProperty()
+  id!: number;
 
-export type JobApplicantResponseDto = {
-  message: string;
-};
+  @ApiProperty()
+  name!: string;
+}
 
-export type JobApplicantItemResponseDto = {
-  jobApplicantPublicId: string;
-  jobPublicId: string;
-  status: CommonJobApplicantStatus;
-  resumePublicId: string;
-  proposedRate: number;
-  estimatedDays: number;
-  appliedAt: Date;
-  matchingScore: number;
-};
+export class CategoryResponseDto {
+  @ApiProperty()
+  id!: number;
 
-export type CategoryResponseDto = {
-  id: number;
-  name: string;
-};
+  @ApiProperty()
+  name!: string;
+}
 
-export type ArrangementResponseDto = {
-  id: number;
-  name: string;
-};
+export class ArrangementResponseDto {
+  @ApiProperty()
+  id!: number;
 
-export type SkillResponseDto = {
-  id: number;
-  name: string;
-};
+  @ApiProperty()
+  name!: string;
+}
 
-export type JobDetailResponseDto = {
-  publicId: string;
-  title: string;
-  description: string;
-  location: string;
-  requirements: string;
-  budget: number;
-  currency: CommonCurrency;
-  status: CommonJobStatus;
-  skills: {
-    id: number;
-    name: string;
-  }[];
-  category: {
-    id: number;
-    name: string;
-  };
-  arrangement: {
-    id: number;
-    name: string;
-  };
-  postedBy: {
-    publicId: string;
-    name: string;
-    participatedSince: Date;
-  };
-  dueAt: Date;
-  totalApplicants: number;
-};
+export class JobItemResponseDto {
+  @ApiProperty({ format: 'uuid' })
+  publicId!: string;
+
+  @ApiProperty()
+  title!: string;
+
+  @ApiProperty()
+  description!: string;
+
+  @ApiProperty()
+  location!: string;
+
+  @ApiProperty()
+  budget!: number;
+
+  @ApiProperty({ enum: CommonCurrency })
+  currency!: CommonCurrency;
+
+  @ApiProperty({ type: () => SkillResponseDto, isArray: true })
+  skills!: SkillResponseDto[];
+
+  @ApiProperty({ type: () => CategoryResponseDto })
+  category!: CategoryResponseDto;
+
+  @ApiProperty({ type: () => ArrangementResponseDto })
+  arrangement!: ArrangementResponseDto;
+
+  @ApiProperty({ type: String, format: 'date-time' })
+  dueAt!: Date;
+
+  @ApiProperty()
+  totalApplicants!: number;
+}
+
+export class JobApplicantResponseDto {
+  @ApiProperty()
+  message!: string;
+}
+
+export class JobApplicantItemResponseDto {
+  @ApiProperty({ format: 'uuid' })
+  jobApplicantPublicId!: string;
+
+  @ApiProperty({ format: 'uuid' })
+  jobPublicId!: string;
+
+  @ApiProperty({ enum: CommonJobApplicantStatus })
+  status!: CommonJobApplicantStatus;
+
+  @ApiProperty({ format: 'uuid' })
+  resumePublicId!: string;
+
+  @ApiProperty()
+  proposedRate!: number;
+
+  @ApiProperty()
+  estimatedDays!: number;
+
+  @ApiProperty({ type: String, format: 'date-time' })
+  appliedAt!: Date;
+
+  @ApiProperty()
+  matchingScore!: number;
+}
+
+export class JobPostedByResponseDto {
+  @ApiProperty({ format: 'uuid' })
+  publicId!: string;
+
+  @ApiProperty()
+  name!: string;
+
+  @ApiProperty({ type: String, format: 'date-time' })
+  participatedSince!: Date;
+}
+
+export class JobDetailResponseDto {
+  @ApiProperty({ format: 'uuid' })
+  publicId!: string;
+
+  @ApiProperty()
+  title!: string;
+
+  @ApiProperty()
+  description!: string;
+
+  @ApiProperty()
+  location!: string;
+
+  @ApiProperty()
+  requirements!: string;
+
+  @ApiProperty()
+  budget!: number;
+
+  @ApiProperty({ enum: CommonCurrency })
+  currency!: CommonCurrency;
+
+  @ApiProperty({ enum: CommonJobStatus })
+  status!: CommonJobStatus;
+
+  @ApiProperty({ type: () => SkillResponseDto, isArray: true })
+  skills!: SkillResponseDto[];
+
+  @ApiProperty({ type: () => CategoryResponseDto })
+  category!: CategoryResponseDto;
+
+  @ApiProperty({ type: () => ArrangementResponseDto })
+  arrangement!: ArrangementResponseDto;
+
+  @ApiProperty({ type: () => JobPostedByResponseDto })
+  postedBy!: JobPostedByResponseDto;
+
+  @ApiProperty({ type: String, format: 'date-time' })
+  dueAt!: Date;
+
+  @ApiProperty()
+  totalApplicants!: number;
+}

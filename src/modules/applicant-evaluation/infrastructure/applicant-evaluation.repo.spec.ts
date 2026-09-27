@@ -9,6 +9,7 @@ import {
   PrepareApplicantEvaluationInput,
 } from '../domain/repositories/applicant-evaluation.repo.interface';
 import { ApplicantEvaluationRepository } from './applicant-evaluation.repo';
+import { createResumeEvaluationSnapshot } from '../application/services/resume-redact-evaluation';
 
 jest.mock('generated/prisma/client', () => ({
   PrismaClient: class {},
@@ -38,6 +39,12 @@ describe('ApplicantEvaluationRepository', () => {
     parserVersion: 'parser-v1',
     model: 'evaluation-model',
     promptVersion: 'applicant-match-v1',
+    redactedResumeText:
+      'Five years of TypeScript experience. [REDACTED CONTACT]',
+    redactedResumeHash: createResumeEvaluationSnapshot(
+      'Five years of TypeScript experience. [REDACTED CONTACT]',
+    ).hash,
+    redactionVersion: 'resume-redaction-v1',
   };
   const createProcessingEvaluation = () => ({
     publicId: 'evaluation-id',
@@ -47,10 +54,19 @@ describe('ApplicantEvaluationRepository', () => {
     parserVersion: input.parserVersion,
     model: input.model,
     promptVersion: input.promptVersion,
+    jobSnapshot,
+    resumeContent: {
+      extractedText: 'Five years of TypeScript experience. jane@example.com',
+      contentHash: input.resumeContentHash,
+      parserVersion: input.parserVersion,
+    },
+    redactedResumeText: input.redactedResumeText,
+    redactedResumeHash: input.redactedResumeHash,
+    redactionVersion: input.redactionVersion,
     jobApplicant: {
       jobSnapshot,
       resumeContent: {
-        extractedText: 'Five years of TypeScript experience.',
+        extractedText: 'Five years of TypeScript experience. jane@example.com',
         contentHash: input.resumeContentHash,
         parserVersion: input.parserVersion,
       },
@@ -104,6 +120,111 @@ describe('ApplicantEvaluationRepository', () => {
     repository = new ApplicantEvaluationRepository(
       prismaService as unknown as PrismaService,
     );
+  });
+
+  describe('getApplicantEvaluationForJobOwner', () => {
+    it('filters by evaluation and job and returns V2 result metadata', async () => {
+      const scoreBreakdown = {
+        schemaVersion: 2,
+        criteria: [{ criterionId: 'skill:1', scoreContribution: 42 }],
+      };
+      const evidence = {
+        schemaVersion: 2,
+        strengths: ['TypeScript'],
+        gaps: [],
+        explanation: 'Relevant skill found.',
+        criteria: [
+          {
+            criterionId: 'skill:1',
+            criterionText: 'TypeScript',
+            verdict: 'PARTIAL',
+            scoreContribution: 42,
+            explanation: 'Skill is mentioned.',
+            evidence: [
+              {
+                snippet: 'TypeScript',
+                section: 'resume',
+                startOffset: 0,
+                endOffset: 10,
+              },
+            ],
+          },
+        ],
+      };
+      prismaService.applicantEvaluation.findUnique.mockResolvedValue({
+        publicId: 'evaluation-id',
+        overallScore: 42,
+        scoreBreakdown,
+        evidence,
+        redactedResumeText: 'TypeScript',
+        redactedResumeHash: 'redacted-hash',
+        redactionVersion: 'resume-redaction-v1',
+        jobContentHash: 'job-hash',
+        resumeContentHash: 'resume-hash',
+        parserVersion: 'parser-v1',
+        model: 'gemini-model',
+        promptVersion: 'applicant-match-v2',
+      });
+
+      const result = await repository.getApplicantEvaluationForJobOwner(
+        'evaluation-id',
+        'job-id',
+      );
+
+      expect(prismaService.applicantEvaluation.findUnique).toHaveBeenCalledWith(
+        {
+          where: {
+            publicId: 'evaluation-id',
+            jobApplicant: { job: { publicId: 'job-id' } },
+          },
+          select: {
+            publicId: true,
+            overallScore: true,
+            scoreBreakdown: true,
+            evidence: true,
+            redactedResumeText: true,
+            redactedResumeHash: true,
+            redactionVersion: true,
+            jobContentHash: true,
+            resumeContentHash: true,
+            parserVersion: true,
+            model: true,
+            promptVersion: true,
+          },
+        },
+      );
+      expect(result._unsafeUnwrap()).toEqual({
+        publicId: 'evaluation-id',
+        overallScore: 42,
+        scoreBreakdown,
+        evidence,
+        decisionSupportOnly: true,
+        resumeRedaction: {
+          redactedResumeText: 'TypeScript',
+          redactedResumeVersion: 'resume-redaction-v1',
+        },
+        metadata: {
+          jobContentHash: 'job-hash',
+          resumeContentHash: 'resume-hash',
+          redactedResumeHash: 'redacted-hash',
+          parserVersion: 'parser-v1',
+          redactionVersion: 'resume-redaction-v1',
+          model: 'gemini-model',
+          promptVersion: 'applicant-match-v2',
+        },
+      });
+    });
+
+    it('returns null when evaluation is absent or belongs to another job', async () => {
+      prismaService.applicantEvaluation.findUnique.mockResolvedValue(null);
+
+      const result = await repository.getApplicantEvaluationForJobOwner(
+        'other-evaluation-id',
+        'job-id',
+      );
+
+      expect(result._unsafeUnwrap()).toBeNull();
+    });
   });
 
   describe('getRealtimeStateForApplicant', () => {
@@ -205,6 +326,11 @@ describe('ApplicantEvaluationRepository', () => {
         parserVersion: input.parserVersion,
         model: input.model,
         promptVersion: input.promptVersion,
+        jobSnapshot,
+        resumeContentId: input.resumeContentId,
+        redactedResumeText: input.redactedResumeText,
+        redactedResumeHash: input.redactedResumeHash,
+        redactionVersion: input.redactionVersion,
       },
       select: { publicId: true, status: true },
     });
@@ -300,10 +426,15 @@ describe('ApplicantEvaluationRepository', () => {
       expect(result._unsafeUnwrap()).toEqual({
         publicId: 'evaluation-id',
         jobSnapshot,
-        resumeText: 'Five years of TypeScript experience.',
+        resumeRedactedText: input.redactedResumeText,
+        resumeRedactedHash: input.redactedResumeHash,
+        resumeRedactionVersion: input.redactionVersion,
         model: input.model,
         promptVersion: input.promptVersion,
       });
+      expect(result._unsafeUnwrap()?.resumeRedactedText).not.toContain(
+        'jane@example.com',
+      );
       expect(tx.applicantEvaluation.updateMany).toHaveBeenCalledWith({
         where: {
           publicId: 'evaluation-id',
@@ -344,10 +475,7 @@ describe('ApplicantEvaluationRepository', () => {
     it('returns an error when resume content is incomplete', async () => {
       tx.applicantEvaluation.findUnique.mockResolvedValue({
         ...createProcessingEvaluation(),
-        jobApplicant: {
-          jobSnapshot,
-          resumeContent: null,
-        },
+        resumeContent: null,
       });
 
       const result = await repository.claimForProcessing('evaluation-id');
@@ -355,6 +483,53 @@ describe('ApplicantEvaluationRepository', () => {
       expect(result.isErr()).toBe(true);
       expect(result._unsafeUnwrapErr().message).toContain(
         'Evaluation resume content is incomplete',
+      );
+    });
+
+    it('rejects a redacted snapshot whose hash does not match', async () => {
+      tx.applicantEvaluation.findUnique.mockResolvedValue({
+        ...createProcessingEvaluation(),
+        redactedResumeHash: 'wrong-hash',
+      });
+
+      const result = await repository.claimForProcessing('evaluation-id');
+
+      expect(result._unsafeUnwrapErr().message).toContain(
+        'Evaluation redacted resume hash does not match',
+      );
+      expect(tx.applicantEvaluation.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('creates and persists a redacted snapshot for a legacy row', async () => {
+      const rawText =
+        'Jane Doe\nEmail: jane@example.com\nExperience\nBuilt NestJS APIs.';
+      tx.applicantEvaluation.findUnique.mockResolvedValue({
+        ...createProcessingEvaluation(),
+        resumeContent: {
+          extractedText: rawText,
+          contentHash: input.resumeContentHash,
+          parserVersion: input.parserVersion,
+        },
+        redactedResumeText: null,
+        redactedResumeHash: null,
+        redactionVersion: null,
+      });
+
+      const result = await repository.claimForProcessing('evaluation-id');
+      const snapshot = createResumeEvaluationSnapshot(rawText);
+
+      expect(result._unsafeUnwrap()?.resumeRedactedText).toBe(snapshot.text);
+      expect(result._unsafeUnwrap()?.resumeRedactedText).not.toContain(
+        'jane@example.com',
+      );
+      expect(tx.applicantEvaluation.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            redactedResumeText: snapshot.text,
+            redactedResumeHash: snapshot.hash,
+            redactionVersion: snapshot.redactionVersion,
+          }) as unknown,
+        }),
       );
     });
 
@@ -439,6 +614,52 @@ describe('ApplicantEvaluationRepository', () => {
             evaluatedAt: expect.any(Date) as Date,
           },
         },
+      );
+    });
+
+    it('stores V2 evidence and its computed breakdown', async () => {
+      const v2Input: CompleteApplicantEvaluationInput = {
+        evaluationPublicId: 'evaluation-id',
+        overallScore: 42,
+        scoreBreakdown: {
+          schemaVersion: 2,
+          criteria: [{ criterionId: 'skill:1', scoreContribution: 42 }],
+        },
+        evidence: {
+          schemaVersion: 2,
+          strengths: ['TypeScript'],
+          gaps: [],
+          explanation: 'Relevant skill found.',
+          criteria: [
+            {
+              criterionId: 'skill:1',
+              criterionText: 'TypeScript',
+              verdict: 'PARTIAL',
+              scoreContribution: 42,
+              explanation: 'Skill is mentioned.',
+              evidence: [
+                {
+                  snippet: 'TypeScript',
+                  section: 'resume',
+                  startOffset: 0,
+                  endOffset: 10,
+                },
+              ],
+            },
+          ],
+        },
+      };
+
+      expect((await repository.markCompleted(v2Input))._unsafeUnwrap()).toBe(
+        true,
+      );
+      expect(prismaService.applicantEvaluation.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            scoreBreakdown: v2Input.scoreBreakdown,
+            evidence: v2Input.evidence,
+          }) as object,
+        }),
       );
     });
 
