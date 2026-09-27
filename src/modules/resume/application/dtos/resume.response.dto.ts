@@ -1,17 +1,29 @@
 import { CommonResumeIngestionStatus } from 'src/shared/domain/enum';
+import { ApiProperty } from '@nestjs/swagger';
 
-export type ResumeResponseDto = {
-  publicId: string;
-  ingestionPublicId: string;
-  ingestionStatus: CommonResumeIngestionStatus;
-};
+export class ResumeResponseDto {
+  @ApiProperty({ format: 'uuid' })
+  publicId!: string;
 
-export type ResumeUploadResponseDto = {
-  uploadUrl: string;
-  storageKey: string;
-  expiresAt: Date;
-};
+  @ApiProperty({ format: 'uuid' })
+  ingestionPublicId!: string;
 
-export type ResumeDownloadUrlResponseDto = {
-  downloadUrl: string;
-};
+  @ApiProperty({ enum: CommonResumeIngestionStatus })
+  ingestionStatus!: CommonResumeIngestionStatus;
+}
+
+export class ResumeUploadResponseDto {
+  @ApiProperty({ format: 'uri' })
+  uploadUrl!: string;
+
+  @ApiProperty()
+  storageKey!: string;
+
+  @ApiProperty({ type: String, format: 'date-time' })
+  expiresAt!: Date;
+}
+
+export class ResumeDownloadUrlResponseDto {
+  @ApiProperty({ format: 'uri' })
+  downloadUrl!: string;
+}

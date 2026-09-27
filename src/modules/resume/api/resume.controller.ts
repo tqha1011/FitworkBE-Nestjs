@@ -12,12 +12,13 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import type { JwtPayload } from 'src/shared/common/jwt.payload.interface';
 import { toHttpException } from 'src/shared/common/app-error.mapper';
 import { Auth } from 'src/shared/common/swagger/auth-swagger.decorator';
 import { User } from 'src/shared/common/user.decorator';
 import { CommonContentDisposition } from 'src/shared/domain/enum';
+import { ApiStandardResponse } from 'src/shared/common/swagger/api-standard-response.decorator';
 import {
   CreateResumeRequestDto,
   UpdateResumeRequestDto,
@@ -38,6 +39,7 @@ export class ResumeController {
   @Post('upload-url')
   @Auth()
   @ApiOperation({ summary: 'Generate a resume upload URL' })
+  @ApiStandardResponse(ResumeUploadResponseDto, { status: HttpStatus.CREATED })
   async getUploadUrl(
     @User() user: JwtPayload,
     @Body() request: UploadResumeRequestDto,
@@ -58,6 +60,7 @@ export class ResumeController {
   @Post()
   @Auth()
   @ApiOperation({ summary: 'Create a resume from an uploaded file' })
+  @ApiStandardResponse(ResumeResponseDto, { status: HttpStatus.CREATED })
   async createResume(
     @User() user: JwtPayload,
     @Body() request: CreateResumeRequestDto,
@@ -77,6 +80,7 @@ export class ResumeController {
   @Patch(':resumePublicId')
   @Auth()
   @ApiOperation({ summary: 'Update a resume from an uploaded file' })
+  @ApiStandardResponse(ResumeResponseDto)
   async updateResume(
     @User() user: JwtPayload,
     @Param('resumePublicId') resumePublicId: string,
@@ -97,6 +101,7 @@ export class ResumeController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @Auth()
   @ApiOperation({ summary: 'Soft-delete a resume' })
+  @ApiResponse({ status: HttpStatus.NO_CONTENT, description: 'Resume deleted' })
   async deleteResume(
     @User() user: JwtPayload,
     @Param('resumePublicId') resumePublicId: string,
@@ -113,6 +118,7 @@ export class ResumeController {
   @Get(':resumePublicId/download-url')
   @Auth()
   @ApiOperation({ summary: 'Generate a resume download or preview URL' })
+  @ApiStandardResponse(ResumeDownloadUrlResponseDto)
   @ApiQuery({
     name: 'disposition',
     enum: CommonContentDisposition,

@@ -28,3 +28,37 @@ export function ApiStandardResponse<TModel extends Type<unknown>>(
     }),
   );
 }
+
+/** Documents the PageResult<T> JSON envelope with a concrete item model. */
+export function ApiPaginatedResponse<TModel extends Type<unknown>>(
+  model: TModel,
+) {
+  return applyDecorators(
+    ApiExtraModels(model),
+    ApiResponse({
+      status: HttpStatus.OK,
+      schema: {
+        type: 'object',
+        required: [
+          'items',
+          'totalPages',
+          'pageNumber',
+          'pageSize',
+          'hasPrevious',
+          'hasNext',
+        ],
+        properties: {
+          items: {
+            type: 'array',
+            items: { $ref: getSchemaPath(model) },
+          },
+          totalPages: { type: 'integer' },
+          pageNumber: { type: 'integer' },
+          pageSize: { type: 'integer' },
+          hasPrevious: { type: 'boolean' },
+          hasNext: { type: 'boolean' },
+        },
+      },
+    }),
+  );
+}

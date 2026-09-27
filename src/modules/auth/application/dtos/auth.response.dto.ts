@@ -1,8 +1,14 @@
-export type RegisterResponseDto = {
-  publicId: string;
-};
+import { ApiProperty } from '@nestjs/swagger';
 
-export type LoginResponseDto = {
-  accessToken: string;
-  expiresIn: number;
-};
+export class RegisterResponseDto {
+  @ApiProperty({ format: 'uuid' })
+  publicId!: string;
+}
+
+export class LoginResponseDto {
+  @ApiProperty()
+  accessToken!: string;
+
+  @ApiProperty({ description: 'Access token lifetime in seconds' })
+  expiresIn!: number;
+}

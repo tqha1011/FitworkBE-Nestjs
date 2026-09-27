@@ -8,9 +8,10 @@ import {
   Res,
   UnauthorizedException,
 } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { toHttpException } from 'src/shared/common/app-error.mapper';
+import { ApiStandardResponse } from 'src/shared/common/swagger/api-standard-response.decorator';
 import {
   LoginRequestDto,
   RegisterRequestDto,
@@ -31,6 +32,7 @@ export class AuthController {
 
   @Post('register')
   @ApiOperation({ summary: 'Register a new user' })
+  @ApiStandardResponse(RegisterResponseDto, { status: HttpStatus.CREATED })
   async register(
     @Body() dto: RegisterRequestDto,
   ): Promise<RegisterResponseDto> {
@@ -46,6 +48,7 @@ export class AuthController {
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Log in with email and password' })
+  @ApiStandardResponse(LoginResponseDto)
   async login(
     @Body() dto: LoginRequestDto,
     @Res({ passthrough: true }) res: Response,
@@ -74,6 +77,7 @@ export class AuthController {
   @ApiOperation({
     summary: 'Rotate the refresh token and issue a new access token',
   })
+  @ApiStandardResponse(LoginResponseDto)
   async refresh(
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
@@ -105,6 +109,7 @@ export class AuthController {
   @Post('logout')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Revoke the current refresh token' })
+  @ApiResponse({ status: HttpStatus.NO_CONTENT, description: 'Logged out' })
   async logout(
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
