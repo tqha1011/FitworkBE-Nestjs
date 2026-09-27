@@ -64,6 +64,22 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
         ),
       );
     }
+    const cacheKey = this.buildJobOwnerCacheKey(
+      jobOwnerPublicId,
+      jobPublicId,
+      evaluationPublicId,
+    );
+    try {
+      const cached =
+        await this.cacheManager.get<ApplicantEvaluationForJobOwnerDto>(
+          cacheKey,
+        );
+      if (cached !== undefined) {
+        return ok(cached);
+      }
+    } catch {
+      this.logger.warn('Failed to read cached job owner evaluation');
+    }
     const result =
       await this.applicantEvaluationRepository.getApplicantEvaluationForJobOwner(
         evaluationPublicId,
@@ -94,7 +110,7 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
         ),
       );
     }
-    return ok({
+    const detail: ApplicantEvaluationForJobOwnerDto = {
       publicId: result.value.publicId,
       overallScore: result.value.overallScore,
       scoreBreakdown: result.value.scoreBreakdown,
@@ -102,7 +118,13 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
       decisionSupportOnly: true,
       resumeRedaction: result.value.resumeRedaction,
       metadata: result.value.metadata,
-    });
+    };
+    try {
+      await this.cacheManager.set(cacheKey, detail);
+    } catch {
+      this.logger.warn('Failed to cache job owner evaluation');
+    }
+    return ok(detail);
   }
   async getApplicantEvaluationDetailAsync(
     applicantPublicId: string,
@@ -303,5 +325,13 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
     evaluationPublicId: string,
   ): string {
     return `applicant:${applicantPublicId}:${evaluationPublicId}`;
+  }
+
+  private buildJobOwnerCacheKey(
+    jobOwnerPublicId: string,
+    jobPublicId: string,
+    evaluationPublicId: string,
+  ): string {
+    return `job-owner:${jobOwnerPublicId}:${jobPublicId}:${evaluationPublicId}`;
   }
 }

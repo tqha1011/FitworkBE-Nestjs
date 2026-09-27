@@ -192,11 +192,40 @@ describe('ApplicantEvaluationService', () => {
       expect(
         applicantEvaluationRepository.getApplicantEvaluationForJobOwner,
       ).toHaveBeenCalledWith('evaluation-id', 'job-id');
-      expect(applicationCache.get).not.toHaveBeenCalled();
+      expect(applicationCache.get).toHaveBeenCalledWith(
+        'job-owner:owner-id:job-id:evaluation-id',
+      );
+      expect(applicationCache.set).toHaveBeenCalledWith(
+        'job-owner:owner-id:job-id:evaluation-id',
+        ownerDetail,
+      );
+    });
+
+    it('uses cached owner detail only after checking job ownership', async () => {
+      applicationCache.get.mockResolvedValue(ownerDetail);
+
+      const result = await service.getApplicantEvaluationForJobOwnerAsync(
+        'owner-id',
+        'job-id',
+        'evaluation-id',
+      );
+
+      expect(result._unsafeUnwrap()).toEqual(ownerDetail);
+      expect(jobRepository.authorizeJobOwner).toHaveBeenCalledWith(
+        'owner-id',
+        'job-id',
+      );
+      expect(applicationCache.get).toHaveBeenCalledWith(
+        'job-owner:owner-id:job-id:evaluation-id',
+      );
+      expect(
+        applicantEvaluationRepository.getApplicantEvaluationForJobOwner,
+      ).not.toHaveBeenCalled();
     });
 
     it('denies a user who does not own the job', async () => {
       jobRepository.authorizeJobOwner.mockResolvedValue(ok(null));
+      applicationCache.get.mockResolvedValue(ownerDetail);
 
       const result = await service.getApplicantEvaluationForJobOwnerAsync(
         'other-user',
@@ -205,9 +234,48 @@ describe('ApplicantEvaluationService', () => {
       );
 
       expect(result._unsafeUnwrapErr().code).toBe(ErrorCode.Forbidden);
+      expect(applicationCache.get).not.toHaveBeenCalled();
       expect(
         applicantEvaluationRepository.getApplicantEvaluationForJobOwner,
       ).not.toHaveBeenCalled();
+    });
+
+    it('keeps owner cache entries separate by job', async () => {
+      applicantEvaluationRepository.getApplicantEvaluationForJobOwner.mockResolvedValue(
+        ok(ownerDetail),
+      );
+
+      await service.getApplicantEvaluationForJobOwnerAsync(
+        'owner-id',
+        'another-job-id',
+        'evaluation-id',
+      );
+
+      expect(applicationCache.get).toHaveBeenCalledWith(
+        'job-owner:owner-id:another-job-id:evaluation-id',
+      );
+      expect(
+        applicantEvaluationRepository.getApplicantEvaluationForJobOwner,
+      ).toHaveBeenCalledWith('evaluation-id', 'another-job-id');
+    });
+
+    it('falls back to the repository when the owner cache fails', async () => {
+      applicationCache.get.mockRejectedValue(new Error('Redis unavailable'));
+      applicationCache.set.mockRejectedValue(new Error('Redis unavailable'));
+      applicantEvaluationRepository.getApplicantEvaluationForJobOwner.mockResolvedValue(
+        ok(ownerDetail),
+      );
+
+      const result = await service.getApplicantEvaluationForJobOwnerAsync(
+        'owner-id',
+        'job-id',
+        'evaluation-id',
+      );
+
+      expect(result._unsafeUnwrap()).toEqual(ownerDetail);
+      expect(
+        applicantEvaluationRepository.getApplicantEvaluationForJobOwner,
+      ).toHaveBeenCalledWith('evaluation-id', 'job-id');
     });
 
     it('hides evaluations belonging to another job', async () => {
