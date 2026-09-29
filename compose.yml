@@ -105,6 +105,15 @@ services:
     volumes:
       - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
 
+  alloy:
+    image: grafana/alloy:latest
+    container_name: alloy-fitwork-nestjs
+    ports:
+      - '127.0.0.1:${ALLOT_PORT:-4317}:4317'
+    networks:
+      - Fitwork-backend
+
+
 
 
 networks:
