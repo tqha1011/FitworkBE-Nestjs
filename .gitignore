@@ -42,6 +42,9 @@ lerna-debug.log*
 .env.production.local
 .env.local
 
+# Local monitoring credentials (mounted as Docker secrets)
+/.secrets/
+
 # temp directory
 .temp
 .tmp

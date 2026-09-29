@@ -11,30 +11,22 @@ processors:
     spike_limit_mib: 500
   batch:
 exporters:
-  debug:
-    verbosity: basic
-  prometheus:
-    endpoint: 0.0.0.0:9464
-    enable_open_metrics: true
-    metric_expiration: 5m
-    resource_constant_labels:
-      included:
-        - service.name
-        - service.instance.id
-        - service.version
-        - deployment.environment.name
+  otlp_grpc/alloy:
+    endpoint: alloy:4317
+    tls:
+      insecure: true
 
 service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [batch]
-      exporters: [debug]
+      processors: [memory_limiter, batch]
+      exporters: [otlp_grpc/alloy]
     metrics:
       receivers: [otlp]
-      processors: [batch]
-      exporters: [debug, prometheus]
+      processors: [memory_limiter, batch]
+      exporters: [otlp_grpc/alloy]
     logs:
       receivers: [otlp]
-      processors: [batch]
-      exporters: [debug]
+      processors: [memory_limiter, batch]
+      exporters: [otlp_grpc/alloy]
