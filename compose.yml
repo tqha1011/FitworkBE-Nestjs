@@ -12,6 +12,7 @@ services:
     env_file:
       - .env
     environment:
+      NODE_OPTIONS: '--require @opentelemetry/auto-instrumentations-node/register'
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB}
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:${REDIS_PORT:-6379}
       OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-fitwork-nestjs-api}
@@ -70,8 +71,7 @@ services:
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD}
       REDIS_URL: redis://:${REDIS_PASSWORD}@localhost:6379
-    command:
-      redis-server --requirepass ${REDIS_PASSWORD}
+    command: redis-server --requirepass ${REDIS_PASSWORD}
 
     healthcheck:
       test: ['CMD-SHELL', 'redis-cli ping']
@@ -94,19 +94,18 @@ services:
     image: grafana/grafana:latest
     container_name: grafana-fitwork-nestjs
     ports:
-      - '3000:3000'
+      - '127.0.0.1:${GRAFANA_PORT:-3001}:3000'
     networks:
       - Fitwork-monitoring
     volumes:
       - grafana_data:/var/lib/grafana
-      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./src/monitoring/grafana/provisioning/datasource:/etc/grafana/provisioning/datasources:ro
     environment:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
     depends_on:
       prometheus:
         condition: service_started
-
 
   prometheus:
     image: prom/prometheus:latest
@@ -121,28 +120,28 @@ services:
       - Fitwork-monitoring
       - Fitwork-backend
     volumes:
-      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ./monitoring/prometheus/alert.rule.yml:/etc/prometheus/alert.rule.yml:ro
+      - ./src/monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./src/monitoring/prometheus/alert.rule.yml:/etc/prometheus/alert.rule.yml:ro
       - prometheus_data:/var/lib/prometheus
     depends_on:
-      redis_exporter:
+      redis-exporter:
         condition: service_started
       otel-collector:
         condition: service_started
 
   otel-collector:
-      image: otel/opentelemetry-collector:latest
-      container_name: otel-collector-fitwork-nestjs
-      ports:
-        - '127.0.0.1:${OTEL_PORT:-4317}:4317'
-      networks:
-        - Fitwork-monitoring
-        - Fitwork-backend
-      volumes:
-        - ./monitoring/opentelemetry/collector.yml:/etc/otelcol/config.yaml:ro
-      depends_on:
-        alloy:
-          condition: service_started
+    image: otel/opentelemetry-collector:latest
+    container_name: otel-collector-fitwork-nestjs
+    ports:
+      - '127.0.0.1:${OTEL_PORT:-4317}:4317'
+    networks:
+      - Fitwork-monitoring
+      - Fitwork-backend
+    volumes:
+      - ./src/monitoring/opentelemetry/collector.yml:/etc/otelcol/config.yaml:ro
+    depends_on:
+      alloy:
+        condition: service_started
 
   alloy:
     image: grafana/alloy:latest
@@ -155,7 +154,7 @@ services:
       - '--storage.path=/var/lib/alloy/data'
       - /etc/alloy/config.alloy
     volumes:
-      - ./monitoring/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - ./src/monitoring/alloy/config.alloy:/etc/alloy/config.alloy:ro
       - alloy_data:/var/lib/alloy/data:rw
     networks:
       - Fitwork-monitoring
@@ -170,18 +169,58 @@ services:
     command:
       - '--config.file=/etc/loki/config.yml'
     volumes:
-      - ./monitoring/loki/config.yml:/etc/loki/config.yml:ro
+      - ./src/monitoring/loki/config.yml:/etc/loki/config.yml:ro
       - loki_data:/var/lib/loki/data:rw
 
   jaeger:
-      image: jaegertracing/all-in-one:latest
-      container_name: interviewiq-jaeger
-      ports:
-        - '127.0.0.1:${JAEGER_PORT:-16686}:16686'
-      networks:
-        - Fitwork-monitoring
-      environment:
-        - COLLECTOR_OTLP_ENABLED=true
+    image: jaegertracing/all-in-one:latest
+    container_name: interviewiq-jaeger
+    ports:
+      - '127.0.0.1:${JAEGER_PORT:-16686}:16686'
+    networks:
+      - Fitwork-monitoring
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+
+  alertmanager:
+    image: prom/alertmanager:v0.34.1
+    container_name: alertmanager-fitwork-nestjs
+    restart: unless-stopped
+    profiles: ['alerting']
+    entrypoint: ['/bin/sh', '/etc/alertmanager/entrypoint.sh']
+    command:
+      - '--config.file=/tmp/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+      - '--cluster.listen-address='
+    environment:
+      SMTP_GMAIL_USER: ${SMTP_GMAIL_USER:-}
+      ALERT_EMAIL_TO: ${ALERT_EMAIL_TO:-}
+    ports:
+      - '127.0.0.1:${ALERTMANAGER_PORT:-9093}:9093'
+    volumes:
+      - ./src/monitoring/alertmanager:/etc/alertmanager:ro
+      - alertmanager_data:/alertmanager
+    secrets:
+      - gmail_app_password
+    networks:
+      - Fitwork-monitoring
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'wget',
+          '-q',
+          '-O',
+          '/dev/null',
+          'http://127.0.0.1:9093/-/ready',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+secrets:
+  gmail_app_password:
+    file: ./.secrets/gmail-app-password
 
 networks:
   Fitwork-backend:
@@ -196,3 +235,4 @@ volumes:
   loki_data:
   prometheus_data:
   alloy_data:
+  alertmanager_data:

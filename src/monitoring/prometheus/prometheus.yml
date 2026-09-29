@@ -8,7 +8,7 @@ storage:
     out_of_order_time_window: 10m
 
 rule_files:
-  - 'alert.rules.yml'
+  - '/etc/prometheus/alert.rule.yml'
 
 alerting:
   alertmanagers:
@@ -31,4 +31,4 @@ scrape_configs:
 
   - job_name: 'alloy'
     static_configs:
-      - targets: ['alloy:4317']
+      - targets: ['alloy:4201']

@@ -20,13 +20,13 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [batch]
+      processors: [memory_limiter, batch]
       exporters: [otlp_grpc/alloy]
     metrics:
       receivers: [otlp]
-      processors: [batch]
-      exporters: [debug, otlp_grpc/alloy]
+      processors: [memory_limiter, batch]
+      exporters: [otlp_grpc/alloy]
     logs:
       receivers: [otlp]
-      processors: [batch]
+      processors: [memory_limiter, batch]
       exporters: [otlp_grpc/alloy]

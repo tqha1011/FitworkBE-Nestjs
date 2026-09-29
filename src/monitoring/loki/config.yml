@@ -7,7 +7,7 @@ ui:
   enabled: true
 
 ruler:
-  alertmanager_url: alertmanager:9093
+  alertmanager_url: http://alertmanager:9093
 
 common:
   path_prefix: /var/lib/loki/data

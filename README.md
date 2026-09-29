@@ -47,6 +47,7 @@ Jobs with structured skills use evaluation V2. Jobs without skills use V1, which
 | File storage                  | S3-compatible object storage through AWS SDK v3                                              |
 | Document parsing              | `pdf-parse` for PDF, Mammoth for DOCX                                                        |
 | Real-time communication       | Socket.IO, NestJS WebSockets, NestJS EventEmitter                                            |
+| Monitoring                    | OpenTelemetry Collector, Grafana Alloy, Prometheus, Alertmanager, Loki, Jaeger, Grafana      |
 | Authentication and validation | JWT, bcrypt, hashed opaque refresh tokens, cookie-parser, class-validator, class-transformer |
 | Testing                       | Jest, ts-jest, NestJS testing utilities, Supertest                                           |
 | Tooling and delivery          | ESLint, Prettier, Husky, lint-staged, Commitlint, GitHub Actions, multi-stage Docker builds  |
@@ -99,6 +100,128 @@ Connect to the Socket.IO namespace with `auth: { token: accessToken }`. Room sub
 | `/evaluation` | `evaluation-join` with `{ evaluationPublicId }` | `evaluation-score-notify`  |
 
 Join responses include `joined` and the current state when available. Both pipelines use `PENDING`, `PROCESSING`, `COMPLETED`, and `FAILED` states. Leave a resume subscription with `resume-leave` and `{ resumePublicId }`.
+
+## Monitoring and Gmail Alerts
+
+### Monitoring Flow
+
+```mermaid
+flowchart LR
+    App["Instrumented API / OTLP client"] -->|"OTLP gRPC :4317"| Collector[OpenTelemetry Collector]
+    Collector -->|"OTLP gRPC :4317"| Alloy[Grafana Alloy]
+    Alloy -->|Metrics: remote write| Prometheus[Prometheus]
+    Alloy -->|Logs| Loki[Loki]
+    Alloy -->|Traces: OTLP| Jaeger[Jaeger]
+    Redis[Redis] --> Exporter[Redis exporter]
+    Exporter -->|Scraped metrics| Prometheus
+    Prometheus -->|Scrape Alloy HTTP metrics| Alloy
+    Grafana[Grafana] -->|Query metrics| Prometheus
+    Grafana -->|Query logs| Loki
+    Prometheus -->|Firing / resolved alerts| Alertmanager[Alertmanager]
+    Alertmanager -->|"Gmail SMTP with STARTTLS :587"| Inbox[Email inbox]
+```
+
+- **Collector** accepts OTLP traces, metrics, and logs, applies memory limits and batching, and forwards them to Alloy.
+- **Alloy** sends metrics to Prometheus's remote write receiver, logs to Loki, and traces to Jaeger. It copies the OTEL `service.name` resource attribute onto metrics as the Prometheus label `service_name`.
+- **Prometheus** also scrapes itself, Redis exporter, Loki, and Alloy's HTTP metrics endpoint on port `4201`. Every 15 seconds, it evaluates the rules in `src/monitoring/prometheus/alert.rule.yml` and forwards alerts to `alertmanager:9093`.
+- **Grafana** provisions Prometheus and Loki data sources automatically. Open the Jaeger UI separately to inspect traces.
+- **Alertmanager** groups and deduplicates alerts, supports silences, and sends firing and resolved email notifications. It runs when the Compose `alerting` profile is enabled. Loki's ruler also points to Alertmanager, but this repository does not include log alert rules.
+
+**Current API instrumentation:** Compose configures OTEL exporter environment variables, but the application does not yet initialize a Node.js OpenTelemetry SDK. The infrastructure pipeline can receive OTLP data; API runtime, HTTP metrics, traces, and logs require an instrumented producer. `BackendTelemetryMissing` will fire while the required runtime metric is absent. The backend rules currently match `service_name="fitwork-nestjs-api"`; update those selectors if you change `OTEL_SERVICE_NAME`.
+
+### Monitoring Interfaces
+
+| Service      | Default local URL        | Configuration                                                                                                     |
+| ------------ | ------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| Grafana      | `http://localhost:3001`  | `GRAFANA_PORT`; credentials use `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD`, defaulting to `admin` / `admin`. |
+| Prometheus   | `http://localhost:9090`  | `PROMETHEUS_PORT`; inspect `/targets`, `/rules`, and `/alerts`.                                                   |
+| Alertmanager | `http://localhost:9093`  | `ALERTMANAGER_PORT`; active alerts and silences; requires the `alerting` profile.                                 |
+| Alloy        | `http://localhost:4201`  | `ALLOY_PORT`; pipeline status and HTTP metrics.                                                                   |
+| Loki         | `http://localhost:3100`  | `LOKI_PORT`; log storage queried through Grafana.                                                                 |
+| Jaeger       | `http://localhost:16686` | `JAEGER_PORT`; trace search UI.                                                                                   |
+| Collector    | `localhost:4317`         | `OTEL_PORT`; OTLP gRPC ingestion, not an HTTP UI.                                                                 |
+
+Grafana uses port `3001` so it can run alongside the API on port `3000`. Prometheus, Loki, Grafana, Alloy, and Alertmanager have named volumes for local state. Configuration files are mounted from `src/monitoring/`.
+
+### Alert Rules
+
+| Alert                     | Condition                                                                                  | Hold time | Severity |
+| ------------------------- | ------------------------------------------------------------------------------------------ | --------- | -------- |
+| `TelemetryPipelineDown`   | Prometheus cannot scrape Alloy.                                                            | 1 minute  | Critical |
+| `BackendTelemetryMissing` | The backend's `nodejs_eventloop_utilization_ratio` metric is absent.                       | 2 minutes | Critical |
+| `RedisExporterDown`       | Prometheus cannot scrape Redis exporter.                                                   | 1 minute  | Critical |
+| `RedisDown`               | Redis exporter reports `redis_up == 0`.                                                    | 1 minute  | Critical |
+| `HighRequestLatency`      | Average HTTP duration exceeds 2 seconds, with at least 20 requests in the last 5 minutes.  | 1 minute  | Warning  |
+| `HTTPErrorRate`           | HTTP 5xx responses exceed 5% of requests, with at least 20 requests in the last 5 minutes. | 2 minutes | Warning  |
+
+Latency alerts remain firing for another 5 minutes after the condition clears. Alertmanager groups by alert name and severity, waits 30 seconds before the first notification, checks group changes every 5 minutes, and repeats ongoing alerts every 4 hours. Rule hold times and evaluation intervals are added to the notification delay.
+
+### Configure Gmail Delivery
+
+1. Enable Google **2-Step Verification**, then create an **App Password** for Alertmanager. Use that password for SMTP authentication. See [Google's App Password instructions](https://support.google.com/mail/answer/185833?hl=en). If your account does not offer App Passwords, check the account or Workspace administrator restrictions described there.
+2. Add the sender and recipient to `.env`. Each setting accepts one plain email address; the sender must be the account that generated the App Password. The recipient can be the same Gmail address.
+
+   ```env
+   SMTP_GMAIL_USER=your-account@gmail.com
+   ALERT_EMAIL_TO=your-account@gmail.com
+   ALERTMANAGER_PORT=9093
+   GRAFANA_PORT=3001
+   ```
+
+3. Store only the App Password, without display spaces, in `.secrets/gmail-app-password`:
+
+   ```bash
+   mkdir -p .secrets
+   chmod 700 .secrets
+   ${EDITOR:-vi} .secrets/gmail-app-password
+   chmod 444 .secrets/gmail-app-password
+   ```
+
+   The private directory protects the file on the host. Read permission on the file lets the container's unprivileged user read the bind-mounted Compose secret. `.secrets/` is ignored by Git. The password is mounted only into Alertmanager at `/run/secrets/gmail_app_password` and is not inserted into the generated YAML. The startup script renders email addresses, validates the config with `amtool`, and starts Alertmanager.
+
+4. Start monitoring with email delivery enabled:
+
+   ```bash
+   docker compose --profile alerting up -d redis redis-exporter otel-collector alloy prometheus loki jaeger grafana alertmanager
+   ```
+
+   To include the API and database, run `docker compose --profile alerting up -d --build`. Gmail uses `smtp.gmail.com:587` with required TLS; allow outbound access to that endpoint. See [Google's SMTP settings](https://support.google.com/mail/answer/7104828?hl=en).
+
+### Verify Alerts
+
+Validate the running configuration and inspect delivery logs:
+
+```bash
+docker compose --profile alerting config --quiet
+docker compose exec prometheus promtool check config /etc/prometheus/prometheus.yml
+docker compose --profile alerting exec alertmanager amtool check-config /tmp/alertmanager.yml
+docker compose --profile alerting logs --tail=100 alertmanager prometheus
+```
+
+After Gmail is configured, submit a manual alert to test email delivery. It expires in 2 minutes and also tests the resolved notification:
+
+```bash
+python3 - <<'PY' | curl --fail-with-body -sS \
+  -H 'Content-Type: application/json' \
+  --data-binary @- http://localhost:9093/api/v2/alerts
+from datetime import datetime, timedelta, timezone
+import json
+
+expires = datetime.now(timezone.utc) + timedelta(minutes=2)
+print(json.dumps([{
+    'labels': {'alertname': 'GmailDeliveryTest', 'severity': 'info'},
+    'annotations': {
+        'summary': 'Fitwork Gmail delivery test',
+        'description': 'Manual test alert; expires automatically after 2 minutes.'
+    },
+    'endsAt': expires.isoformat()
+}]))
+PY
+```
+
+Use your configured `ALERTMANAGER_PORT` if it differs from `9093`. The first email normally follows the 30-second group wait; the resolved email follows a later group interval. This manual test verifies Alertmanager-to-email delivery. Check Prometheus's `/alerts` page separately to confirm rule evaluation. Check Spam and Alertmanager logs if no email arrives; authentication failures usually require checking the sender address and App Password.
+
+After changing `.env` email settings, run `docker compose --profile alerting up -d --force-recreate alertmanager`. After editing the mounted Alertmanager template or replacing the password file, recreate the container so its rendered configuration and secret mount refresh. Configuration details are in the [Alertmanager reference](https://prometheus.io/docs/alerting/latest/configuration/).
 
 ## Getting Started
 
@@ -159,6 +282,7 @@ src/
     resume/                 # Resume management and ingestion
     applicant-evaluation/   # AI evaluation, evidence validation, and results
     realtime/               # Socket.IO gateways and progress events
+  monitoring/               # Collector, Alloy, Prometheus, Loki, Grafana, and Alertmanager
   shared/
     application/            # Shared application contracts
     common/                 # Guards, validation, errors, and Swagger helpers
