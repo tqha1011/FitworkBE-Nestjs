@@ -24,8 +24,12 @@ services:
       OTEL_LOG_LEVEL: ${OTEL_LOG_LEVEL:-info}
       OTEL_SDK_DISABLED: ${OTEL_SDK_DISABLED:-false}
     depends_on:
-      - database
-      - redis
+      database:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
     networks:
       - Fitwork-backend
 
@@ -95,6 +99,7 @@ services:
       - Fitwork-monitoring
     volumes:
       - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
     environment:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
@@ -119,6 +124,11 @@ services:
       - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./monitoring/prometheus/alert.rule.yml:/etc/prometheus/alert.rule.yml:ro
       - prometheus_data:/var/lib/prometheus
+    depends_on:
+      redis_exporter:
+        condition: service_started
+      otel-collector:
+        condition: service_started
 
   otel-collector:
       image: otel/opentelemetry-collector:latest
@@ -139,8 +149,12 @@ services:
     container_name: alloy-fitwork-nestjs
     ports:
       - '127.0.0.1:${ALLOY_PORT:-4201}:4201'
+    command:
+      - run
+      - '--server.http.listen-addr=0.0.0.0:4201'
+      - '--storage.path=/var/lib/alloy/data'
+      - /etc/alloy/config.alloy
     networks:
-      - Fitwork-backend
       - Fitwork-monitoring
 
 
