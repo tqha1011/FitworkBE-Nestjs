@@ -1,7 +1,7 @@
 name: smart-portal
 
 services:
-  fitWork-nestjs-api:
+  fitwork-nestjs-api:
     container_name: Fitwork-backend-nestjs
     restart: unless-stopped
     build:
@@ -14,6 +14,15 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB}
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:${REDIS_PORT:-6379}
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-fitwork-nestjs-api}
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: otlp
+      OTEL_LOGS_EXPORTER: otlp
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_NODE_RESOURCE_DETECTORS: env,host,os,serviceinstance,container
+      OTEL_LOG_LEVEL: ${OTEL_LOG_LEVEL:-info}
+      OTEL_SDK_DISABLED: ${OTEL_SDK_DISABLED:-false}
     depends_on:
       - database
       - redis
@@ -97,24 +106,56 @@ services:
   prometheus:
     image: prom/prometheus:latest
     container_name: prometheus-fitwork-nestjs
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/var/lib/prometheus'
+      - '--web.enabled-remote-write-receiver'
     ports:
-      - '9090:9090'
+      - '127.0.0.1:${PROMETHEUS_PORT:-9090}:9090'
     networks:
       - Fitwork-monitoring
       - Fitwork-backend
     volumes:
       - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/alert.rule.yml:/etc/prometheus/alert.rule.yml:ro
+      - prometheus_data:/var/lib/prometheus
+
+  otel-collector:
+      image: otel/opentelemetry-collector:latest
+      container_name: otel-collector-fitwork-nestjs
+      ports:
+        - '127.0.0.1:${OTEL_PORT:-4317}:4317'
+      networks:
+        - Fitwork-monitoring
+        - Fitwork-backend
+      volumes:
+        - ./monitoring/opentelemetry/collector.yml:/etc/otelcol/config.yaml:ro
+      depends_on:
+        alloy:
+          condition: service_started
 
   alloy:
     image: grafana/alloy:latest
     container_name: alloy-fitwork-nestjs
     ports:
-      - '127.0.0.1:${ALLOT_PORT:-4317}:4317'
+      - '127.0.0.1:${ALLOY_PORT:-4201}:4201'
     networks:
       - Fitwork-backend
+      - Fitwork-monitoring
 
 
-
+  loki:
+    image: grafana/loki:latest
+    container_name: loki-fitwork-nestjs
+    ports:
+      - '3100:3100'
+    networks:
+      - Fitwork-monitoring
+    command:
+      - '--config.file=/etc/loki/config.yml'
+    volumes:
+      - ./monitoring/loki/config.yml:/etc/loki/config.yml:ro
+      - loki_data:/var/lib/loki/data
 
 networks:
   Fitwork-backend:
@@ -126,3 +167,5 @@ volumes:
   postgres_data:
   redis_data:
   grafana_data:
+  loki_data:
+  prometheus_data:
