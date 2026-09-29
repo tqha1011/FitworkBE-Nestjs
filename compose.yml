@@ -154,22 +154,34 @@ services:
       - '--server.http.listen-addr=0.0.0.0:4201'
       - '--storage.path=/var/lib/alloy/data'
       - /etc/alloy/config.alloy
+    volumes:
+      - ./monitoring/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - alloy_data:/var/lib/alloy/data:rw
     networks:
       - Fitwork-monitoring
-
 
   loki:
     image: grafana/loki:latest
     container_name: loki-fitwork-nestjs
     ports:
-      - '3100:3100'
+      - '127.0.0.1:${LOKI_PORT:-3100}:3100'
     networks:
       - Fitwork-monitoring
     command:
       - '--config.file=/etc/loki/config.yml'
     volumes:
       - ./monitoring/loki/config.yml:/etc/loki/config.yml:ro
-      - loki_data:/var/lib/loki/data
+      - loki_data:/var/lib/loki/data:rw
+
+  jaeger:
+      image: jaegertracing/all-in-one:latest
+      container_name: interviewiq-jaeger
+      ports:
+        - '127.0.0.1:${JAEGER_PORT:-16686}:16686'
+      networks:
+        - Fitwork-monitoring
+      environment:
+        - COLLECTOR_OTLP_ENABLED=true
 
 networks:
   Fitwork-backend:
@@ -183,3 +195,4 @@ volumes:
   grafana_data:
   loki_data:
   prometheus_data:
+  alloy_data:
