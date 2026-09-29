@@ -1,7 +1,7 @@
 name: smart-portal
 
 services:
-  FitWork-Nestjs-api:
+  fitWork-nestjs-api:
     container_name: Fitwork-backend-nestjs
     restart: unless-stopped
     build:
