@@ -8,9 +8,11 @@ import { IResumeContentRepository } from '../../domain/repositories/resume-conte
 import { IResumeIngestionNotifier } from '../interfaces/resume-ingestion-notifier.interface';
 import { IResumeIngestionService } from '../interfaces/resume-ingestion.service.interface';
 import { IResumeTextExtractor } from '../interfaces/resume-text-extractor.interface';
+import { SpanStatusCode, trace } from '@opentelemetry/api';
 
 @Injectable()
 export class ResumeIngestionService implements IResumeIngestionService {
+  private readonly trace = trace.getTracer('fitwork.resume.ingestion');
   constructor(
     private readonly contentRepository: IResumeContentRepository,
     private readonly fileStorage: IFileStorage,
@@ -23,77 +25,101 @@ export class ResumeIngestionService implements IResumeIngestionService {
     attemptsMade: number,
     maxAttempts: number,
   ): Promise<void> {
-    try {
-      const contentResult = await this.contentRepository.getByPublicId(
-        payload.resumeContentPublicId,
-      );
-      if (contentResult.isErr()) {
-        throw contentResult.error;
-      }
-      const content = contentResult.value;
-      if (!content || content.resumePublicId !== payload.resumePublicId) {
-        throw new Error('Resume ingestion content was not found');
-      }
-      if (content.status === CommonResumeIngestionStatus.COMPLETED) {
-        return;
-      }
-
-      const processingResult = await this.contentRepository.markProcessing(
-        content.publicId,
-      );
-      if (processingResult.isErr() || !processingResult.value) {
-        throw processingResult.isErr()
-          ? processingResult.error
-          : new Error('Failed to mark resume ingestion as processing');
-      }
-      await this.notifier.notify(this.toEvent(processingResult.value));
-
-      const objectResult = await this.fileStorage.getObject(
-        content.storagePath,
-      );
-      if (objectResult.isErr()) {
-        throw objectResult.error;
-      }
-      const buffer = objectResult.value;
-      if (
-        buffer.length !== content.fileSize ||
-        buffer.length <= 0 ||
-        buffer.length > MAX_RESUME_FILE_SIZE
-      ) {
-        throw new Error(
-          `Resume file size mismatch: expected ${content.fileSize}, received ${buffer.length}`,
+    return this.trace.startActiveSpan('ingest.resume', async (span) => {
+      try {
+        const contentResult = await this.contentRepository.getByPublicId(
+          payload.resumeContentPublicId,
         );
-      }
+        if (contentResult.isErr()) {
+          span.setAttribute('resume.ingest.get.content', 'failed');
+          span.setStatus({ code: SpanStatusCode.ERROR });
+          throw contentResult.error;
+        }
+        const content = contentResult.value;
+        if (!content || content.resumePublicId !== payload.resumePublicId) {
+          span.setAttribute('resume.ingest.content.invalid', 'true');
+          span.setStatus({ code: SpanStatusCode.OK });
+          throw new Error('Resume ingestion content was not found');
+        }
+        if (content.status === CommonResumeIngestionStatus.COMPLETED) {
+          span.setAttribute('resume.ingestion.content', 'already completed');
+          span.setStatus({ code: SpanStatusCode.OK });
+          return;
+        }
 
-      const extractedResult = await this.textExtractor.extract(
-        content.fileType,
-        buffer,
-      );
-      if (extractedResult.isErr()) {
-        throw extractedResult.error;
-      }
-      const extractedText = this.normalizeText(extractedResult.value);
-      if (!extractedText) {
-        throw new Error('Resume text is empty after extraction');
-      }
+        const processingResult = await this.contentRepository.markProcessing(
+          content.publicId,
+        );
+        if (processingResult.isErr() || !processingResult.value) {
+          span.setAttribute('resume.ingest.mark.processing', 'failed');
+          span.setStatus({ code: SpanStatusCode.ERROR });
+          throw processingResult.isErr()
+            ? processingResult.error
+            : new Error('Failed to mark resume ingestion as processing');
+        }
+        await this.notifier.notify(this.toEvent(processingResult.value));
 
-      const completedResult = await this.contentRepository.markCompleted({
-        publicId: content.publicId,
-        extractedText,
-        contentHash: createHash('sha256').update(buffer).digest('hex'),
-      });
-      if (completedResult.isErr() || !completedResult.value) {
-        throw completedResult.isErr()
-          ? completedResult.error
-          : new Error('Failed to complete resume ingestion');
+        const objectResult = await this.fileStorage.getObject(
+          content.storagePath,
+        );
+        if (objectResult.isErr()) {
+          span.setAttribute('resume.ingest.get.object', 'failed');
+          span.setStatus({ code: SpanStatusCode.ERROR });
+          throw objectResult.error;
+        }
+        const buffer = objectResult.value;
+        if (
+          buffer.length !== content.fileSize ||
+          buffer.length <= 0 ||
+          buffer.length > MAX_RESUME_FILE_SIZE
+        ) {
+          span.setAttribute('resume.ingest.get.object.buffer', 'failed');
+          span.setStatus({ code: SpanStatusCode.ERROR });
+          throw new Error(
+            `Resume file size mismatch: expected ${content.fileSize}, received ${buffer.length}`,
+          );
+        }
+
+        const extractedResult = await this.textExtractor.extract(
+          content.fileType,
+          buffer,
+        );
+        if (extractedResult.isErr()) {
+          span.setAttribute('resume.ingest.extract.text', 'failed');
+          span.setStatus({ code: SpanStatusCode.ERROR });
+          throw extractedResult.error;
+        }
+        const extractedText = this.normalizeText(extractedResult.value);
+        if (!extractedText) {
+          span.setAttribute('resume.ingest.normalize.extracted.text', 'failed');
+          span.setStatus({ code: SpanStatusCode.ERROR });
+          throw new Error('Resume text is empty after extraction');
+        }
+
+        const completedResult = await this.contentRepository.markCompleted({
+          publicId: content.publicId,
+          extractedText,
+          contentHash: createHash('sha256').update(buffer).digest('hex'),
+        });
+        if (completedResult.isErr() || !completedResult.value) {
+          span.setAttribute('resume.ingest.mark.completed', 'failed');
+          span.setStatus({ code: SpanStatusCode.ERROR });
+          throw completedResult.isErr()
+            ? completedResult.error
+            : new Error('Failed to complete resume ingestion');
+        }
+        await this.notifier.notify(this.toEvent(completedResult.value));
+      } catch (error) {
+        span.setStatus({ code: SpanStatusCode.ERROR });
+        span.setAttribute('resume.ingest.error', 'internal-server-error');
+        if (attemptsMade + 1 >= maxAttempts) {
+          await this.failFinally(payload.resumeContentPublicId, error);
+        }
+        throw error;
+      } finally {
+        span.end();
       }
-      await this.notifier.notify(this.toEvent(completedResult.value));
-    } catch (error) {
-      if (attemptsMade + 1 >= maxAttempts) {
-        await this.failFinally(payload.resumeContentPublicId, error);
-      }
-      throw error;
-    }
+    });
   }
 
   private normalizeText(text: string): string {

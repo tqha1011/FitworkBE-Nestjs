@@ -18,43 +18,40 @@ export class ResumeIngestionQueue implements IResumeIngestionQueue {
   ) {}
 
   async enqueue(payload: ResumeIngestionJobDto): Promise<void> {
-    return this.trace.startActiveSpan(
-      'ingestion.resume',
-      async (parentSpan) => {
-        try {
-          const jobId = payload.resumeContentPublicId;
-          const existingJob = await this.queue.getJob(jobId);
-          if (existingJob) {
-            const state = await existingJob.getState();
-            if (state === 'failed' || state === 'completed') {
-              await existingJob.remove();
-              parentSpan.setAttribute('resume.enqueue', 'removed');
-            } else {
-              parentSpan.setAttribute('resume.enqueue', 'processing');
-              parentSpan.setAttribute('resume.job.state', state);
-              return;
-            }
+    return this.trace.startActiveSpan('enqueue.resume', async (parentSpan) => {
+      try {
+        const jobId = payload.resumeContentPublicId;
+        const existingJob = await this.queue.getJob(jobId);
+        if (existingJob) {
+          const state = await existingJob.getState();
+          if (state === 'failed' || state === 'completed') {
+            await existingJob.remove();
+            parentSpan.setAttribute('resume.enqueue', 'removed');
+          } else {
+            parentSpan.setAttribute('resume.enqueue', 'processing');
+            parentSpan.setAttribute('resume.job.state', state);
+            return;
           }
-
-          await this.queue.add(EventName.IngestionResume, payload, {
-            jobId,
-            attempts: RESUME_INGESTION_ATTEMPTS,
-            backoff: { type: 'exponential', delay: 2000 },
-            removeOnComplete: { age: 24 * 60 * 60, count: 1000 },
-            removeOnFail: { age: 7 * 24 * 60 * 60, count: 5000 },
-          });
-          parentSpan.setAttribute('resume.enqueue', 'success');
-          parentSpan.setStatus({ code: SpanStatusCode.OK });
-        } catch (error) {
-          parentSpan.setAttribute('resume.enqueue', 'failed');
-          parentSpan.setStatus({
-            code: SpanStatusCode.ERROR,
-          });
-          throw error;
-        } finally {
-          parentSpan.end();
         }
-      },
-    );
+
+        await this.queue.add(EventName.IngestionResume, payload, {
+          jobId,
+          attempts: RESUME_INGESTION_ATTEMPTS,
+          backoff: { type: 'exponential', delay: 2000 },
+          removeOnComplete: { age: 24 * 60 * 60, count: 1000 },
+          removeOnFail: { age: 7 * 24 * 60 * 60, count: 5000 },
+        });
+        parentSpan.setAttribute('resume.enqueue', 'success');
+        parentSpan.setStatus({ code: SpanStatusCode.OK });
+      } catch (error) {
+        parentSpan.setAttribute('resume.enqueue', 'failed');
+        parentSpan.setStatus({
+          code: SpanStatusCode.ERROR,
+        });
+        throw error;
+      } finally {
+        parentSpan.end();
+      }
+    });
   }
 }
