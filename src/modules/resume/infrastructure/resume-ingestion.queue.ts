@@ -5,7 +5,12 @@ import { IResumeIngestionQueue } from '../application/interfaces/resume-ingestio
 import { EventName } from 'src/shared/infrastructure/queue/constant/event-name';
 import { QueueName } from 'src/shared/infrastructure/queue/constant/queue-name';
 import { ResumeIngestionJobDto } from '../application/dtos/resume-ingestion-job.dto';
-import { SpanStatusCode, trace } from '@opentelemetry/api';
+import {
+  context,
+  propagation,
+  SpanStatusCode,
+  trace,
+} from '@opentelemetry/api';
 
 export const RESUME_INGESTION_ATTEMPTS = 3;
 
@@ -34,7 +39,17 @@ export class ResumeIngestionQueue implements IResumeIngestionQueue {
           }
         }
 
-        await this.queue.add(EventName.IngestionResume, payload, {
+        const carrier: Record<string, string> = {};
+        propagation.inject(context.active(), carrier);
+        const queuedPayload: ResumeIngestionJobDto = {
+          resumePublicId: payload.resumePublicId,
+          resumeContentPublicId: payload.resumeContentPublicId,
+          ...(carrier.traceparent
+            ? { telemetry: { traceparent: carrier.traceparent } }
+            : {}),
+        };
+
+        await this.queue.add(EventName.IngestionResume, queuedPayload, {
           jobId,
           attempts: RESUME_INGESTION_ATTEMPTS,
           backoff: { type: 'exponential', delay: 2000 },
