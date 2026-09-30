@@ -3,5 +3,6 @@ export type ResumeIngestionJobDto = {
   resumeContentPublicId: string;
   telemetry?: {
     traceparent?: string;
+    tracestate?: string;
   };
 };

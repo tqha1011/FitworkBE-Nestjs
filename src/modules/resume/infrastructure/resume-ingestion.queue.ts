@@ -8,6 +8,7 @@ import { ResumeIngestionJobDto } from '../application/dtos/resume-ingestion-job.
 import {
   context,
   propagation,
+  SpanKind,
   SpanStatusCode,
   trace,
 } from '@opentelemetry/api';
@@ -23,50 +24,58 @@ export class ResumeIngestionQueue implements IResumeIngestionQueue {
   ) {}
 
   async enqueue(payload: ResumeIngestionJobDto): Promise<void> {
-    return this.trace.startActiveSpan('enqueue.resume', async (parentSpan) => {
-      try {
-        const jobId = payload.resumeContentPublicId;
-        const existingJob = await this.queue.getJob(jobId);
-        if (existingJob) {
-          const state = await existingJob.getState();
-          if (state === 'failed' || state === 'completed') {
-            await existingJob.remove();
-            parentSpan.setAttribute('resume.enqueue', 'removed');
-          } else {
-            parentSpan.setAttribute('resume.enqueue', 'processing');
-            parentSpan.setAttribute('resume.job.state', state);
-            return;
-          }
-        }
-
-        const carrier: Record<string, string> = {};
-        propagation.inject(context.active(), carrier);
-        const queuedPayload: ResumeIngestionJobDto = {
-          resumePublicId: payload.resumePublicId,
-          resumeContentPublicId: payload.resumeContentPublicId,
-          ...(carrier.traceparent
-            ? { telemetry: { traceparent: carrier.traceparent } }
-            : {}),
-        };
-
-        await this.queue.add(EventName.IngestionResume, queuedPayload, {
-          jobId,
-          attempts: RESUME_INGESTION_ATTEMPTS,
-          backoff: { type: 'exponential', delay: 2000 },
-          removeOnComplete: { age: 24 * 60 * 60, count: 1000 },
-          removeOnFail: { age: 7 * 24 * 60 * 60, count: 5000 },
-        });
-        parentSpan.setAttribute('resume.enqueue', 'success');
-        parentSpan.setStatus({ code: SpanStatusCode.OK });
-      } catch (error) {
-        parentSpan.setAttribute('resume.enqueue', 'failed');
-        parentSpan.setStatus({
-          code: SpanStatusCode.ERROR,
-        });
-        throw error;
-      } finally {
-        parentSpan.end();
+    const jobId = payload.resumeContentPublicId;
+    const existingJob = await this.queue.getJob(jobId);
+    if (existingJob) {
+      const state = await existingJob.getState();
+      if (state === 'failed' || state === 'completed') {
+        await existingJob.remove();
+      } else {
+        return;
       }
-    });
+    }
+
+    return this.trace.startActiveSpan(
+      'enqueue.resume',
+      { kind: SpanKind.PRODUCER },
+      async (span) => {
+        try {
+          const carrier: Record<string, string> = {};
+          propagation.inject(context.active(), carrier);
+          const queuedPayload: ResumeIngestionJobDto = {
+            resumePublicId: payload.resumePublicId,
+            resumeContentPublicId: payload.resumeContentPublicId,
+            ...(carrier.traceparent
+              ? {
+                  telemetry: {
+                    traceparent: carrier.traceparent,
+                    ...(carrier.tracestate
+                      ? { tracestate: carrier.tracestate }
+                      : {}),
+                  },
+                }
+              : {}),
+          };
+
+          await this.queue.add(EventName.IngestionResume, queuedPayload, {
+            jobId,
+            attempts: RESUME_INGESTION_ATTEMPTS,
+            backoff: { type: 'exponential', delay: 2000 },
+            removeOnComplete: { age: 24 * 60 * 60, count: 1000 },
+            removeOnFail: { age: 7 * 24 * 60 * 60, count: 5000 },
+          });
+          span.setAttribute('resume.enqueue', 'success');
+          span.setStatus({ code: SpanStatusCode.OK });
+        } catch (error) {
+          span.setAttribute('resume.enqueue', 'failed');
+          span.setStatus({
+            code: SpanStatusCode.ERROR,
+          });
+          throw error;
+        } finally {
+          span.end();
+        }
+      },
+    );
   }
 }

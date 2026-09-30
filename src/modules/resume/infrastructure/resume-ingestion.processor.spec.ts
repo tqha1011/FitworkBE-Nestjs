@@ -1,4 +1,5 @@
 import {
+  SpanKind,
   SpanStatusCode,
   trace,
   type Span,
@@ -60,7 +61,7 @@ describe('ResumeIngestionProcessor', () => {
     expect(ingest).toHaveBeenCalledWith(payload, 1, 3);
     expect(startActiveSpan).toHaveBeenCalledWith(
       'queue.process',
-      {},
+      { kind: SpanKind.CONSUMER },
       expect.anything(),
       expect.any(Function),
     );

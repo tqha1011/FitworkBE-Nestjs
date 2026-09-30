@@ -2,6 +2,7 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import {
   propagation,
   ROOT_CONTEXT,
+  SpanKind,
   SpanStatusCode,
   trace,
 } from '@opentelemetry/api';
@@ -20,14 +21,18 @@ export class ResumeIngestionProcessor extends WorkerHost {
 
   async process(job: Job<ResumeIngestionJobDto>): Promise<void> {
     const traceparent = job.data.telemetry?.traceparent;
+    const tracestate = job.data.telemetry?.tracestate;
     const parentContext =
       typeof traceparent === 'string'
-        ? propagation.extract(ROOT_CONTEXT, { traceparent })
+        ? propagation.extract(ROOT_CONTEXT, {
+            traceparent,
+            ...(typeof tracestate === 'string' ? { tracestate } : {}),
+          })
         : ROOT_CONTEXT;
 
     return this.tracer.startActiveSpan(
       'queue.process',
-      {},
+      { kind: SpanKind.CONSUMER },
       parentContext,
       async (span): Promise<void> => {
         span.setAttribute('fitwork.queue.name', QueueName.ResumeIngestion);

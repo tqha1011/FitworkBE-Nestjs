@@ -1,4 +1,11 @@
-import { context, propagation, trace } from '@opentelemetry/api';
+import {
+  context,
+  propagation,
+  ROOT_CONTEXT,
+  SpanKind,
+  SpanStatusCode,
+  trace,
+} from '@opentelemetry/api';
 import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
 import { W3CTraceContextPropagator } from '@opentelemetry/core';
 import {
@@ -99,10 +106,17 @@ describe('resume ingestion trace across BullMQ', () => {
         }),
     } as unknown as Queue<ResumeIngestionJobDto>;
 
-    await new ResumeIngestionQueue(queue).enqueue(payload);
+    const upstreamContext = propagation.extract(ROOT_CONTEXT, {
+      traceparent: '00-11111111111111111111111111111111-2222222222222222-01',
+      tracestate: 'vendor=tenant',
+    });
+    await context.with(upstreamContext, () =>
+      new ResumeIngestionQueue(queue).enqueue(payload),
+    );
     expect(queuedData?.telemetry?.traceparent).toMatch(
       /^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$/,
     );
+    expect(queuedData?.telemetry?.tracestate).toBe('vendor=tenant');
     expect(payload).not.toHaveProperty('telemetry');
 
     const processor = makeProcessor();
@@ -119,19 +133,79 @@ describe('resume ingestion trace across BullMQ', () => {
     const processes = spans.filter((span) => span.name === 'queue.process');
     const ingests = spans.filter((span) => span.name === 'ingest.resume');
     expect(enqueue).toBeDefined();
+    expect(enqueue?.kind).toBe(SpanKind.PRODUCER);
     expect(processes).toHaveLength(2);
     expect(ingests).toHaveLength(2);
     for (const process of processes) {
+      expect(process.kind).toBe(SpanKind.CONSUMER);
       expect(process.spanContext().traceId).toBe(
         enqueue?.spanContext().traceId,
       );
       expect(process.parentSpanContext?.spanId).toBe(
         enqueue?.spanContext().spanId,
       );
+      expect(process.spanContext().traceState?.serialize()).toBe(
+        'vendor=tenant',
+      );
     }
     expect(
       ingests.map((span) => span.parentSpanContext?.spanId).sort(),
     ).toEqual(processes.map((span) => span.spanContext().spanId).sort());
+  });
+
+  it('does not create a producer span when an active job already exists', async () => {
+    const queue = {
+      getJob: jest.fn().mockResolvedValue({
+        getState: jest.fn().mockResolvedValue('active'),
+      }),
+      add: jest.fn(),
+    } as unknown as Queue<ResumeIngestionJobDto>;
+
+    await new ResumeIngestionQueue(queue).enqueue(payload);
+
+    expect(exporter.getFinishedSpans()).toHaveLength(0);
+  });
+
+  it.each(['failed', 'completed'])(
+    'creates a producer span when replacing a %s job',
+    async (state) => {
+      const queue = {
+        getJob: jest.fn().mockResolvedValue({
+          getState: jest.fn().mockResolvedValue(state),
+          remove: jest.fn().mockResolvedValue(undefined),
+        }),
+        add: jest.fn().mockResolvedValue(undefined),
+      } as unknown as Queue<ResumeIngestionJobDto>;
+
+      await new ResumeIngestionQueue(queue).enqueue(payload);
+
+      expect(exporter.getFinishedSpans()).toEqual([
+        expect.objectContaining({
+          name: 'enqueue.resume',
+          kind: SpanKind.PRODUCER,
+        }),
+      ]);
+    },
+  );
+
+  it('ends the producer span with an error when queue.add fails', async () => {
+    const error = new Error('Redis unavailable');
+    const queue = {
+      getJob: jest.fn().mockResolvedValue(undefined),
+      add: jest.fn().mockRejectedValue(error),
+    } as unknown as Queue<ResumeIngestionJobDto>;
+
+    await expect(new ResumeIngestionQueue(queue).enqueue(payload)).rejects.toBe(
+      error,
+    );
+
+    expect(exporter.getFinishedSpans()).toEqual([
+      expect.objectContaining({
+        name: 'enqueue.resume',
+        kind: SpanKind.PRODUCER,
+        status: { code: SpanStatusCode.ERROR },
+      }),
+    ]);
   });
 
   it.each([undefined, 'invalid-traceparent'])(
