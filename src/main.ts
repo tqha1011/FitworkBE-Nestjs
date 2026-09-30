@@ -1,3 +1,4 @@
+import './instrumentation';
 import 'reflect-metadata';
 /**
  * This is the main entry point of the application. It sets up the NestJS application, applies global validation pipes, and configures Swagger for API documentation. Finally, it starts the server on the specified port.
