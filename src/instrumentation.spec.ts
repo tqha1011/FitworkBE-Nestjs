@@ -4,6 +4,7 @@ describe('OpenTelemetry bootstrap', () => {
   it('registers a recording tracer when tracing is enabled', async () => {
     const names = [
       'OTEL_SERVICE_NAME',
+      'OTEL_EXPORTER_OTLP_PROTOCOL',
       'OTEL_TRACES_EXPORTER',
       'OTEL_METRICS_EXPORTER',
       'OTEL_LOGS_EXPORTER',

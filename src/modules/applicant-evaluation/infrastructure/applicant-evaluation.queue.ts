@@ -6,6 +6,7 @@ import { Queue } from 'bullmq';
 import { EventName } from 'src/shared/infrastructure/queue/constant/event-name';
 import { Injectable } from '@nestjs/common';
 import { context, propagation, SpanKind, trace } from '@opentelemetry/api';
+import { requestContext } from 'src/shared/observability/request-context';
 
 export const APPLICANT_EVALUATION_ATTEMPTS = 3;
 
@@ -25,15 +26,19 @@ export class ApplicantEvaluationQueue implements IApplicantEvaluationQueueInterf
         try {
           const carrier: Record<string, string> = {};
           propagation.inject(context.active(), carrier);
+          const requestId = requestContext.getStore()?.requestId;
           const payload: ApplicantEvaluationJobDto = {
             evaluationPublicId: request.evaluationPublicId,
-            ...(carrier.traceparent
+            ...(carrier.traceparent || requestId
               ? {
                   telemetry: {
-                    traceparent: carrier.traceparent,
+                    ...(carrier.traceparent
+                      ? { traceparent: carrier.traceparent }
+                      : {}),
                     ...(carrier.tracestate
                       ? { tracestate: carrier.tracestate }
                       : {}),
+                    ...(requestId ? { requestId } : {}),
                   },
                 }
               : {}),
@@ -61,7 +66,32 @@ export class ApplicantEvaluationQueue implements IApplicantEvaluationQueueInterf
 
     const state = await existingJob.getState();
     if (state === 'failed') {
-      await existingJob.retry();
+      await this.tracer.startActiveSpan(
+        'evaluation.retry',
+        { kind: SpanKind.PRODUCER },
+        async (span) => {
+          try {
+            const carrier: Record<string, string> = {};
+            propagation.inject(context.active(), carrier);
+            const requestId = requestContext.getStore()?.requestId;
+            const telemetry = {
+              ...existingJob.data?.telemetry,
+              ...(carrier.traceparent
+                ? { traceparent: carrier.traceparent }
+                : {}),
+              ...(carrier.tracestate ? { tracestate: carrier.tracestate } : {}),
+              ...(requestId ? { requestId } : {}),
+            };
+            await existingJob.updateData({
+              evaluationPublicId: request.evaluationPublicId,
+              ...(Object.keys(telemetry).length ? { telemetry } : {}),
+            });
+            await existingJob.retry();
+          } finally {
+            span.end();
+          }
+        },
+      );
     }
   }
 }

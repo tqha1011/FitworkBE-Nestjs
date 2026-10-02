@@ -18,6 +18,7 @@ import { RealtimeModule } from './modules/realtime/realtime.module';
 import { ApplicantEvaluationModule } from './modules/applicant-evaluation/applicant-evaluation.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { CachingModule } from './shared/infrastructure/cache/cache.module';
+import { StructuredLogger } from './shared/observability/structured-logger';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { CachingModule } from './shared/infrastructure/cache/cache.module';
     CachingModule,
   ],
   providers: [
+    StructuredLogger,
     {
       provide: APP_PIPE,
       useClass: ValidationPipe,

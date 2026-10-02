@@ -3,5 +3,6 @@ export type ApplicantEvaluationJobDto = {
   telemetry?: {
     traceparent?: string;
     tracestate?: string;
+    requestId?: string;
   };
 };

@@ -10,10 +10,14 @@ import {
   SpanStatusCode,
   trace,
 } from '@opentelemetry/api';
+import { randomUUID } from 'node:crypto';
+import { StructuredLogger } from 'src/shared/observability/structured-logger';
+import { queueMetrics } from 'src/shared/observability/queue-metrics';
 
 @Processor(QueueName.LlmEvaluation)
 export class ApplicantEvaluationProcessor extends WorkerHost {
   private readonly tracer = trace.getTracer('evaluation.processor');
+  private readonly jobLogger = new StructuredLogger();
   constructor(
     private readonly processingService: IApplicantEvaluationProcessingService,
   ) {
@@ -36,6 +40,8 @@ export class ApplicantEvaluationProcessor extends WorkerHost {
       { kind: SpanKind.CONSUMER },
       parentContext,
       async (span) => {
+        const started = performance.now();
+        let outcome: 'success' | 'error' = 'error';
         try {
           const result = await this.processingService.process(
             job.data.evaluationPublicId,
@@ -47,11 +53,30 @@ export class ApplicantEvaluationProcessor extends WorkerHost {
           }
           span.setStatus({ code: SpanStatusCode.OK });
           span.setAttribute('evaluation.processor.success', 'success');
+          outcome = 'success';
         } catch (error) {
           span.setStatus({ code: SpanStatusCode.ERROR });
           span.setAttribute('evaluation.processor.error', 'failed');
           throw error;
         } finally {
+          const durationMs = Math.round(performance.now() - started);
+          queueMetrics.attempt(
+            QueueName.LlmEvaluation,
+            job.attemptsMade,
+            job.opts.attempts ?? 1,
+            outcome,
+            durationMs / 1000,
+          );
+          const spanContext = span.spanContext?.();
+          this.jobLogger.job({
+            requestId: job.data.telemetry?.requestId ?? randomUUID(),
+            queue: QueueName.LlmEvaluation,
+            attempt: job.attemptsMade + 1,
+            outcome,
+            durationMs,
+            traceId: spanContext?.traceId,
+            spanId: spanContext?.spanId,
+          });
           span.end();
         }
       },

@@ -4,5 +4,6 @@ export type ResumeIngestionJobDto = {
   telemetry?: {
     traceparent?: string;
     tracestate?: string;
+    requestId?: string;
   };
 };

@@ -1,5 +1,6 @@
 import { ConfigService } from '@nestjs/config';
 import { Logger } from '@nestjs/common';
+import { Span, SpanStatusCode, trace } from '@opentelemetry/api';
 import {
   ApplicantEvaluationLlmOutput,
   ApplicantEvaluationLlmOutputV2,
@@ -230,5 +231,100 @@ describe('GeminiEvaluateApplicant', () => {
 
     expect(result.isErr()).toBe(true);
     expect(result._unsafeUnwrapErr().message).toBe('Gemini unavailable');
+  });
+
+  it('ends a child span after a successful evaluation with safe metadata', async () => {
+    const span = {
+      setAttribute: jest.fn(),
+      setStatus: jest.fn(),
+      end: jest.fn(),
+    };
+    const startActiveSpan = jest.fn((...args: unknown[]) => {
+      const callback = args[1] as (span: Span) => Promise<unknown>;
+      return callback(span as unknown as Span);
+    });
+    jest
+      .spyOn(trace, 'getTracer')
+      .mockReturnValue({ startActiveSpan } as never);
+    provider = new GeminiEvaluateApplicant({
+      getOrThrow: jest.fn().mockReturnValue('test-key'),
+    } as unknown as ConfigService);
+    mockGenerateContent.mockResolvedValue({ text: JSON.stringify(output) });
+
+    const result = await provider.evaluate(input);
+
+    expect(result.isOk()).toBe(true);
+    expect(startActiveSpan).toHaveBeenCalledWith(
+      'evaluation.llm.evaluate',
+      expect.any(Function),
+    );
+    expect(span.setAttribute).toHaveBeenCalledWith(
+      'gen_ai.request.model',
+      input.model,
+    );
+    expect(span.setAttribute).toHaveBeenCalledWith(
+      'evaluation.prompt.version',
+      input.promptVersion,
+    );
+    expect(span.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
+    expect(span.end).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(span.setAttribute.mock.calls)).not.toContain(
+      input.resumeText,
+    );
+  });
+
+  it.each([
+    ['empty response', { text: undefined }],
+    ['invalid response', { text: 'not-json' }],
+    [
+      'schema violation',
+      { text: JSON.stringify({ ...output, overallScore: 101 }) },
+    ],
+  ])('marks and ends the span for an %s', async (_case, response) => {
+    const span = {
+      setAttribute: jest.fn(),
+      setStatus: jest.fn(),
+      end: jest.fn(),
+    };
+    jest.spyOn(trace, 'getTracer').mockReturnValue({
+      startActiveSpan: (...args: unknown[]) => {
+        const callback = args[1] as (span: Span) => Promise<unknown>;
+        return callback(span as unknown as Span);
+      },
+    } as never);
+    provider = new GeminiEvaluateApplicant({
+      getOrThrow: jest.fn().mockReturnValue('test-key'),
+    } as unknown as ConfigService);
+    mockGenerateContent.mockResolvedValue(response);
+
+    const result = await provider.evaluate(input);
+
+    expect(result.isErr()).toBe(true);
+    expect(span.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.ERROR });
+    expect(span.end).toHaveBeenCalledTimes(1);
+  });
+
+  it('marks and ends the span when Gemini rejects the request', async () => {
+    const span = {
+      setAttribute: jest.fn(),
+      setStatus: jest.fn(),
+      end: jest.fn(),
+    };
+    jest.spyOn(trace, 'getTracer').mockReturnValue({
+      startActiveSpan: (...args: unknown[]) => {
+        const callback = args[1] as (span: Span) => Promise<unknown>;
+        return callback(span as unknown as Span);
+      },
+    } as never);
+    provider = new GeminiEvaluateApplicant({
+      getOrThrow: jest.fn().mockReturnValue('test-key'),
+    } as unknown as ConfigService);
+    mockGenerateContent.mockRejectedValue(new Error('Gemini unavailable'));
+
+    const result = await provider.evaluate(input);
+
+    expect(result._unsafeUnwrapErr().message).toBe('Gemini unavailable');
+    expect(span.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.ERROR });
+    expect(span.end).toHaveBeenCalledTimes(1);
   });
 });

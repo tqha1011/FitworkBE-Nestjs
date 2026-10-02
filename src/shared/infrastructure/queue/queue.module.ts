@@ -3,6 +3,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { QueueName } from './constant/queue-name';
 import Redis from 'ioredis';
+import { QueueSnapshotService } from './queue-snapshot.service';
 
 @Global()
 @Module({
@@ -26,6 +27,7 @@ import Redis from 'ioredis';
       },
     ),
   ],
+  providers: [QueueSnapshotService],
   exports: [BullModule],
 })
 export class QueueModule {}

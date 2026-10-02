@@ -12,6 +12,7 @@ import {
   SpanStatusCode,
   trace,
 } from '@opentelemetry/api';
+import { requestContext } from 'src/shared/observability/request-context';
 
 export const RESUME_INGESTION_ATTEMPTS = 3;
 
@@ -42,16 +43,20 @@ export class ResumeIngestionQueue implements IResumeIngestionQueue {
         try {
           const carrier: Record<string, string> = {};
           propagation.inject(context.active(), carrier);
+          const requestId = requestContext.getStore()?.requestId;
           const queuedPayload: ResumeIngestionJobDto = {
             resumePublicId: payload.resumePublicId,
             resumeContentPublicId: payload.resumeContentPublicId,
-            ...(carrier.traceparent
+            ...(carrier.traceparent || requestId
               ? {
                   telemetry: {
-                    traceparent: carrier.traceparent,
+                    ...(carrier.traceparent
+                      ? { traceparent: carrier.traceparent }
+                      : {}),
                     ...(carrier.tracestate
                       ? { tracestate: carrier.tracestate }
                       : {}),
+                    ...(requestId ? { requestId } : {}),
                   },
                 }
               : {}),

@@ -29,13 +29,3 @@ export function shutdownInstrumentation(): Promise<void> {
   shutdownPromise ??= sdk.shutdown();
   return shutdownPromise;
 }
-
-function handleShutdown(): void {
-  setTimeout(() => process.exit(1), 5_000);
-  void shutdownInstrumentation()
-    .then(() => process.exit(0))
-    .catch(() => process.exit(1));
-}
-
-process.once('SIGTERM', handleShutdown);
-process.once('SIGINT', handleShutdown);
