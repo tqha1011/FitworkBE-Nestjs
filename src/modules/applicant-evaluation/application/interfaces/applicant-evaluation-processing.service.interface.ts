@@ -5,9 +5,5 @@ export abstract class IApplicantEvaluationProcessingService {
     evaluationPublicId: string,
     attemptsMade: number, // total failed processing times in queue
     maxAttempts: number,
-    telemetry?: {
-      traceparent?: string;
-      tracestate?: string;
-    },
   ): Promise<Result<undefined, Error>>;
 }

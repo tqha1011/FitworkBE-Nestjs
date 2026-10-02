@@ -3,7 +3,13 @@ import { Job } from 'bullmq';
 import { QueueName } from 'src/shared/infrastructure/queue/constant/queue-name';
 import { ApplicantEvaluationJobDto } from '../application/dtos/applicant-evaluation-job.dto';
 import { IApplicantEvaluationProcessingService } from '../application/interfaces/applicant-evaluation-processing.service.interface';
-import { SpanStatusCode, trace } from '@opentelemetry/api';
+import {
+  propagation,
+  ROOT_CONTEXT,
+  SpanKind,
+  SpanStatusCode,
+  trace,
+} from '@opentelemetry/api';
 
 @Processor(QueueName.LlmEvaluation)
 export class ApplicantEvaluationProcessor extends WorkerHost {
@@ -15,23 +21,39 @@ export class ApplicantEvaluationProcessor extends WorkerHost {
   }
 
   async process(job: Job<ApplicantEvaluationJobDto>): Promise<void> {
+    const traceparent = job.data.telemetry?.traceparent;
+    const tracestate = job.data.telemetry?.tracestate;
+    const parentContext =
+      typeof traceparent === 'string'
+        ? propagation.extract(ROOT_CONTEXT, {
+            traceparent,
+            ...(typeof tracestate === 'string' ? { tracestate } : {}),
+          })
+        : ROOT_CONTEXT;
+
     return this.tracer.startActiveSpan(
       'evaluation.process',
-      async (parentSpan) => {
-        const result = await this.processingService.process(
-          job.data.evaluationPublicId,
-          job.attemptsMade,
-          job.opts.attempts ?? 1,
-          job.data.telemetry,
-        );
-        if (result.isErr()) {
-          parentSpan.setStatus({ code: SpanStatusCode.ERROR });
-          parentSpan.setAttribute('evaluation.processor.error', 'failed');
-          throw result.error;
+      { kind: SpanKind.CONSUMER },
+      parentContext,
+      async (span) => {
+        try {
+          const result = await this.processingService.process(
+            job.data.evaluationPublicId,
+            job.attemptsMade,
+            job.opts.attempts ?? 1,
+          );
+          if (result.isErr()) {
+            throw result.error;
+          }
+          span.setStatus({ code: SpanStatusCode.OK });
+          span.setAttribute('evaluation.processor.success', 'success');
+        } catch (error) {
+          span.setStatus({ code: SpanStatusCode.ERROR });
+          span.setAttribute('evaluation.processor.error', 'failed');
+          throw error;
+        } finally {
+          span.end();
         }
-        parentSpan.setStatus({ code: SpanStatusCode.OK });
-        parentSpan.setAttribute('evaluation.processor.success', 'success');
-        parentSpan.end();
       },
     );
   }

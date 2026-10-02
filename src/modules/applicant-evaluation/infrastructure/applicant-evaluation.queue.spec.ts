@@ -1,4 +1,5 @@
 import { Queue } from 'bullmq';
+import { propagation } from '@opentelemetry/api';
 import { EventName } from 'src/shared/infrastructure/queue/constant/event-name';
 import { ApplicantEvaluationJobDto } from '../application/dtos/applicant-evaluation-job.dto';
 import {
@@ -11,6 +12,8 @@ jest.mock('@nestjs/bullmq', () => ({
 }));
 
 describe('ApplicantEvaluationQueue', () => {
+  afterEach(() => jest.restoreAllMocks());
+
   const request: ApplicantEvaluationJobDto = {
     evaluationPublicId: 'evaluation-id',
   };
@@ -30,6 +33,36 @@ describe('ApplicantEvaluationQueue', () => {
       removeOnComplete: { age: 86400, count: 1000 },
       removeOnFail: { age: 604800, count: 5000 },
     });
+  });
+
+  it('injects the active trace context into a new job', async () => {
+    const inject = jest
+      .spyOn(propagation, 'inject')
+      .mockImplementation((_context, carrier) => {
+        Object.assign(carrier as object, {
+          traceparent: '00-abc-def-01',
+          tracestate: 'vendor=value',
+        });
+      });
+    const add = jest.fn().mockResolvedValue(undefined);
+    const queue = new ApplicantEvaluationQueue({
+      add,
+    } as unknown as Queue<ApplicantEvaluationJobDto>);
+
+    await queue.enqueue(request);
+
+    expect(inject).toHaveBeenCalledTimes(1);
+    expect(add).toHaveBeenCalledWith(
+      EventName.EvaluationApplicant,
+      {
+        evaluationPublicId: request.evaluationPublicId,
+        telemetry: {
+          traceparent: '00-abc-def-01',
+          tracestate: 'vendor=value',
+        },
+      },
+      expect.anything(),
+    );
   });
 
   it('retries an existing failed job', async () => {
