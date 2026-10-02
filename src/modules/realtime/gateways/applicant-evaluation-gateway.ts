@@ -17,6 +17,7 @@ import { JwtPayload } from 'src/shared/common/jwt.payload.interface';
 import { EventName } from '../constants/event-name';
 import { EvaluationJoinEventDto } from '../payload/evaluation-event.dto';
 import type { EvaluationJoinResponseDto } from '../payload/evaluation-event.dto';
+import { publishRealtime } from 'src/shared/observability/realtime-publish';
 
 type SocketData = { user?: JwtPayload };
 
@@ -114,9 +115,11 @@ export class ApplicantEvaluationGateway implements OnGatewayConnection {
 
   @OnEvent(APPLICANT_EVALUATION_UPDATED_EVENT)
   handleEvaluationScoreNotify(payload: ApplicantEvaluationUpdatedEvent) {
-    this.server
-      .to(this.buildRoom(payload.evaluationPublicId))
-      .emit(EventName.EvaluationScoreNotify, payload);
+    publishRealtime(() => {
+      this.server
+        .to(this.buildRoom(payload.evaluationPublicId))
+        .emit(EventName.EvaluationScoreNotify, payload);
+    });
   }
 
   private joinResponse(

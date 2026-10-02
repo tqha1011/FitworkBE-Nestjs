@@ -23,16 +23,16 @@ groups:
         expr: |
           (
             sum by (service_name) (
-              rate(http_server_request_duration_seconds_sum{service_name="fitwork-nestjs-api"}[5m])
+              rate(fitwork_http_request_duration_seconds_sum{service_name="fitwork-nestjs-api"}[5m])
             )
             /
             sum by (service_name) (
-              rate(http_server_request_duration_seconds_count{service_name="fitwork-nestjs-api"}[5m])
+              rate(fitwork_http_request_duration_seconds_count{service_name="fitwork-nestjs-api"}[5m])
             ) > 2
           )
           and on (service_name)
           sum by (service_name) (
-            increase(http_server_request_duration_seconds_count{service_name="fitwork-nestjs-api"}[5m])
+            increase(fitwork_http_request_duration_seconds_count{service_name="fitwork-nestjs-api"}[5m])
           ) >= 20
         for: 1m
         keep_firing_for: 5m
@@ -64,16 +64,16 @@ groups:
         expr: |
           (
             sum by (service_name) (
-              rate(http_server_request_duration_seconds_count{service_name="fitwork-nestjs-api",http_response_status_code=~"5.."}[5m])
+              rate(fitwork_http_errors_total{service_name="fitwork-nestjs-api",status_class="5xx"}[5m])
             )
             /
             sum by (service_name) (
-              rate(http_server_request_duration_seconds_count{service_name="fitwork-nestjs-api"}[5m])
+              rate(fitwork_http_requests_total{service_name="fitwork-nestjs-api"}[5m])
             ) > 0.05
           )
           and on (service_name)
           sum by (service_name) (
-            increase(http_server_request_duration_seconds_count{service_name="fitwork-nestjs-api"}[5m])
+            increase(fitwork_http_requests_total{service_name="fitwork-nestjs-api"}[5m])
           ) >= 20
         for: 2m
         labels:

@@ -12,13 +12,12 @@ services:
     env_file:
       - .env
     environment:
-      NODE_OPTIONS: '--require @opentelemetry/auto-instrumentations-node/register'
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB}
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:${REDIS_PORT:-6379}
       OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-fitwork-nestjs-api}
-      OTEL_TRACES_EXPORTER: otlp
-      OTEL_METRICS_EXPORTER: otlp
-      OTEL_LOGS_EXPORTER: otlp
+      OTEL_TRACES_EXPORTER: ${OTEL_TRACES_EXPORTER:-otlp}
+      OTEL_METRICS_EXPORTER: ${OTEL_METRICS_EXPORTER:-otlp}
+      OTEL_LOGS_EXPORTER: ${OTEL_LOGS_EXPORTER:-otlp}
       OTEL_EXPORTER_OTLP_PROTOCOL: grpc
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
       OTEL_NODE_RESOURCE_DETECTORS: env,host,os,serviceinstance,container

@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { SpanStatusCode, trace } from '@opentelemetry/api';
 import { UserType } from 'generated/prisma/enums';
 import { err, ok, Result } from 'neverthrow';
 import { IUserRepository } from 'src/modules/users/domain/repositories/users.repo.interface';
@@ -20,6 +21,7 @@ const userTypeToRole: Record<UserType, CommonUserRole> = {
 
 @Injectable()
 export class AuthService implements IAuthService {
+  private readonly tracer = trace.getTracer('fitwork.auth');
   private readonly accessTokenExpiresIn: number;
   private readonly refreshTokenExpiresInDays: number;
 
@@ -40,6 +42,102 @@ export class AuthService implements IAuthService {
   }
 
   async registerAsync(data: {
+    email: string;
+    username: string;
+    fullName: string;
+    password: string;
+    userType: UserType;
+  }): Promise<Result<{ publicId: string }, AppError>> {
+    return this.tracer.startActiveSpan('auth.register', async (span) => {
+      span.setAttribute('fitwork.register.method', 'token');
+      try {
+        const result = await this.registerCredentialsAsync(data);
+        if (result.isErr()) {
+          span.setAttribute('fitwork.register.outcome', 'internal_error');
+          span.setStatus({ code: SpanStatusCode.ERROR });
+          return result;
+        }
+        span.setAttribute('fitwork.register.outcome', 'success');
+        span.setStatus({ code: SpanStatusCode.OK });
+        return result;
+      } catch (error) {
+        span.setAttribute('fitwork.register.outcome', 'internal_error');
+        span.setStatus({ code: SpanStatusCode.ERROR });
+        throw error;
+      } finally {
+        span.end();
+      }
+    });
+  }
+
+  async loginAsync(
+    email: string,
+    password: string,
+  ): Promise<Result<AuthTokens, AppError>> {
+    return this.tracer.startActiveSpan('auth.login', async (span) => {
+      span.setAttribute('fitwork.auth.method', 'password');
+      try {
+        const result = await this.loginCredentials(email, password);
+        if (result.isErr()) {
+          span.setAttribute(
+            'fitwork.auth.outcome',
+            result.error.code === ErrorCode.Unauthorized
+              ? 'invalid_credentials'
+              : 'internal_error',
+          );
+          span.setStatus({ code: SpanStatusCode.ERROR });
+        } else {
+          span.setAttribute('fitwork.auth.outcome', 'success');
+          span.setStatus({ code: SpanStatusCode.OK });
+        }
+        return result;
+      } catch (error) {
+        span.setAttribute('fitwork.auth.outcome', 'internal_error');
+        span.setStatus({ code: SpanStatusCode.ERROR });
+        throw error;
+      } finally {
+        span.end();
+      }
+    });
+  }
+
+  private async loginCredentials(
+    email: string,
+    password: string,
+  ): Promise<Result<AuthTokens, AppError>> {
+    const found = await this.userRepository.findByEmail(email);
+    if (found.isErr()) {
+      return err(
+        new AppError(ErrorCode.InternalServerError, found.error.message),
+      );
+    }
+
+    const user = found.value;
+    if (!user || !user.isActive) {
+      return err(
+        new AppError(ErrorCode.Unauthorized, 'Invalid email or password'),
+      );
+    }
+
+    const verified = await this.passwordHasher.verifyPassword(
+      password,
+      user.passwordHashed,
+    );
+    if (verified.isErr()) {
+      return err(
+        new AppError(ErrorCode.InternalServerError, verified.error.message),
+      );
+    }
+    if (!verified.value) {
+      return err(
+        new AppError(ErrorCode.Unauthorized, 'Invalid email or password'),
+      );
+    }
+
+    return this.issueTokens(user.id, user.publicId, user.email, user.role);
+  }
+
+  private async registerCredentialsAsync(data: {
     email: string;
     username: string;
     fullName: string;
@@ -82,42 +180,6 @@ export class AuthService implements IAuthService {
     }
 
     return ok(created.value);
-  }
-
-  async loginAsync(
-    email: string,
-    password: string,
-  ): Promise<Result<AuthTokens, AppError>> {
-    const found = await this.userRepository.findByEmail(email);
-    if (found.isErr()) {
-      return err(
-        new AppError(ErrorCode.InternalServerError, found.error.message),
-      );
-    }
-
-    const user = found.value;
-    if (!user || !user.isActive) {
-      return err(
-        new AppError(ErrorCode.Unauthorized, 'Invalid email or password'),
-      );
-    }
-
-    const verified = await this.passwordHasher.verifyPassword(
-      password,
-      user.passwordHashed,
-    );
-    if (verified.isErr()) {
-      return err(
-        new AppError(ErrorCode.InternalServerError, verified.error.message),
-      );
-    }
-    if (!verified.value) {
-      return err(
-        new AppError(ErrorCode.Unauthorized, 'Invalid email or password'),
-      );
-    }
-
-    return this.issueTokens(user.id, user.publicId, user.email, user.role);
   }
 
   async refreshTokensAsync(

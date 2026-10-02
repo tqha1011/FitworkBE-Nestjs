@@ -127,7 +127,7 @@ flowchart LR
 - **Grafana** provisions Prometheus and Loki data sources automatically. Open the Jaeger UI separately to inspect traces.
 - **Alertmanager** groups and deduplicates alerts, supports silences, and sends firing and resolved email notifications. It runs when the Compose `alerting` profile is enabled. Loki's ruler also points to Alertmanager, but this repository does not include log alert rules.
 
-**Current API instrumentation:** Compose configures OTEL exporter environment variables, but the application does not yet initialize a Node.js OpenTelemetry SDK. The infrastructure pipeline can receive OTLP data; API runtime, HTTP metrics, traces, and logs require an instrumented producer. `BackendTelemetryMissing` will fire while the required runtime metric is absent. The backend rules currently match `service_name="fitwork-nestjs-api"`; update those selectors if you change `OTEL_SERVICE_NAME`.
+**Current API instrumentation:** `src/instrumentation.ts` starts the Node.js OpenTelemetry SDK before NestJS loads. Compose sends automatic instrumentation data to the Collector over OTLP gRPC at port `4317`; local runs leave exporters disabled unless `OTEL_TRACES_EXPORTER`, `OTEL_METRICS_EXPORTER`, or `OTEL_LOGS_EXPORTER` is configured. Business spans, structured application logs, and the `fitwork_*` metrics are still planned. `BackendTelemetryMissing` will fire if the required runtime metric is absent. The backend rules currently match `service_name="fitwork-nestjs-api"`; update those selectors if you change `OTEL_SERVICE_NAME`.
 
 ### Monitoring Interfaces
 

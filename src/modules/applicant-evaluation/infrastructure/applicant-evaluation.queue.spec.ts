@@ -1,4 +1,6 @@
 import { Queue } from 'bullmq';
+import { propagation } from '@opentelemetry/api';
+import { requestContext } from 'src/shared/observability/request-context';
 import { EventName } from 'src/shared/infrastructure/queue/constant/event-name';
 import { ApplicantEvaluationJobDto } from '../application/dtos/applicant-evaluation-job.dto';
 import {
@@ -11,6 +13,8 @@ jest.mock('@nestjs/bullmq', () => ({
 }));
 
 describe('ApplicantEvaluationQueue', () => {
+  afterEach(() => jest.restoreAllMocks());
+
   const request: ApplicantEvaluationJobDto = {
     evaluationPublicId: 'evaluation-id',
   };
@@ -32,11 +36,42 @@ describe('ApplicantEvaluationQueue', () => {
     });
   });
 
+  it('injects the active trace context into a new job', async () => {
+    const inject = jest
+      .spyOn(propagation, 'inject')
+      .mockImplementation((_context, carrier) => {
+        Object.assign(carrier as object, {
+          traceparent: '00-abc-def-01',
+          tracestate: 'vendor=value',
+        });
+      });
+    const add = jest.fn().mockResolvedValue(undefined);
+    const queue = new ApplicantEvaluationQueue({
+      add,
+    } as unknown as Queue<ApplicantEvaluationJobDto>);
+
+    await queue.enqueue(request);
+
+    expect(inject).toHaveBeenCalledTimes(1);
+    expect(add).toHaveBeenCalledWith(
+      EventName.EvaluationApplicant,
+      {
+        evaluationPublicId: request.evaluationPublicId,
+        telemetry: {
+          traceparent: '00-abc-def-01',
+          tracestate: 'vendor=value',
+        },
+      },
+      expect.anything(),
+    );
+  });
+
   it('retries an existing failed job', async () => {
     const add = jest.fn().mockResolvedValue(undefined);
     const retry = jest.fn().mockResolvedValue(undefined);
+    const updateData = jest.fn().mockResolvedValue(undefined);
     const getState = jest.fn().mockResolvedValue('failed');
-    const getJob = jest.fn().mockResolvedValue({ getState, retry });
+    const getJob = jest.fn().mockResolvedValue({ getState, retry, updateData });
     const queue = new ApplicantEvaluationQueue({
       add,
       getJob,
@@ -47,7 +82,40 @@ describe('ApplicantEvaluationQueue', () => {
     expect(getJob).toHaveBeenCalledWith(request.evaluationPublicId);
     expect(getState).toHaveBeenCalledTimes(1);
     expect(retry).toHaveBeenCalledTimes(1);
+    expect(updateData).toHaveBeenCalledWith(
+      expect.objectContaining({
+        evaluationPublicId: request.evaluationPublicId,
+      }),
+    );
     expect(add).not.toHaveBeenCalled();
+  });
+
+  it('uses the current request context when retrying a failed job', async () => {
+    jest
+      .spyOn(propagation, 'inject')
+      .mockImplementation((_context, carrier) => {
+        Object.assign(carrier as object, { traceparent: 'new-parent' });
+      });
+    const retry = jest.fn().mockResolvedValue(undefined);
+    const updateData = jest.fn().mockResolvedValue(undefined);
+    const queue = new ApplicantEvaluationQueue({
+      getJob: jest.fn().mockResolvedValue({
+        data: request,
+        getState: jest.fn().mockResolvedValue('failed'),
+        updateData,
+        retry,
+      }),
+    } as unknown as Queue<ApplicantEvaluationJobDto>);
+
+    await requestContext.run({ requestId: 'new-request' }, () =>
+      queue.retry(request),
+    );
+
+    expect(updateData).toHaveBeenCalledWith({
+      evaluationPublicId: request.evaluationPublicId,
+      telemetry: { traceparent: 'new-parent', requestId: 'new-request' },
+    });
+    expect(retry).toHaveBeenCalledTimes(1);
   });
 
   it('enqueues the job when there is no BullMQ job to retry', async () => {

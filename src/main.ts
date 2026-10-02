@@ -1,4 +1,7 @@
+import { shutdownInstrumentation } from './instrumentation';
 import 'reflect-metadata';
+import { createShutdown } from './shutdown';
+import type { INestApplication } from '@nestjs/common';
 /**
  * This is the main entry point of the application. It sets up the NestJS application, applies global validation pipes, and configures Swagger for API documentation. Finally, it starts the server on the specified port.
  */
@@ -8,9 +11,17 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './shared/common/exceptions.filter';
+import { StructuredLogger } from './shared/observability/structured-logger';
+
+let application: INestApplication | undefined;
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    bufferLogs: true,
+    abortOnError: false,
+  });
+  application = app;
+  app.useLogger(app.get(StructuredLogger));
   app.use(cookieParser());
   app.useGlobalPipes(
     new ValidationPipe({
@@ -41,4 +52,22 @@ async function bootstrap() {
   await app.listen(process.env.PORT ?? 3000);
 }
 
-void bootstrap();
+// Register before asynchronous startup so signals during startup also drain safely.
+const shutdown = createShutdown(
+  async () => {
+    try {
+      await startup;
+    } finally {
+      await application?.close();
+    }
+  },
+  shutdownInstrumentation,
+  (code) => process.exit(code),
+);
+process.on('SIGTERM', () => void shutdown());
+process.on('SIGINT', () => void shutdown());
+const startup = bootstrap();
+void startup.catch(() => {
+  process.stderr.write('application.startup_failed\n');
+  void shutdown();
+});

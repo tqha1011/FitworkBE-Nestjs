@@ -22,6 +22,7 @@ import { IResumeRepository } from 'src/modules/resume/domain/repositories/resume
 import { IResumeContentRepository } from 'src/modules/resume/domain/repositories/resume-content.repo.interface';
 import { RESUME_INGESTION_UPDATED_EVENT } from 'src/modules/resume/application/interfaces/resume-ingestion-notifier.interface';
 import type { ResumeIngestionUpdatedEvent } from 'src/modules/resume/application/interfaces/resume-ingestion-notifier.interface';
+import { publishRealtime } from 'src/shared/observability/realtime-publish';
 
 type SocketData = { user?: JwtPayload };
 
@@ -131,9 +132,11 @@ export class ResumeGateway implements OnGatewayConnection {
 
   @OnEvent(RESUME_INGESTION_UPDATED_EVENT)
   handleNotifyIngestionProcess(payload: ResumeIngestionUpdatedEvent) {
-    this.server
-      .to(this.buildRoom(payload.resumePublicId))
-      .emit(EventName.IngestionProcessNotify, payload);
+    publishRealtime(() => {
+      this.server
+        .to(this.buildRoom(payload.resumePublicId))
+        .emit(EventName.IngestionProcessNotify, payload);
+    });
   }
 
   private joinResponse(

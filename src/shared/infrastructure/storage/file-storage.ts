@@ -17,6 +17,7 @@ import {
   PresignedUpload,
   PresignUploadInput,
 } from './file-storage.interface';
+import { traceResult } from 'src/shared/observability/trace-result';
 
 /** An upload URL grants writes to the bucket, so it expires well before a read one. */
 const DEFAULT_UPLOAD_EXPIRY_SECONDS = 300;
@@ -51,35 +52,34 @@ export class FileStorage implements IFileStorage, OnModuleDestroy {
   async getUploadUrl(
     input: PresignUploadInput,
   ): Promise<Result<PresignedUpload, AppError>> {
-    const expiresIn = input.expiresInSeconds ?? DEFAULT_UPLOAD_EXPIRY_SECONDS;
+    return traceResult('storage.presign_upload', async () => {
+      const expiresIn = input.expiresInSeconds ?? DEFAULT_UPLOAD_EXPIRY_SECONDS;
 
-    try {
-      const command = new PutObjectCommand({
-        Bucket: this.bucket,
-        Key: input.key,
-        ContentType: input.contentType,
-        ContentLength: input.contentLength,
-      });
-      const url = await getSignedUrl(this.s3, command, { expiresIn });
+      try {
+        const command = new PutObjectCommand({
+          Bucket: this.bucket,
+          Key: input.key,
+          ContentType: input.contentType,
+          ContentLength: input.contentLength,
+        });
+        const url = await getSignedUrl(this.s3, command, { expiresIn });
 
-      return ok({
-        uploadUrl: url,
-        key: input.key,
-        expiresAt: new Date(Date.now() + expiresIn * 1000),
-      });
-    } catch (error) {
-      this.logger.error(
-        `Failed to presign an upload for key ${input.key}.`,
-        this.describe(error),
-      );
+        return ok({
+          uploadUrl: url,
+          key: input.key,
+          expiresAt: new Date(Date.now() + expiresIn * 1000),
+        });
+      } catch {
+        this.logger.error('Failed to presign an upload');
 
-      return err(
-        new AppError(
-          ErrorCode.InternalServerError,
-          'Failed to generate presigned upload URL',
-        ),
-      );
-    }
+        return err(
+          new AppError(
+            ErrorCode.InternalServerError,
+            'Failed to generate presigned upload URL',
+          ),
+        );
+      }
+    });
   }
 
   async getDownloadUrl(
@@ -88,113 +88,118 @@ export class FileStorage implements IFileStorage, OnModuleDestroy {
     disposition: CommonContentDisposition,
     expiresInSeconds?: number,
   ): Promise<Result<string, AppError>> {
-    try {
-      const command = new GetObjectCommand({
-        Bucket: this.bucket,
-        Key: key,
-        ResponseContentDisposition: this.contentDisposition(
-          fileName,
-          disposition,
-        ),
-      });
-      const url = await getSignedUrl(this.s3, command, {
-        expiresIn: expiresInSeconds ?? DEFAULT_DOWNLOAD_EXPIRY_SECONDS,
-      });
+    return traceResult('storage.presign_download', async () => {
+      try {
+        const command = new GetObjectCommand({
+          Bucket: this.bucket,
+          Key: key,
+          ResponseContentDisposition: this.contentDisposition(
+            fileName,
+            disposition,
+          ),
+        });
+        const url = await getSignedUrl(this.s3, command, {
+          expiresIn: expiresInSeconds ?? DEFAULT_DOWNLOAD_EXPIRY_SECONDS,
+        });
 
-      return ok(url);
-    } catch (error) {
-      this.logger.error(
-        `Failed to presign a download for key ${key}.`,
-        this.describe(error),
-      );
+        return ok(url);
+      } catch {
+        this.logger.error('Failed to presign a download');
 
-      return err(
-        new AppError(
-          ErrorCode.InternalServerError,
-          'Failed to generate presigned download URL',
-        ),
-      );
-    }
+        return err(
+          new AppError(
+            ErrorCode.InternalServerError,
+            'Failed to generate presigned download URL',
+          ),
+        );
+      }
+    });
   }
 
   async getObjectMetadata(
     key: string,
   ): Promise<Result<ObjectMetadata | null, AppError>> {
-    try {
-      const response = await this.s3.send(
-        new HeadObjectCommand({ Bucket: this.bucket, Key: key }),
-      );
+    return traceResult('storage.head', async () => {
+      try {
+        const response = await this.s3.send(
+          new HeadObjectCommand({ Bucket: this.bucket, Key: key }),
+        );
 
-      return ok({
-        contentType: response.ContentType ?? null,
-        contentLength: response.ContentLength ?? 0,
-        lastModified: response.LastModified ?? null,
-      });
-    } catch (error) {
-      if (this.isNotFound(error)) {
-        return ok(null);
+        return ok({
+          contentType: response.ContentType ?? null,
+          contentLength: response.ContentLength ?? 0,
+          lastModified: response.LastModified ?? null,
+        });
+      } catch (error) {
+        if (this.isNotFound(error)) {
+          return ok(null);
+        }
+
+        this.logger.error('Failed to read object metadata');
+
+        return err(
+          new AppError(
+            ErrorCode.InternalServerError,
+            'Failed to read object metadata',
+          ),
+        );
       }
-
-      this.logger.error(
-        `Failed to read metadata for key ${key}.`,
-        this.describe(error),
-      );
-
-      return err(
-        new AppError(
-          ErrorCode.InternalServerError,
-          'Failed to read object metadata',
-        ),
-      );
-    }
+    });
   }
 
   async getObject(key: string): Promise<Result<Buffer, AppError>> {
-    try {
-      const response = await this.s3.send(
-        new GetObjectCommand({ Bucket: this.bucket, Key: key }),
-      );
+    return traceResult('storage.get', async () => {
+      try {
+        const response = await this.s3.send(
+          new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+        );
 
-      if (!response.Body) {
+        if (!response.Body) {
+          return err(
+            new AppError(
+              ErrorCode.NotFound,
+              `Object has no body for key ${key}`,
+            ),
+          );
+        }
+
+        const bytes = await response.Body.transformToByteArray();
+        return ok(Buffer.from(bytes));
+      } catch (error) {
+        if (this.isNotFound(error)) {
+          return err(
+            new AppError(ErrorCode.NotFound, `Object not found for key ${key}`),
+          );
+        }
+
+        this.logger.error('Failed to read object');
+
         return err(
-          new AppError(ErrorCode.NotFound, `Object has no body for key ${key}`),
+          new AppError(ErrorCode.InternalServerError, 'Failed to read object'),
         );
       }
-
-      const bytes = await response.Body.transformToByteArray();
-      return ok(Buffer.from(bytes));
-    } catch (error) {
-      if (this.isNotFound(error)) {
-        return err(
-          new AppError(ErrorCode.NotFound, `Object not found for key ${key}`),
-        );
-      }
-
-      this.logger.error(
-        `Failed to read object for key ${key}.`,
-        this.describe(error),
-      );
-
-      return err(
-        new AppError(ErrorCode.InternalServerError, 'Failed to read object'),
-      );
-    }
+    });
   }
 
   async deleteObject(key: string): Promise<Result<void, AppError>> {
-    try {
-      await this.s3.send(
-        new DeleteObjectCommand({ Bucket: this.bucket, Key: key }),
-      );
+    return traceResult('storage.delete', async () => {
+      try {
+        await this.s3.send(
+          new DeleteObjectCommand({ Bucket: this.bucket, Key: key }),
+        );
 
-      return ok(undefined);
-    } catch (error) {
-      this.logger.error(`Failed to delete key ${key}.`, this.describe(error));
+        return ok(undefined);
+      } catch {
+        this.logger.error('Failed to delete object');
 
-      return err(
-        new AppError(ErrorCode.InternalServerError, 'Failed to delete object'),
-      );
-    }
+        return err(
+          new AppError(
+            ErrorCode.InternalServerError,
+            'Failed to delete object',
+          ),
+        );
+      }
+    });
   }
 
   /**
@@ -231,12 +236,6 @@ export class FileStorage implements IFileStorage, OnModuleDestroy {
       name === 'NoSuchKey' ||
       $metadata?.httpStatusCode === 404
     );
-  }
-
-  private describe(error: unknown): string {
-    return error instanceof Error
-      ? (error.stack ?? error.message)
-      : String(error);
   }
 
   private requireEnv(key: string): string {

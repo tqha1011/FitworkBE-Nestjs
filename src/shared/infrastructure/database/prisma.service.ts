@@ -17,7 +17,7 @@ export class PrismaService
     const adapter = new PrismaPg(pool);
     super({
       adapter,
-      log: ['query', 'info', 'error', 'warn'],
+      log: ['error', 'warn'],
     });
   }
   async onModuleInit() {
