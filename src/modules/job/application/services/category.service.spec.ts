@@ -88,4 +88,13 @@ describe('CategoryService', () => {
     expect(result._unsafeUnwrapErr().code).toBe(ErrorCode.InternalServerError);
     expect(cache.set).not.toHaveBeenCalled();
   });
+
+  it('keeps the repository cause without exposing dependency details', async () => {
+    const failure = new Error('private dependency payload');
+    repository.getAllCategories.mockResolvedValue(err(failure));
+    const error = (await service.getAllCategoriesAsync())._unsafeUnwrapErr();
+    expect(error.cause).toBe(failure);
+    expect(error.code).toBe(ErrorCode.InternalServerError);
+    expect(error.message).not.toContain('private dependency payload');
+  });
 });

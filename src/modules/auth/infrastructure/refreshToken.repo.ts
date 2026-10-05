@@ -26,7 +26,7 @@ export class RefreshTokenRepository implements IRefreshTokenRepository {
       });
       return ok(created);
     } catch (error) {
-      return err(new Error(`Failed to add refresh token. ${error}`));
+      return err(new Error('Failed to add refresh token', { cause: error }));
     }
   }
 
@@ -45,7 +45,9 @@ export class RefreshTokenRepository implements IRefreshTokenRepository {
       });
       return ok(record);
     } catch (error) {
-      return err(new Error(`Failed to get refresh token by hash. ${error}`));
+      return err(
+        new Error('Failed to get refresh token by hash', { cause: error }),
+      );
     }
   }
 
@@ -57,7 +59,7 @@ export class RefreshTokenRepository implements IRefreshTokenRepository {
       });
       return ok(undefined);
     } catch (error) {
-      return err(new Error(`Failed to revoke refresh token. ${error}`));
+      return err(new Error('Failed to revoke refresh token', { cause: error }));
     }
   }
 
@@ -72,7 +74,7 @@ export class RefreshTokenRepository implements IRefreshTokenRepository {
       return ok(undefined);
     } catch (error) {
       return err(
-        new Error(`Failed to revoke refresh tokens for user. ${error}`),
+        new Error('Failed to revoke refresh tokens for user', { cause: error }),
       );
     }
   }

@@ -36,7 +36,11 @@ export class ArrangementService implements IArrangementService {
     const result = await this.arrangementRepository.getAllArrangements();
     if (result.isErr()) {
       return err(
-        new AppError(ErrorCode.InternalServerError, result.error.message),
+        new AppError(
+          ErrorCode.InternalServerError,
+          'Failed to get all arrangements',
+          { cause: result.error },
+        ),
       );
     }
 

@@ -206,9 +206,11 @@ describe('ApplicantEvaluationProcessingService', () => {
       }),
     );
 
-    expect(
-      (await service.process('evaluation-id', 0, 3))._unsafeUnwrapErr().message,
-    ).toBe('Invalid evaluation V2 response');
+    const error = (
+      await service.process('evaluation-id', 0, 3)
+    )._unsafeUnwrapErr();
+    expect(error.message).toBe('Invalid evaluation V2 response');
+    expect(error.cause).toBeInstanceOf(Error);
     expect(repository.markCompleted).not.toHaveBeenCalled();
     expect(repository.markPending).toHaveBeenCalledWith(
       'evaluation-id',
@@ -300,5 +302,19 @@ describe('ApplicantEvaluationProcessingService', () => {
     const result = await service.process('evaluation-id', 0, 3);
 
     expect(result.isOk()).toBe(true);
+  });
+
+  it('preserves non-Error failures while retaining background error messages', async () => {
+    const failure = 'private LLM failure';
+    llm.evaluate.mockResolvedValue(err(failure));
+    const error = (
+      await service.process('evaluation-id', 0, 3)
+    )._unsafeUnwrapErr();
+    expect(error.cause).toBe(failure);
+    expect(error.message).toBe(failure);
+    expect(repository.markPending).toHaveBeenCalledWith(
+      'evaluation-id',
+      failure,
+    );
   });
 });

@@ -68,7 +68,9 @@ export class ResumeService implements IResumeService {
     const deleteResult = await this.resumeRepo.deleteResume(resumePublicId);
     if (deleteResult.isErr()) {
       return err(
-        new AppError(ErrorCode.InternalServerError, 'Failed to delete resume'),
+        new AppError(ErrorCode.InternalServerError, 'Failed to delete resume', {
+          cause: deleteResult.error,
+        }),
       );
     }
     return ok(undefined);
@@ -139,7 +141,9 @@ export class ResumeService implements IResumeService {
     });
     if (updatedResumeResult.isErr()) {
       return err(
-        new AppError(ErrorCode.BadRequest, updatedResumeResult.error.message),
+        new AppError(ErrorCode.BadRequest, updatedResumeResult.error.message, {
+          cause: updatedResumeResult.error,
+        }),
       );
     }
 
@@ -156,7 +160,9 @@ export class ResumeService implements IResumeService {
     );
     if (updateResult.isErr()) {
       return err(
-        new AppError(ErrorCode.InternalServerError, 'Failed to update resume'),
+        new AppError(ErrorCode.InternalServerError, 'Failed to update resume', {
+          cause: updateResult.error,
+        }),
       );
     }
 
@@ -227,7 +233,9 @@ export class ResumeService implements IResumeService {
     });
     if (resumeResult.isErr()) {
       return err(
-        new AppError(ErrorCode.BadRequest, resumeResult.error.message),
+        new AppError(ErrorCode.BadRequest, resumeResult.error.message, {
+          cause: resumeResult.error,
+        }),
       );
     }
 
@@ -244,7 +252,9 @@ export class ResumeService implements IResumeService {
     );
     if (addResult.isErr()) {
       return err(
-        new AppError(ErrorCode.InternalServerError, 'Failed to create resume'),
+        new AppError(ErrorCode.InternalServerError, 'Failed to create resume', {
+          cause: addResult.error,
+        }),
       );
     }
 
@@ -265,7 +275,8 @@ export class ResumeService implements IResumeService {
       return err(
         new AppError(
           ErrorCode.InternalServerError,
-          `Failed to get resume storage data: ${resumeStorageData.error}`,
+          'Failed to get resume storage data',
+          { cause: resumeStorageData.error },
         ),
       );
     }
@@ -302,7 +313,8 @@ export class ResumeService implements IResumeService {
         return err(
           new AppError(
             ErrorCode.InternalServerError,
-            `Failed to check user exists: ${userExists.error}`,
+            'Failed to check user exists',
+            { cause: userExists.error },
           ),
         );
       }
@@ -336,7 +348,8 @@ export class ResumeService implements IResumeService {
       return err(
         new AppError(
           ErrorCode.InternalServerError,
-          `Failed to get upload URL: ${error}`,
+          'Failed to get upload URL',
+          { cause: error },
         ),
       );
     }
@@ -354,7 +367,9 @@ export class ResumeService implements IResumeService {
       await this.userRepository.resolvePublicIdToId(userPublicId);
     if (userIdResult.isErr()) {
       return err(
-        new AppError(ErrorCode.InternalServerError, 'Failed to resolve user'),
+        new AppError(ErrorCode.InternalServerError, 'Failed to resolve user', {
+          cause: userIdResult.error,
+        }),
       );
     }
     if (!userIdResult.value) {
@@ -378,7 +393,9 @@ export class ResumeService implements IResumeService {
     }
     if (resumeResult.isErr()) {
       return err(
-        new AppError(ErrorCode.InternalServerError, 'Failed to get resume'),
+        new AppError(ErrorCode.InternalServerError, 'Failed to get resume', {
+          cause: resumeResult.error,
+        }),
       );
     }
     if (!resumeResult.value) {
@@ -444,6 +461,7 @@ export class ResumeService implements IResumeService {
         new AppError(
           ErrorCode.InternalServerError,
           'Failed to enqueue resume ingestion',
+          { cause: error },
         ),
       );
     }

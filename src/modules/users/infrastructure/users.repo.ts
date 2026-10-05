@@ -24,7 +24,9 @@ export class UsersRepository implements IUserRepository {
       });
       return ok(!!user);
     } catch (error) {
-      return err(new Error(`Failed to check user public id exists. ${error}`));
+      return err(
+        new Error('Failed to check user public id exists', { cause: error }),
+      );
     }
   }
   async resolvePublicIdToId(
@@ -42,7 +44,9 @@ export class UsersRepository implements IUserRepository {
       }
       return ok(user.id);
     } catch (error) {
-      return err(new Error(`Failed to resolve public id to id. ${error}`));
+      return err(
+        new Error('Failed to resolve public id to id', { cause: error }),
+      );
     }
   }
   async getUserRole(
@@ -60,7 +64,7 @@ export class UsersRepository implements IUserRepository {
       }
       return ok(mapRoleToDomain(user.role));
     } catch (error) {
-      return err(new Error(`Failed to get user role. ${error}`));
+      return err(new Error('Failed to get user role', { cause: error }));
     }
   }
 
@@ -89,7 +93,7 @@ export class UsersRepository implements IUserRepository {
       };
       return ok(response);
     } catch (error) {
-      return err(new Error(`Failed to find user by email. ${error}`));
+      return err(new Error('Failed to find user by email', { cause: error }));
     }
   }
 
@@ -118,7 +122,7 @@ export class UsersRepository implements IUserRepository {
       };
       return ok(response);
     } catch (error) {
-      return err(new Error(`Failed to find user by id. ${error}`));
+      return err(new Error('Failed to find user by id', { cause: error }));
     }
   }
 
@@ -132,7 +136,7 @@ export class UsersRepository implements IUserRepository {
       });
       return ok(created);
     } catch (error) {
-      return err(new Error(`Failed to create user. ${error}`));
+      return err(new Error('Failed to create user', { cause: error }));
     }
   }
 }

@@ -1,3 +1,6 @@
+import { Job } from '../domain/entities/job.entity';
+import { CommonCurrency } from 'src/shared/domain/enum';
+import { CommonJobStatus } from 'src/shared/domain/enum';
 import { PrismaService } from 'src/shared/infrastructure/database/prisma.service';
 import { JobRepository } from './job.repo';
 import { ok } from 'neverthrow';
@@ -17,6 +20,21 @@ describe('JobRepository getJobsAppliedAsync', () => {
       },
     };
     repository = new JobRepository(prismaService as unknown as PrismaService);
+  });
+
+  it('keeps the original search error without embedding its sensitive message', async () => {
+    const failure = Object.assign(new Error('private query payload'), {
+      code: 'P2021',
+    });
+    const repo = new JobRepository({
+      job: {
+        findMany: jest.fn().mockRejectedValue(failure),
+        count: jest.fn().mockResolvedValue(0),
+      },
+    } as unknown as PrismaService);
+    const result = await repo.getListJobs(1, 20);
+    expect(result._unsafeUnwrapErr().cause).toBe(failure);
+    expect(result._unsafeUnwrapErr().message).not.toContain('private');
   });
 
   describe('authorizeJobOwner', () => {
@@ -135,5 +153,100 @@ describe('JobRepository getJobsAppliedAsync', () => {
         'Failed to get job data for snapshot',
       );
     });
+  });
+});
+
+describe('JobRepository error causes', () => {
+  const operations: Array<
+    [
+      string,
+      (
+        repository: JobRepository,
+      ) => Promise<import('neverthrow').Result<unknown, Error>>,
+    ]
+  > = [
+    [
+      'authorizeJobOwner',
+      (repository) => repository.authorizeJobOwner('user', 'job'),
+    ],
+    [
+      'getJobDataForSnapshot',
+      (repository) => repository.getJobDataForSnapshot('job'),
+    ],
+    ['getJobByPublicId', (repository) => repository.getJobByPublicId('job')],
+    [
+      'updateJob',
+      (repository) =>
+        repository.updateJob(
+          Job.create({
+            title: 'Engineer',
+            description: 'Build APIs',
+            requirements: 'TypeScript',
+            location: 'Remote',
+            status: CommonJobStatus.OPEN,
+            budget: 100,
+            currency: CommonCurrency.USD,
+            postedBy: 1,
+            categoryId: 1,
+            arrangementId: 1,
+            dueAt: new Date(Date.now() + 86400000),
+          })._unsafeUnwrap(),
+        ),
+    ],
+    ['getJobDetails', (repository) => repository.getJobDetails('job')],
+    ['getListJobs', (repository) => repository.getListJobs(1, 20)],
+    [
+      'addJob',
+      (repository) =>
+        repository.addJob(
+          Job.create({
+            title: 'Engineer',
+            description: 'Build APIs',
+            requirements: 'TypeScript',
+            location: 'Remote',
+            status: CommonJobStatus.OPEN,
+            budget: 100,
+            currency: CommonCurrency.USD,
+            postedBy: 1,
+            categoryId: 1,
+            arrangementId: 1,
+            dueAt: new Date(Date.now() + 86400000),
+          })._unsafeUnwrap(),
+          [1],
+        ),
+    ],
+    [
+      'getJobIdByPublicId',
+      (repository) => repository.getJobIdByPublicId('job'),
+    ],
+  ];
+
+  describe.each([
+    ['Error', new Error('private dependency payload')],
+    ['non-Error', { message: 'private dependency payload', code: 'PRIVATE' }],
+  ])('%s failures', (_kind, failure) => {
+    it.each(operations)(
+      'preserves the cause and hides dependency details in %s',
+      async (_method, invoke) => {
+        const delegate = {
+          findUnique: jest.fn().mockRejectedValue(failure),
+          findFirst: jest.fn().mockRejectedValue(failure),
+          findMany: jest.fn().mockRejectedValue(failure),
+          count: jest.fn().mockRejectedValue(failure),
+          create: jest.fn().mockRejectedValue(failure),
+          update: jest.fn().mockRejectedValue(failure),
+          updateMany: jest.fn().mockRejectedValue(failure),
+        };
+        const repository = new JobRepository({
+          job: delegate,
+          resume: delegate,
+          $transaction: jest.fn().mockRejectedValue(failure),
+        } as unknown as PrismaService);
+        const error = (await invoke(repository))._unsafeUnwrapErr();
+        expect(error.cause).toBe(failure);
+        expect(error.message).not.toContain('private dependency payload');
+        expect(error.message).not.toContain('[object Object]');
+      },
+    );
   });
 });

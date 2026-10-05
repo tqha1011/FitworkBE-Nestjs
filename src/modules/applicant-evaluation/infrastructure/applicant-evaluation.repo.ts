@@ -80,7 +80,9 @@ export class ApplicantEvaluationRepository implements IApplicantEvaluationReposi
       });
     } catch (error) {
       return err(
-        new Error(`Failed to get applicant evaluation for job owner: ${error}`),
+        new Error('Failed to get applicant evaluation for job owner', {
+          cause: error,
+        }),
       );
     }
   }
@@ -111,7 +113,9 @@ export class ApplicantEvaluationRepository implements IApplicantEvaluationReposi
       });
     } catch (error) {
       return err(
-        new Error(`Failed to get applicant evaluation detail: ${error}`),
+        new Error('Failed to get applicant evaluation detail', {
+          cause: error,
+        }),
       );
     }
   }
@@ -147,9 +151,9 @@ export class ApplicantEvaluationRepository implements IApplicantEvaluationReposi
       });
     } catch (error) {
       return err(
-        new Error(
-          `Failed to get applicant evaluation realtime state: ${String(error)}`,
-        ),
+        new Error('Failed to get applicant evaluation realtime state', {
+          cause: error,
+        }),
       );
     }
   }
@@ -234,7 +238,9 @@ export class ApplicantEvaluationRepository implements IApplicantEvaluationReposi
 
       return ok(prepared);
     } catch (error) {
-      return err(new Error(`Failed to prepare applicant evaluation: ${error}`));
+      return err(
+        new Error('Failed to prepare applicant evaluation', { cause: error }),
+      );
     }
   }
 
@@ -391,7 +397,7 @@ export class ApplicantEvaluationRepository implements IApplicantEvaluationReposi
       return ok(processingData);
     } catch (error) {
       return err(
-        new Error(`Failed to claim applicant evaluation: ${String(error)}`),
+        new Error('Failed to claim applicant evaluation', { cause: error }),
       );
     }
   }
@@ -417,7 +423,7 @@ export class ApplicantEvaluationRepository implements IApplicantEvaluationReposi
       return ok(updated.count > 0);
     } catch (error) {
       return err(
-        new Error(`Failed to complete applicant evaluation: ${String(error)}`),
+        new Error('Failed to complete applicant evaluation', { cause: error }),
       );
     }
   }
@@ -446,9 +452,9 @@ export class ApplicantEvaluationRepository implements IApplicantEvaluationReposi
       return ok(updated.count > 0);
     } catch (error) {
       return err(
-        new Error(
-          `Failed to release applicant evaluation for retry: ${String(error)}`,
-        ),
+        new Error('Failed to release applicant evaluation for retry', {
+          cause: error,
+        }),
       );
     }
   }
@@ -477,7 +483,7 @@ export class ApplicantEvaluationRepository implements IApplicantEvaluationReposi
       return ok(updated.count > 0);
     } catch (error) {
       return err(
-        new Error(`Failed to fail applicant evaluation: ${String(error)}`),
+        new Error('Failed to fail applicant evaluation', { cause: error }),
       );
     }
   }

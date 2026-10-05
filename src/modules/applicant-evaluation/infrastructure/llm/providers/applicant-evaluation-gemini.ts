@@ -122,7 +122,9 @@ export class GeminiEvaluateApplicant implements IApplicantEvaluationLlm {
           return err(
             error instanceof Error
               ? error
-              : new Error(`Gemini evaluation failed: ${String(error)}`),
+              : new Error(`Gemini evaluation failed: ${String(error)}`, {
+                  cause: error,
+                }),
           );
         } finally {
           this.telemetry.complete(

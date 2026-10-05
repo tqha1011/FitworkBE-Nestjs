@@ -99,6 +99,8 @@ services:
     volumes:
       - grafana_data:/var/lib/grafana
       - ./src/monitoring/grafana/provisioning/datasource:/etc/grafana/provisioning/datasources:ro
+      - ./src/monitoring/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./src/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
     environment:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
@@ -106,13 +108,27 @@ services:
       prometheus:
         condition: service_started
 
+  monitoring-volume-init:
+    image: redis:8.6.1-alpine
+    user: '0:0'
+    network_mode: none
+    entrypoint: ['/bin/sh', '-c']
+    command:
+      - >-
+        mkdir -p /prometheus-data /loki-data &&
+        chown -R 65534:65534 /prometheus-data &&
+        chown -R 10001:10001 /loki-data
+    volumes:
+      - prometheus_data:/prometheus-data
+      - loki_data:/loki-data
+
   prometheus:
     image: prom/prometheus:latest
     container_name: prometheus-fitwork-nestjs
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/var/lib/prometheus'
-      - '--web.enabled-remote-write-receiver'
+      - '--web.enable-remote-write-receiver'
     ports:
       - '127.0.0.1:${PROMETHEUS_PORT:-9090}:9090'
     networks:
@@ -123,6 +139,8 @@ services:
       - ./src/monitoring/prometheus/alert.rule.yml:/etc/prometheus/alert.rule.yml:ro
       - prometheus_data:/var/lib/prometheus
     depends_on:
+      monitoring-volume-init:
+        condition: service_completed_successfully
       redis-exporter:
         condition: service_started
       otel-collector:
@@ -170,6 +188,9 @@ services:
     volumes:
       - ./src/monitoring/loki/config.yml:/etc/loki/config.yml:ro
       - loki_data:/var/lib/loki/data:rw
+    depends_on:
+      monitoring-volume-init:
+        condition: service_completed_successfully
 
   jaeger:
     image: jaegertracing/all-in-one:latest

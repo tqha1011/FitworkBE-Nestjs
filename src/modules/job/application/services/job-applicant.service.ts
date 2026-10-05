@@ -33,7 +33,8 @@ export class JobApplicantService implements IJobApplicantService {
       return err(
         new AppError(
           ErrorCode.InternalServerError,
-          actorIdResult.error.message,
+          'Failed to resolve applicant status actor',
+          { cause: actorIdResult.error },
         ),
       );
     if (!actorIdResult.value)
@@ -42,7 +43,8 @@ export class JobApplicantService implements IJobApplicantService {
       return err(
         new AppError(
           ErrorCode.InternalServerError,
-          contextResult.error.message,
+          'Failed to get job applicant status context',
+          { cause: contextResult.error },
         ),
       );
     if (!contextResult.value)
@@ -81,7 +83,11 @@ export class JobApplicantService implements IJobApplicantService {
         );
       if (result.isErr())
         return err(
-          new AppError(ErrorCode.InternalServerError, result.error.message),
+          new AppError(
+            ErrorCode.InternalServerError,
+            'Failed to accept applicant and reject others',
+            { cause: result.error },
+          ),
         );
       if (!result.value)
         return err(
@@ -102,7 +108,8 @@ export class JobApplicantService implements IJobApplicantService {
       return err(
         new AppError(
           ErrorCode.InternalServerError,
-          transitionResult.error.message,
+          'Failed to transition job applicant status',
+          { cause: transitionResult.error },
         ),
       );
     if (!transitionResult.value)
@@ -127,19 +134,27 @@ export class JobApplicantService implements IJobApplicantService {
     ]);
     if (userId.isErr())
       return err(
-        new AppError(ErrorCode.InternalServerError, userId.error.message),
+        new AppError(
+          ErrorCode.InternalServerError,
+          'Failed to resolve applicant',
+          { cause: userId.error },
+        ),
       );
     if (!userId.value)
       return err(new AppError(ErrorCode.NotFound, 'User not found'));
     if (jobId.isErr())
       return err(
-        new AppError(ErrorCode.InternalServerError, jobId.error.message),
+        new AppError(ErrorCode.InternalServerError, 'Failed to resolve job', {
+          cause: jobId.error,
+        }),
       );
     if (!jobId.value)
       return err(new AppError(ErrorCode.NotFound, 'Job not found'));
     if (resume.isErr())
       return err(
-        new AppError(ErrorCode.InternalServerError, resume.error.message),
+        new AppError(ErrorCode.InternalServerError, 'Failed to get resume', {
+          cause: resume.error,
+        }),
       );
     if (!resume.value)
       return err(new AppError(ErrorCode.NotFound, 'Resume not found'));
@@ -159,7 +174,9 @@ export class JobApplicantService implements IJobApplicantService {
     });
     if (jobApplicantResult.isErr())
       return err(
-        new AppError(ErrorCode.BadRequest, jobApplicantResult.error.message),
+        new AppError(ErrorCode.BadRequest, jobApplicantResult.error.message, {
+          cause: jobApplicantResult.error,
+        }),
       );
 
     const result = await this.jobApplicantRepository.addJobApplicant(
@@ -167,7 +184,11 @@ export class JobApplicantService implements IJobApplicantService {
     );
     if (result.isErr())
       return err(
-        new AppError(ErrorCode.InternalServerError, result.error.message),
+        new AppError(
+          ErrorCode.InternalServerError,
+          'Failed to add job applicant',
+          { cause: result.error },
+        ),
       );
     return ok(undefined);
   }

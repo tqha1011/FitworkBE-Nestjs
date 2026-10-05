@@ -124,10 +124,10 @@ flowchart LR
 - **Collector** accepts OTLP traces, metrics, and logs, applies memory limits and batching, and forwards them to Alloy.
 - **Alloy** sends metrics to Prometheus's remote write receiver, logs to Loki, and traces to Jaeger. It copies the OTEL `service.name` resource attribute onto metrics as the Prometheus label `service_name`.
 - **Prometheus** also scrapes itself, Redis exporter, Loki, and Alloy's HTTP metrics endpoint on port `4201`. Every 15 seconds, it evaluates the rules in `src/monitoring/prometheus/alert.rule.yml` and forwards alerts to `alertmanager:9093`.
-- **Grafana** provisions Prometheus and Loki data sources automatically. Open the Jaeger UI separately to inspect traces.
+- **Grafana** provisions Prometheus, Loki, and Jaeger data sources automatically, plus the `FitWork - Metrics` and `FitWork - Logs` dashboards in the `FitWork` folder. Jaeger traces can be inspected in Grafana Explore or the separate Jaeger UI.
 - **Alertmanager** groups and deduplicates alerts, supports silences, and sends firing and resolved email notifications. It runs when the Compose `alerting` profile is enabled. Loki's ruler also points to Alertmanager, but this repository does not include log alert rules.
 
-**Current API instrumentation:** `src/instrumentation.ts` starts the Node.js OpenTelemetry SDK before NestJS loads. Compose sends automatic instrumentation data to the Collector over OTLP gRPC at port `4317`; local runs leave exporters disabled unless `OTEL_TRACES_EXPORTER`, `OTEL_METRICS_EXPORTER`, or `OTEL_LOGS_EXPORTER` is configured. Business spans, structured application logs, and the `fitwork_*` metrics are still planned. `BackendTelemetryMissing` will fire if the required runtime metric is absent. The backend rules currently match `service_name="fitwork-nestjs-api"`; update those selectors if you change `OTEL_SERVICE_NAME`.
+**Current API instrumentation:** `src/instrumentation.ts` starts the Node.js OpenTelemetry SDK before NestJS loads. Compose sends automatic instrumentation data to the Collector over OTLP gRPC at port `4317`; local runs leave exporters disabled unless `OTEL_TRACES_EXPORTER`, `OTEL_METRICS_EXPORTER`, or `OTEL_LOGS_EXPORTER` is configured. Structured application logs and the `fitwork_*` metrics cover HTTP requests, queue jobs, Gemini usage, cache accesses, and dependency errors. `BackendTelemetryMissing` will fire if the required runtime metric is absent. The backend rules currently match `service_name="fitwork-nestjs-api"`; update those selectors if you change `OTEL_SERVICE_NAME`.
 
 ### Monitoring Interfaces
 
@@ -142,6 +142,19 @@ flowchart LR
 | Collector    | `localhost:4317`         | `OTEL_PORT`; OTLP gRPC ingestion, not an HTTP UI.                                                                 |
 
 Grafana uses port `3001` so it can run alongside the API on port `3000`. Prometheus, Loki, Grafana, Alloy, and Alertmanager have named volumes for local state. Configuration files are mounted from `src/monitoring/`.
+
+### FitWork Dashboards
+
+Start or update the monitoring services with `docker compose up -d prometheus loki grafana`. The one-shot `monitoring-volume-init` service prepares the named-volume ownership for the non-root Prometheus and Loki processes without deleting data.
+
+- [FitWork - Metrics](http://localhost:3001/d/fitwork-metrics): request rate, HTTP errors and latency, event loop utilization, queue backlog and outcomes, Gemini latency and tokens, cache accesses, dependency errors, Redis, and scrape health. Set the **Service** filter if you change `OTEL_SERVICE_NAME`; Redis and scrape-health panels are independent of this filter.
+- [FitWork - Logs](http://localhost:3001/d/fitwork-logs): log volume and structured logs. Filter by **Event**, or enter a request ID, trace ID, route, or text in **Search**. Expand log entries to inspect their attributes.
+
+The **Error details** panel shows `http.request.failed` events with a readable error summary. Expand an entry to inspect `error_message`, `error_code` (when available), `error_stack`, and the sanitized `error_causes` chain. Search the same request ID or trace ID to find its `http.request.completed` event. Server failures include up to 20 stack frames; client errors are warnings without stacks. Diagnostic redaction covers known credential and PII formats; avoid putting raw user payloads in error messages. Prisma query dumps and arbitrary thrown objects are excluded from diagnostics. Cause propagation is supported by `AppError`; the job-search repository and service preserve their underlying errors.
+
+Dashboard JSON files live in `src/monitoring/grafana/dashboards/`. Grafana polls them every 30 seconds after startup; edit those files to persist changes. Business panels can show **No data** until the corresponding traffic or jobs occur. Empty error series do not prove the absence of errors; check scrape health and API telemetry as well. Logs use the `event_domain="fitwork"` and `event_name` labels set by Alloy.
+
+The dashboards resolve the provisioned data sources by name (`Prometheus` and `Loki`) through hidden datasource variables. Datasource provisioning preserves existing generated UIDs, so these dashboards also work with a Grafana volume created before explicit UIDs were introduced.
 
 ### Alert Rules
 

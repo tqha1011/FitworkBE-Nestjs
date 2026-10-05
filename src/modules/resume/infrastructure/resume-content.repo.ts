@@ -48,7 +48,7 @@ export class ResumeContentRepository implements IResumeContentRepository {
       });
       return ok(content ? this.toRecord(content) : null);
     } catch (error) {
-      return err(new Error(`Failed to get resume content. ${error}`));
+      return err(new Error('Failed to get resume content', { cause: error }));
     }
   }
 
@@ -79,7 +79,9 @@ export class ResumeContentRepository implements IResumeContentRepository {
       });
       return ok(content ? this.toRecord(content) : null);
     } catch (error) {
-      return err(new Error(`Failed to get current resume content. ${error}`));
+      return err(
+        new Error('Failed to get current resume content', { cause: error }),
+      );
     }
   }
 
@@ -137,7 +139,9 @@ export class ResumeContentRepository implements IResumeContentRepository {
       });
       return ok(content ? this.toRecord(content) : null);
     } catch (error) {
-      return err(new Error(`Failed to update resume content. ${error}`));
+      return err(
+        new Error('Failed to update resume content', { cause: error }),
+      );
     }
   }
 

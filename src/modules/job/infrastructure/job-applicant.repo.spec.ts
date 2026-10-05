@@ -1,3 +1,4 @@
+import { JobApplicant } from '../domain/entities/job-applicant.entity';
 import { JobApplicantStatus } from 'generated/prisma/enums';
 import { PrismaService } from 'src/shared/infrastructure/database/prisma.service';
 import { CommonJobApplicantStatus } from 'src/shared/domain/enum';
@@ -211,6 +212,89 @@ describe('JobApplicantRepository', () => {
     expect(result.isErr()).toBe(true);
     expect(result._unsafeUnwrapErr().message).toContain(
       'Failed to get jobs applied',
+    );
+  });
+});
+
+describe('JobApplicantRepository error causes', () => {
+  const operations: Array<
+    [
+      string,
+      (
+        repository: JobApplicantRepository,
+      ) => Promise<import('neverthrow').Result<unknown, Error>>,
+    ]
+  > = [
+    [
+      'acceptApplicantAndRejectOthers',
+      (repository) =>
+        repository.acceptApplicantAndRejectOthers(
+          'application',
+          1,
+          CommonJobApplicantStatus.PENDING,
+          1,
+        ),
+    ],
+    [
+      'getStatusContext',
+      (repository) => repository.getStatusContext('application'),
+    ],
+    [
+      'transitionStatus',
+      (repository) =>
+        repository.transitionStatus(
+          'application',
+          1,
+          CommonJobApplicantStatus.PENDING,
+          CommonJobApplicantStatus.REJECTED,
+        ),
+    ],
+    [
+      'getJobsAppliedAsync',
+      (repository) => repository.getJobsAppliedAsync(1, 1, 20),
+    ],
+    [
+      'addJobApplicant',
+      (repository) =>
+        repository.addJobApplicant(
+          JobApplicant.create({
+            jobId: 1,
+            applicantId: 2,
+            resumeId: 3,
+            coverLetter: 'Hello',
+            proposedRate: 100,
+            estimatedDay: 1,
+          })._unsafeUnwrap(),
+        ),
+    ],
+  ];
+
+  describe.each([
+    ['Error', new Error('private dependency payload')],
+    ['non-Error', { message: 'private dependency payload', code: 'PRIVATE' }],
+  ])('%s failures', (_kind, failure) => {
+    it.each(operations)(
+      'preserves the cause and hides dependency details in %s',
+      async (_method, invoke) => {
+        const delegate = {
+          findUnique: jest.fn().mockRejectedValue(failure),
+          findFirst: jest.fn().mockRejectedValue(failure),
+          findMany: jest.fn().mockRejectedValue(failure),
+          count: jest.fn().mockRejectedValue(failure),
+          create: jest.fn().mockRejectedValue(failure),
+          update: jest.fn().mockRejectedValue(failure),
+          updateMany: jest.fn().mockRejectedValue(failure),
+        };
+        const repository = new JobApplicantRepository({
+          jobApplicant: delegate,
+          resume: delegate,
+          $transaction: jest.fn().mockRejectedValue(failure),
+        } as unknown as PrismaService);
+        const error = (await invoke(repository))._unsafeUnwrapErr();
+        expect(error.cause).toBe(failure);
+        expect(error.message).not.toContain('private dependency payload');
+        expect(error.message).not.toContain('[object Object]');
+      },
     );
   });
 });

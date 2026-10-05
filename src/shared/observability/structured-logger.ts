@@ -1,5 +1,8 @@
 import { Injectable, LoggerService } from '@nestjs/common';
 import { logs, SeverityNumber } from '@opentelemetry/api-logs';
+import { context, trace } from '@opentelemetry/api';
+import { errorDiagnostics } from './error-diagnostics';
+import { requestContext } from './request-context';
 
 type HttpRecord = {
   requestId: string;
@@ -20,10 +23,17 @@ export class StructuredLogger implements LoggerService {
     this.write('app.log', SeverityNumber.INFO, {});
   }
 
-  error(_message: unknown, _trace?: unknown): void {
-    void _message;
-    void _trace;
-    this.write('app.error', SeverityNumber.ERROR, {});
+  error(message: unknown, stack?: unknown): void {
+    if (
+      typeof message === 'string' &&
+      typeof stack === 'string' &&
+      /^\s*at\s/m.test(stack)
+    ) {
+      const exception = new Error(message);
+      exception.stack = stack;
+      message = exception;
+    }
+    this.write('app.error', SeverityNumber.ERROR, errorDiagnostics(message));
   }
 
   warn(_message: unknown): void {
@@ -68,6 +78,25 @@ export class StructuredLogger implements LoggerService {
     );
   }
 
+  httpFailure(
+    record: Omit<HttpRecord, 'durationMs'> & { exception: unknown },
+  ): void {
+    this.write(
+      'http.request.failed',
+      record.statusCode >= 500 ? SeverityNumber.ERROR : SeverityNumber.WARN,
+      {
+        request_id: record.requestId,
+        trace_id: record.traceId ?? '',
+        span_id: record.spanId ?? '',
+        method: record.method,
+        route_template: record.route,
+        status_code: record.statusCode,
+        status_class: `${Math.floor(record.statusCode / 100)}xx`,
+        ...errorDiagnostics(record.exception, record.statusCode >= 500),
+      },
+    );
+  }
+
   job(record: {
     requestId: string;
     queue: string;
@@ -93,6 +122,17 @@ export class StructuredLogger implements LoggerService {
     severityNumber: SeverityNumber,
     fields: Record<string, string | number>,
   ): void {
+    const stored = requestContext.getStore();
+    const span =
+      trace.getSpan(context.active())?.spanContext() ??
+      (stored?.traceId
+        ? { traceId: stored.traceId, spanId: stored.spanId ?? '' }
+        : undefined);
+    fields = {
+      ...(stored?.requestId ? { request_id: stored.requestId } : {}),
+      ...(span ? { trace_id: span.traceId, span_id: span.spanId } : {}),
+      ...fields,
+    };
     const payload = {
       timestamp: new Date().toISOString(),
       event,

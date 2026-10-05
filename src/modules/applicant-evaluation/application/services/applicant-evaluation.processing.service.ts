@@ -87,10 +87,10 @@ export class ApplicantEvaluationProcessingService implements IApplicantEvaluatio
           output.evidence,
         );
         completion = { evaluationPublicId, ...validated };
-      } catch {
+      } catch (error) {
         return this.handleFailure(
           evaluationPublicId,
-          new Error('Invalid evaluation V2 response'),
+          new Error('Invalid evaluation V2 response', { cause: error }),
           attemptsMade,
           maxAttempts,
         );
@@ -176,6 +176,6 @@ export class ApplicantEvaluationProcessingService implements IApplicantEvaluatio
   }
 
   private toError(cause: unknown): Error {
-    return cause instanceof Error ? cause : new Error(String(cause));
+    return cause instanceof Error ? cause : new Error(String(cause), { cause });
   }
 }

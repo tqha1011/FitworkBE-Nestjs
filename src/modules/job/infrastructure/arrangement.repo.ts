@@ -18,7 +18,7 @@ export class ArrangementRepository implements IArrangementRepository {
       });
       return ok(arrangements);
     } catch (error) {
-      return err(new Error(`Failed to get all arrangements: ${error}`));
+      return err(new Error('Failed to get all arrangements', { cause: error }));
     }
   }
 
@@ -31,7 +31,9 @@ export class ArrangementRepository implements IArrangementRepository {
       });
       return ok(count > 0);
     } catch (error) {
-      return err(new Error(`Failed to check arrangement exists: ${error}`));
+      return err(
+        new Error('Failed to check arrangement exists', { cause: error }),
+      );
     }
   }
 }

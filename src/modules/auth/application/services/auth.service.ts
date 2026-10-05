@@ -108,7 +108,11 @@ export class AuthService implements IAuthService {
     const found = await this.userRepository.findByEmail(email);
     if (found.isErr()) {
       return err(
-        new AppError(ErrorCode.InternalServerError, found.error.message),
+        new AppError(
+          ErrorCode.InternalServerError,
+          'Failed to find user by email',
+          { cause: found.error },
+        ),
       );
     }
 
@@ -125,7 +129,11 @@ export class AuthService implements IAuthService {
     );
     if (verified.isErr()) {
       return err(
-        new AppError(ErrorCode.InternalServerError, verified.error.message),
+        new AppError(
+          ErrorCode.InternalServerError,
+          'Failed to verify password',
+          { cause: verified.error },
+        ),
       );
     }
     if (!verified.value) {
@@ -147,7 +155,11 @@ export class AuthService implements IAuthService {
     const existing = await this.userRepository.findByEmail(data.email);
     if (existing.isErr()) {
       return err(
-        new AppError(ErrorCode.InternalServerError, existing.error.message),
+        new AppError(
+          ErrorCode.InternalServerError,
+          'Failed to check registered email',
+          { cause: existing.error },
+        ),
       );
     }
     if (existing.value) {
@@ -161,7 +173,11 @@ export class AuthService implements IAuthService {
     );
     if (hashed.isErr()) {
       return err(
-        new AppError(ErrorCode.InternalServerError, hashed.error.message),
+        new AppError(
+          ErrorCode.InternalServerError,
+          'Failed to generate password hash',
+          { cause: hashed.error },
+        ),
       );
     }
 
@@ -175,7 +191,9 @@ export class AuthService implements IAuthService {
     });
     if (created.isErr()) {
       return err(
-        new AppError(ErrorCode.InternalServerError, created.error.message),
+        new AppError(ErrorCode.InternalServerError, 'Failed to create user', {
+          cause: created.error,
+        }),
       );
     }
 
@@ -190,7 +208,11 @@ export class AuthService implements IAuthService {
       await this.refreshTokenRepository.getRefreshTokenByHash(tokenHash);
     if (found.isErr()) {
       return err(
-        new AppError(ErrorCode.InternalServerError, found.error.message),
+        new AppError(
+          ErrorCode.InternalServerError,
+          'Failed to get refresh token',
+          { cause: found.error },
+        ),
       );
     }
 
@@ -217,7 +239,9 @@ export class AuthService implements IAuthService {
     const userResult = await this.userRepository.findById(record.userId);
     if (userResult.isErr()) {
       return err(
-        new AppError(ErrorCode.InternalServerError, userResult.error.message),
+        new AppError(ErrorCode.InternalServerError, 'Failed to find user', {
+          cause: userResult.error,
+        }),
       );
     }
     const user = userResult.value;
@@ -230,7 +254,11 @@ export class AuthService implements IAuthService {
     );
     if (revoked.isErr()) {
       return err(
-        new AppError(ErrorCode.InternalServerError, revoked.error.message),
+        new AppError(
+          ErrorCode.InternalServerError,
+          'Failed to revoke refresh token',
+          { cause: revoked.error },
+        ),
       );
     }
 
@@ -243,7 +271,11 @@ export class AuthService implements IAuthService {
       await this.refreshTokenRepository.getRefreshTokenByHash(tokenHash);
     if (found.isErr()) {
       return err(
-        new AppError(ErrorCode.InternalServerError, found.error.message),
+        new AppError(
+          ErrorCode.InternalServerError,
+          'Failed to get refresh token',
+          { cause: found.error },
+        ),
       );
     }
     if (!found.value) {
@@ -255,7 +287,11 @@ export class AuthService implements IAuthService {
     );
     if (revoked.isErr()) {
       return err(
-        new AppError(ErrorCode.InternalServerError, revoked.error.message),
+        new AppError(
+          ErrorCode.InternalServerError,
+          'Failed to revoke refresh token',
+          { cause: revoked.error },
+        ),
       );
     }
     return ok(undefined);
@@ -274,7 +310,11 @@ export class AuthService implements IAuthService {
     );
     if (accessToken.isErr()) {
       return err(
-        new AppError(ErrorCode.InternalServerError, accessToken.error.message),
+        new AppError(
+          ErrorCode.InternalServerError,
+          'Failed to generate access token',
+          { cause: accessToken.error },
+        ),
       );
     }
 
@@ -289,7 +329,11 @@ export class AuthService implements IAuthService {
     });
     if (added.isErr()) {
       return err(
-        new AppError(ErrorCode.InternalServerError, added.error.message),
+        new AppError(
+          ErrorCode.InternalServerError,
+          'Failed to add refresh token',
+          { cause: added.error },
+        ),
       );
     }
 

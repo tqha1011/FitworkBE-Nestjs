@@ -18,7 +18,7 @@ export class CategoryRepository implements ICategoryRepository {
       });
       return ok(categories);
     } catch (error) {
-      return err(new Error(`Failed to get all categories: ${error}`));
+      return err(new Error('Failed to get all categories', { cause: error }));
     }
   }
 
@@ -29,7 +29,9 @@ export class CategoryRepository implements ICategoryRepository {
       });
       return ok(count > 0);
     } catch (error) {
-      return err(new Error(`Failed to check category exists: ${error}`));
+      return err(
+        new Error('Failed to check category exists', { cause: error }),
+      );
     }
   }
 }

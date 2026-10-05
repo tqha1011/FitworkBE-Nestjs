@@ -40,7 +40,7 @@ export class ResumeRepository implements IResumeRepository {
 
       return ok(true);
     } catch (error) {
-      return err(new Error(`Failed to authorize resume. ${error}`));
+      return err(new Error('Failed to authorize resume', { cause: error }));
     }
   }
   async deleteResume(publicId: string): Promise<Result<undefined, Error>> {
@@ -53,7 +53,9 @@ export class ResumeRepository implements IResumeRepository {
       });
       return ok(undefined);
     } catch (error) {
-      return err(new Error(`Failed to delete resume by public id. ${error}`));
+      return err(
+        new Error('Failed to delete resume by public id', { cause: error }),
+      );
     }
   }
   async getResumeByPublicId(
@@ -86,7 +88,9 @@ export class ResumeRepository implements IResumeRepository {
         }),
       );
     } catch (error) {
-      return err(new Error(`Failed to get resume by public id. ${error}`));
+      return err(
+        new Error('Failed to get resume by public id', { cause: error }),
+      );
     }
   }
 
@@ -149,7 +153,9 @@ export class ResumeRepository implements IResumeRepository {
         ingestionStatus: toCommonIngestionStatus(ingestion.status),
       });
     } catch (error) {
-      return err(new Error(`Failed to update resume with content. ${error}`));
+      return err(
+        new Error('Failed to update resume with content', { cause: error }),
+      );
     }
   }
 
@@ -186,7 +192,9 @@ export class ResumeRepository implements IResumeRepository {
         ingestionStatus: toCommonIngestionStatus(ingestion.status),
       });
     } catch (error) {
-      return err(new Error(`Failed to add resume with content. ${error}`));
+      return err(
+        new Error('Failed to add resume with content', { cause: error }),
+      );
     }
   }
 
@@ -236,7 +244,9 @@ export class ResumeRepository implements IResumeRepository {
         fileSize: resume.fileSize,
       });
     } catch (error) {
-      return err(new Error(`Failed to get resume storage data. ${error}`));
+      return err(
+        new Error('Failed to get resume storage data', { cause: error }),
+      );
     }
   }
 
@@ -255,7 +265,9 @@ export class ResumeRepository implements IResumeRepository {
       }
       return ok(resume.id);
     } catch (error) {
-      return err(new Error(`Failed to resolve public id to id. ${error}`));
+      return err(
+        new Error('Failed to resolve public id to id', { cause: error }),
+      );
     }
   }
 }

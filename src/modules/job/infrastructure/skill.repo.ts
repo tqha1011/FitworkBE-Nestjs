@@ -22,7 +22,7 @@ export class SkillRepository implements ISkillRepository {
         })),
       );
     } catch (error) {
-      return err(new Error(`Failed to get all skills: ${error}`));
+      return err(new Error('Failed to get all skills', { cause: error }));
     }
   }
 
@@ -37,7 +37,7 @@ export class SkillRepository implements ISkillRepository {
       });
       return ok(skills.map((skill) => skill.id));
     } catch (error) {
-      return err(new Error(`Failed to validate skill ids: ${error}`));
+      return err(new Error('Failed to validate skill ids', { cause: error }));
     }
   }
 }

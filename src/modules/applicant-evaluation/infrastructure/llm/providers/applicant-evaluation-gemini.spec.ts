@@ -327,4 +327,18 @@ describe('GeminiEvaluateApplicant', () => {
     expect(span.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.ERROR });
     expect(span.end).toHaveBeenCalledTimes(1);
   });
+
+  it('preserves a non-Error request failure and its background message', async () => {
+    const failure = 'Gemini unavailable';
+    mockGenerateContent.mockRejectedValue(failure);
+    const error = (await provider.evaluate(input))._unsafeUnwrapErr();
+    expect(error.cause).toBe(failure);
+    expect(error.message).toBe('Gemini evaluation failed: Gemini unavailable');
+  });
+
+  it('returns an original Error unchanged', async () => {
+    const failure = new Error('Gemini unavailable');
+    mockGenerateContent.mockRejectedValue(failure);
+    expect((await provider.evaluate(input))._unsafeUnwrapErr()).toBe(failure);
+  });
 });

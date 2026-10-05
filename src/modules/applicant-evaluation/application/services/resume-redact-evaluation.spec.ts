@@ -118,4 +118,31 @@ describe('ResumeRedactEvaluation', () => {
       'Completed resume content is unavailable',
     );
   });
+
+  it('preserves the content lookup failure', async () => {
+    const failure = new Error('private resume payload');
+    getByPublicId.mockResolvedValue(err(failure));
+    const error = (
+      await service.redactResumeAsync('content')
+    )._unsafeUnwrapErr();
+    expect(error.cause).toBe(failure);
+    expect(error.message).not.toContain('private resume payload');
+  });
+
+  it('preserves snapshot validation failures without exposing resume text', async () => {
+    getByPublicId.mockResolvedValue(
+      ok({
+        status: CommonResumeIngestionStatus.COMPLETED,
+        extractedText: ' \0\r\n ',
+      }),
+    );
+    const error = (
+      await service.redactResumeAsync('content')
+    )._unsafeUnwrapErr();
+    expect(error.cause).toBeInstanceOf(Error);
+    expect((error.cause as Error).message).toBe(
+      'Resume text is empty after normalization',
+    );
+    expect(error.message).toBe('Failed to create resume evaluation snapshot');
+  });
 });

@@ -78,7 +78,9 @@ export class JobApplicantRepository
     } catch (error) {
       if (error === optimisticLockConflict) return ok(false);
       return err(
-        new Error(`Failed to accept applicant and reject others: ${error}`),
+        new Error('Failed to accept applicant and reject others', {
+          cause: error,
+        }),
       );
     }
   }
@@ -120,7 +122,9 @@ export class JobApplicantRepository
       });
     } catch (error) {
       return err(
-        new Error(`Failed to get job applicant status context: ${error}`),
+        new Error('Failed to get job applicant status context', {
+          cause: error,
+        }),
       );
     }
   }
@@ -144,7 +148,9 @@ export class JobApplicantRepository
       return ok(result.count === 1);
     } catch (error) {
       return err(
-        new Error(`Failed to transition job applicant status: ${error}`),
+        new Error('Failed to transition job applicant status', {
+          cause: error,
+        }),
       );
     }
   }
@@ -196,7 +202,7 @@ export class JobApplicantRepository
 
       return ok(new PageResult(items, totalItems, pageNumber, pageSize));
     } catch (error) {
-      return err(new Error(`Failed to get jobs applied: ${error}`));
+      return err(new Error('Failed to get jobs applied', { cause: error }));
     }
   }
 
@@ -220,7 +226,7 @@ export class JobApplicantRepository
       });
       return ok(undefined);
     } catch (error) {
-      return err(new Error(`Failed to add job applicant ${error}`));
+      return err(new Error('Failed to add job applicant', { cause: error }));
     }
   }
 }
