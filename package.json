@@ -20,7 +20,9 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "prepare": "husky",
     "scaffold": "tsx scripts/scaffold-cli.ts",
-    "doctor": "tsx scripts/doctor-cli.ts"
+    "doctor": "tsx scripts/doctor-cli.ts",
+    "seed": "prisma db seed",
+    "test:seed": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config test/jest-seed.json --runInBand"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1133.0",

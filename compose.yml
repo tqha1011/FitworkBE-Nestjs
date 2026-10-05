@@ -1,4 +1,4 @@
-name: smart-portal
+name: fitwork-nestjs
 
 services:
   fitwork-nestjs-api:
@@ -81,7 +81,7 @@ services:
 
   redis-exporter:
     image: oliver006/redis_exporter:v1.41.0
-    container_name: redis-exporter
+    container_name: fitwork-redis-exporter
     ports:
       - '9121:9121'
     networks:
@@ -173,7 +173,7 @@ services:
 
   jaeger:
     image: jaegertracing/all-in-one:latest
-    container_name: interviewiq-jaeger
+    container_name: fitwork-jaeger
     ports:
       - '127.0.0.1:${JAEGER_PORT:-16686}:16686'
     networks:

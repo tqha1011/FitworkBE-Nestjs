@@ -271,6 +271,56 @@ The generated client lives in `generated/prisma` and is excluded from Git. Run g
 
 The API defaults to `http://localhost:3000`, with Swagger at `http://localhost:3000/docs`. Set `PORT` to change the API port. Local HTTP and WebSocket CORS allow `http://localhost:5173` and `http://localhost:3000`.
 
+### Demo Seed
+
+After generating the client and initializing your local database, run:
+
+```bash
+npm run seed
+# Optional: applies only to newly created accounts
+SEED_PASSWORD='YourDemoPassword@123' npm run seed
+```
+
+The seed loads `.env` and connects using `DIRECT_URL` when nonempty, otherwise `DATABASE_URL`. It requires only PostgreSQL; it does not contact storage, Redis, or Gemini. It creates 10 company accounts/profiles, 50 applicant accounts/profiles, 10 categories, 30 skills, 3 arrangements, 60 jobs (50 open and 10 closed), 50 resumes with completed parsed content, and 150 pending applications. Each applicant applies to three open jobs with high, partial, and low skill overlap. Names and locations are Vietnamese; job and resume content is English.
+
+Run it again to create only missing records. Existing text, passwords, statuses, relations, and AI results are preserved. Existing jobs retain their skill relations, including skills you removed. Conflicting emails, fixture UUIDs, owners, or compound identities stop the seed with an error; earlier transaction groups may already have committed. Open-job deadlines are 90 days after their first creation and are preserved on reruns. The seed prints created/existing counts and a sample applicant, company, job UUID, and resume UUID.
+
+Demo logins use password `FitworkDemo@123` unless you set `SEED_PASSWORD` before creating them:
+
+- Companies: `company01@seed.fitwork.test` through `company10@seed.fitwork.test`.
+- Applicants: `applicant01@seed.fitwork.test` through `applicant50@seed.fitwork.test`.
+
+Log in as the sample applicant at `POST /api/auth/login`:
+
+```json
+{
+  "email": "applicant01@seed.fitwork.test",
+  "password": "FitworkDemo@123"
+}
+```
+
+Use the returned access token as `Authorization: Bearer <accessToken>`, then call `POST /api/applicant-evaluation`:
+
+```json
+{
+  "jobPublicId": "a4578085-54c7-5dab-90a2-0a3e45937aed",
+  "resumePublicId": "7867f344-036c-58a1-92f9-296c1385357d"
+}
+```
+
+These stable IDs belong to applicant 01's high-overlap application and a job owned by `company01@seed.fitwork.test`. Browse `GET /api/job` and view applications at `GET /api/job/applied`. The seed creates no `ApplicantEvaluation` or `RefreshToken`; login and evaluation API calls create them. To process AI evaluations, run the API with its BullMQ workers, Redis, and valid `LLM_EVALUATION_KEY` / `LLM_EVALUATION_MODEL` Gemini settings.
+
+**Demo CVs are simulated parsed data, with no downloadable files.** Their storage paths and PDF metadata are placeholders; `fileSize` measures the fixture text bytes. `ResumeContent.extractedText` contains the synthetic CV, with parser version `seed-text-v1`, a SHA-256 content hash, and metadata marking it as simulated. Evaluation uses this database text without downloading a file.
+
+To run the seed integration test, initialize a separate, empty PostgreSQL database with the schema and pass its URL explicitly:
+
+```bash
+npx prisma db push --url "$SEED_TEST_DATABASE_URL"
+npm run test:seed
+```
+
+Set `SEED_TEST_DATABASE_URL` to that disposable database in your shell before these commands. The test checks ownership, credentials, currency conversion, snapshots/hashes, reruns, preservation of edits and AI records, identity conflicts, and evaluation preparation through real repositories with a fake queue. It never calls the LLM or clears existing data, but it leaves deliberately edited test records behind. Without the variable, the suite is skipped.
+
 ## Project Structure
 
 ```text
@@ -291,6 +341,8 @@ src/
 prisma/
   schema.prisma             # Prisma generator and datasource
   models/                   # Feature models and enums
+  seed.ts                   # Demo seed entrypoint
+  seed/                     # Fixtures and create-only database logic
 scripts/                    # Environment doctor and module scaffolding CLIs
 test/                       # E2e tests and configuration
 ```
@@ -303,6 +355,8 @@ Each feature follows the `api/`, `application/`, `domain/`, and `infrastructure/
 | --------------------------------------- | ------------------------------------------------ |
 | `npm run start:dev`                     | Start the API in watch mode.                     |
 | `npm run build`                         | Compile the application.                         |
+| `npm run seed`                          | Create missing demo data in PostgreSQL.          |
+| `npm run test:seed`                     | Verify seed on an empty disposable database.     |
 | `npm run lint`                          | Run ESLint with automatic fixes.                 |
 | `npm run format`                        | Format source and test TypeScript files.         |
 | `npm test`                              | Run unit tests.                                  |
