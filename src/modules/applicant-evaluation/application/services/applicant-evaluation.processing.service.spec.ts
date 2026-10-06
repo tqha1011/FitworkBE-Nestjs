@@ -145,6 +145,122 @@ describe('ApplicantEvaluationProcessingService', () => {
     });
   });
 
+  it('computes evidence offsets from a unique exact snippet before completing V2', async () => {
+    repository.claimForProcessing.mockResolvedValue(
+      ok({
+        publicId: 'evaluation-id',
+        jobSnapshot: buildJobSnapshotV2(jobSnapshot),
+        resumeRedactedText: '👩‍💻 Tôi dùng TypeScript.',
+        resumeRedactedHash: 'hash',
+        resumeRedactionVersion: 'v1',
+        model: 'gemini-model',
+        promptVersion: 'v2',
+      }),
+    );
+    const evidence = {
+      schemaVersion: 2,
+      strengths: [],
+      gaps: [],
+      explanation: 'Skill found.',
+      criteria: [
+        {
+          criterionId: 'skill:1',
+          criterionText: 'Experience with TypeScript',
+          verdict: 'MATCHED',
+          scoreContribution: 80,
+          explanation: 'Skill found.',
+          evidence: [
+            {
+              snippet: 'TypeScript',
+              section: 'resume',
+              startOffset: 2,
+              endOffset: 12,
+            },
+          ],
+        },
+      ],
+    };
+    llm.evaluate.mockResolvedValue(ok({ schemaVersion: 2, evidence }));
+    const result = await service.process('evaluation-id', 0, 3);
+    expect(result.isOk()).toBe(true);
+    expect(repository.markCompleted).toHaveBeenCalledWith({
+      evaluationPublicId: 'evaluation-id',
+      overallScore: 80,
+      scoreBreakdown: {
+        schemaVersion: 2,
+        criteria: [{ criterionId: 'skill:1', scoreContribution: 80 }],
+      },
+      evidence: {
+        ...evidence,
+        criteria: [
+          {
+            ...evidence.criteria[0],
+            evidence: [
+              {
+                snippet: 'TypeScript',
+                section: 'resume',
+                startOffset: 15,
+                endOffset: 25,
+              },
+            ],
+          },
+        ],
+      },
+    });
+    expect(evidence.criteria[0].evidence[0].startOffset).toBe(2);
+    expect(repository.markPending).not.toHaveBeenCalled();
+  });
+
+  it('rejects ambiguous snippets when the model offsets are wrong', async () => {
+    repository.claimForProcessing.mockResolvedValue(
+      ok({
+        publicId: 'evaluation-id',
+        jobSnapshot: buildJobSnapshotV2(jobSnapshot),
+        resumeRedactedText: 'TypeScript and TypeScript',
+        resumeRedactedHash: 'hash',
+        resumeRedactionVersion: 'v1',
+        model: 'gemini-model',
+        promptVersion: 'v2',
+      }),
+    );
+    llm.evaluate.mockResolvedValue(
+      ok({
+        schemaVersion: 2,
+        evidence: {
+          schemaVersion: 2,
+          strengths: [],
+          gaps: [],
+          explanation: 'Skill found.',
+          criteria: [
+            {
+              criterionId: 'skill:1',
+              criterionText: 'Experience with TypeScript',
+              verdict: 'MATCHED',
+              scoreContribution: 80,
+              explanation: 'Skill found.',
+              evidence: [
+                {
+                  snippet: 'TypeScript',
+                  section: 'resume',
+                  startOffset: 2,
+                  endOffset: 12,
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+    const result = await service.process('evaluation-id', 0, 3);
+    const failure = result._unsafeUnwrapErr();
+    expect(failure.message).toBe('Invalid evaluation V2 response');
+    expect(failure.cause).toEqual(
+      expect.objectContaining({ code: 'V2_EVIDENCE_AMBIGUOUS' }),
+    );
+    expect(repository.markCompleted).not.toHaveBeenCalled();
+    expect(repository.markPending).toHaveBeenCalled();
+  });
+
   it('does not complete an invalid V2 response', async () => {
     llm.evaluate.mockResolvedValue(
       ok({ schemaVersion: 2, evidence: { schemaVersion: 2, criteria: [] } }),
@@ -210,7 +326,9 @@ describe('ApplicantEvaluationProcessingService', () => {
       await service.process('evaluation-id', 0, 3)
     )._unsafeUnwrapErr();
     expect(error.message).toBe('Invalid evaluation V2 response');
-    expect(error.cause).toBeInstanceOf(Error);
+    expect(error.cause).toEqual(
+      expect.objectContaining({ code: 'V2_EVIDENCE_SNIPPET_NOT_FOUND' }),
+    );
     expect(repository.markCompleted).not.toHaveBeenCalled();
     expect(repository.markPending).toHaveBeenCalledWith(
       'evaluation-id',

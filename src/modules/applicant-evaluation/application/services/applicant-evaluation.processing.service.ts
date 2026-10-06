@@ -9,7 +9,10 @@ import {
   validateApplicantEvaluationOutput,
   validateApplicantEvaluationOutputV2,
 } from '../../infrastructure/llm/applicant-evaluation-response.validator';
-import { validateEvaluationV2 } from './evaluation-v2-validator';
+import {
+  resolveEvaluationV2EvidenceOffsets,
+  validateEvaluationV2,
+} from './evaluation-v2-validator';
 
 @Injectable()
 export class ApplicantEvaluationProcessingService implements IApplicantEvaluationProcessingService {
@@ -84,7 +87,10 @@ export class ApplicantEvaluationProcessingService implements IApplicantEvaluatio
         const validated = validateEvaluationV2(
           snapshot.criteria,
           evaluationData.value.resumeRedactedText,
-          output.evidence,
+          resolveEvaluationV2EvidenceOffsets(
+            evaluationData.value.resumeRedactedText,
+            output.evidence,
+          ),
         );
         completion = { evaluationPublicId, ...validated };
       } catch (error) {

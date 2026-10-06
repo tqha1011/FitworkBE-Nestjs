@@ -10,13 +10,52 @@ export type ValidatedEvaluationV2 = {
   overallScore: number;
 };
 
+/** Resolve positions ourselves only when an exact quote has one unambiguous match. */
+export function resolveEvaluationV2EvidenceOffsets(
+  resumeText: string,
+  evidence: EvaluationEvidenceV2,
+): EvaluationEvidenceV2 {
+  const criteria = evidence.criteria.map((criterion) => {
+    const references = criterion.evidence.map((reference) => {
+      const { snippet, startOffset, endOffset } = reference;
+      if (
+        startOffset >= 0 &&
+        endOffset > startOffset &&
+        endOffset <= resumeText.length &&
+        resumeText.slice(startOffset, endOffset) === snippet
+      ) {
+        return reference;
+      }
+
+      const start = resumeText.indexOf(snippet);
+      if (
+        !snippet ||
+        start === -1 ||
+        resumeText.indexOf(snippet, start + 1) !== -1
+      ) {
+        return reference; // Leave unverifiable evidence for the strict validator to reject.
+      }
+      return {
+        ...reference,
+        startOffset: start,
+        endOffset: start + snippet.length,
+      };
+    });
+    return { ...criterion, evidence: references };
+  });
+  return { ...evidence, criteria };
+}
+
 export function validateEvaluationV2(
   jobCriteria: JobCriterion[],
   resumeText: string,
   evidence: EvaluationEvidenceV2,
 ): ValidatedEvaluationV2 {
-  const invalid = (): never => {
-    throw new Error('Invalid evaluation V2 response');
+  const invalid = (reason?: string, code = 'V2_INVALID_RESPONSE'): never => {
+    const message = reason
+      ? `Invalid evaluation V2 response: ${reason}`
+      : 'Invalid evaluation V2 response';
+    throw Object.assign(new Error(message), { code });
   };
 
   if (
@@ -65,11 +104,34 @@ export function validateEvaluationV2(
         !Number.isInteger(reference.endOffset) ||
         reference.startOffset < 0 ||
         reference.endOffset <= reference.startOffset ||
-        reference.endOffset > resumeText.length ||
-        resumeText.slice(reference.startOffset, reference.endOffset) !==
-          reference.snippet
+        reference.endOffset > resumeText.length
       ) {
-        invalid();
+        invalid(
+          'evidence reference has an invalid section or offset range',
+          'V2_EVIDENCE_REFERENCE_INVALID',
+        );
+      }
+      if (
+        resumeText.slice(reference.startOffset, reference.endOffset) !==
+        reference.snippet
+      ) {
+        const firstMatch = resumeText.indexOf(reference.snippet);
+        if (!reference.snippet || firstMatch === -1) {
+          invalid(
+            'evidence snippet is not present in resume',
+            'V2_EVIDENCE_SNIPPET_NOT_FOUND',
+          );
+        }
+        if (resumeText.indexOf(reference.snippet, firstMatch + 1) !== -1) {
+          invalid(
+            'evidence snippet has multiple matches and its offsets are invalid',
+            'V2_EVIDENCE_AMBIGUOUS',
+          );
+        }
+        invalid(
+          'evidence offsets do not match the snippet',
+          'V2_EVIDENCE_OFFSET_MISMATCH',
+        );
       }
     }
     total += result.scoreContribution;

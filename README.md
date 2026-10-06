@@ -25,7 +25,7 @@ This repository contains the NestJS backend, including REST endpoints, backgroun
 - **Hexagonal architecture:** Feature modules separate HTTP controllers, application services, domain entities and contracts, and infrastructure adapters. Abstract classes define injectable service and repository contracts.
 - **Explicit error handling:** Domain and application operations use `neverthrow` results. Controllers translate application errors into HTTP responses, with a global exception filter and DTO validation.
 - **Asynchronous processing:** BullMQ queues handle resume ingestion and AI evaluation with three attempts, exponential backoff, and stable job IDs. Workers persist processing and failure states.
-- **Evidence validation:** V2 evaluations use one criterion per structured job skill, with equal weights totaling 100. Each result is `MATCHED`, `PARTIAL`, or `MISSING`; cited snippets and character offsets must match the exact redacted resume snapshot. The backend computes the score from validated contributions.
+- **Evidence validation:** V2 evaluations use one criterion per structured job skill, with equal weights totaling 100. Each result is `MATCHED`, `PARTIAL`, or `MISSING`; cited snippets and character offsets must match the exact redacted resume snapshot. If Gemini supplies wrong offsets but the quote occurs exactly once, the backend resolves its positions before validation. Missing quotes and ambiguous positions are rejected with specific error codes. The backend computes the score from validated contributions.
 - **Versioned evaluation inputs:** Stored job snapshots, resume content hashes, redacted text hashes, and parser, redaction, model, and prompt versions tie results to the inputs used. Matching input and model versions reuse existing evaluations.
 - **Privacy reduction:** A versioned text preprocessing step redacts detected emails, phone numbers, URLs, and contact header names and addresses before evaluation. Redaction is best effort; names outside the contact header may remain.
 - **Structured AI output:** Gemini responses are constrained by JSON schemas and validated with AJV. The V2 prompt treats job and resume text as untrusted data and instructs the model to ignore embedded instructions.
@@ -148,13 +148,29 @@ Grafana uses port `3001` so it can run alongside the API on port `3000`. Prometh
 Start or update the monitoring services with `docker compose up -d prometheus loki grafana`. The one-shot `monitoring-volume-init` service prepares the named-volume ownership for the non-root Prometheus and Loki processes without deleting data.
 
 - [FitWork - Metrics](http://localhost:3001/d/fitwork-metrics): request rate, HTTP errors and latency, event loop utilization, queue backlog and outcomes, Gemini latency and tokens, cache accesses, dependency errors, Redis, and scrape health. Set the **Service** filter if you change `OTEL_SERVICE_NAME`; Redis and scrape-health panels are independent of this filter.
-- [FitWork - Logs](http://localhost:3001/d/fitwork-logs): log volume and structured logs. Filter by **Event**, or enter a request ID, trace ID, route, or text in **Search**. Expand log entries to inspect their attributes.
+- [FitWork - Logs](http://localhost:3001/d/fitwork-logs): log volume and structured logs. Filter by **Event**, or enter an evaluation/resume publicId, BullMQ job ID, request ID, trace ID, route, or text in **Search**. Expand log entries to inspect their attributes.
 
 The **Error details** panel shows `http.request.failed` events with a readable error summary. Expand an entry to inspect `error_message`, `error_code` (when available), `error_stack`, and the sanitized `error_causes` chain. Search the same request ID or trace ID to find its `http.request.completed` event. Server failures include up to 20 stack frames; client errors are warnings without stacks. Diagnostic redaction covers known credential and PII formats; avoid putting raw user payloads in error messages. Prisma query dumps and arbitrary thrown objects are excluded from diagnostics. Cause propagation is supported by `AppError`; the job-search repository and service preserve their underlying errors.
 
 Dashboard JSON files live in `src/monitoring/grafana/dashboards/`. Grafana polls them every 30 seconds after startup; edit those files to persist changes. Business panels can show **No data** until the corresponding traffic or jobs occur. Empty error series do not prove the absence of errors; check scrape health and API telemetry as well. Logs use the `event_domain="fitwork"` and `event_name` labels set by Alloy.
 
 The dashboards resolve the provisioned data sources by name (`Prometheus` and `Loki`) through hidden datasource variables. Datasource provisioning preserves existing generated UIDs, so these dashboards also work with a Grafana volume created before explicit UIDs were introduced.
+
+
+To diagnose a queue failure, open [FitWork - Logs](http://localhost:3001/d/fitwork-logs) and paste the evaluation publicId (for example `smoke-evaluation-...`) into **Search**. For resume ingestion, use `resume_public_id`, `resume_content_public_id`, or the BullMQ `job_id` value. **Application logs** follows the **Event** selector; **Error details** always includes `http.request.failed`, `queue.job.failed`, and `app.error`, and applies Search to the full record before formatting it.
+
+Each new processing attempt emits exactly one outcome event: `queue.job.completed` at INFO on success, or `queue.job.failed` on failure. A failure is WARN while `attempt < max_attempts`, and ERROR with `final_attempt=true` when the configured limit has been reached. These fields describe the attempt budget; they do not guarantee BullMQ will retry or that the database status is `FAILED`. Retry configuration, API responses, database transitions, and metrics are unchanged. Historical logs retain their original event names, including older failed attempts recorded as `queue.job.completed`.
+
+Expand an error entry to inspect the sanitized root `error_type`, `error_message`, optional `error_code`, `error_stack`, and bounded `error_causes`. Copy `trace_id` into Grafana Explore with the **Jaeger** datasource, or open `http://localhost:16686/trace/<trace_id>` in Jaeger. Queue spans include job/public IDs, attempt limits and outcome; their exception events and Gemini child spans retain sanitized diagnostics. Public IDs are log/trace attributes and are never metric labels or indexed Loki labels.
+
+After changing instrumentation, rebuild and recreate the API with `docker compose up -d --build --no-deps fitwork-nestjs-api`. Grafana reloads the provisioned dashboard within 30 seconds. No migration or new dependency is required. To verify diagnostics using fake services and a stubbed Gemini 404, run:
+
+```bash
+npm run build
+node scripts/bullmq-diagnostics-smoke.cjs
+```
+
+The smoke fixture calls the processors directly, exports telemetry to the local Collector, and checks the provisioned dashboard through Grafana's Loki datasource and the matching traces in Jaeger. It creates synthetic logs/metrics/traces only: it never enqueues a real job, changes application data, or calls Gemini. It reads local port overrides and Grafana credentials from `.env`; the monitoring stack must be running. The final output includes synthetic public IDs and Grafana/Jaeger links.
 
 ### Alert Rules
 

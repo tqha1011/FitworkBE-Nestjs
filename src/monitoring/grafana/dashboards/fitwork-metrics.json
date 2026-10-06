@@ -96,7 +96,7 @@
       "id": 2,
       "type": "timeseries",
       "title": "HTTP 5xx error ratio",
-      "description": "Empty means no error series or no traffic; it does not indicate healthy telemetry.",
+      "description": "0% means traffic with no 5xx errors. No data means no traffic or missing request metrics.",
       "datasource": {
         "type": "prometheus",
         "uid": "${prometheus}"
@@ -114,7 +114,7 @@
             "type": "prometheus",
             "uid": "${prometheus}"
           },
-          "expr": "sum(rate(fitwork_http_errors_total{service_name=~\"${service:regex}\",status_class=\"5xx\"}[$__rate_interval])) / sum(rate(fitwork_http_requests_total{service_name=~\"${service:regex}\"}[$__rate_interval]))",
+          "expr": "(sum(rate(fitwork_http_errors_total{service_name=~\"${service:regex}\",status_class=\"5xx\"}[$__rate_interval])) or vector(0)) / (sum(rate(fitwork_http_requests_total{service_name=~\"${service:regex}\"}[$__rate_interval])) > 0)",
           "legendFormat": "5xx ratio",
           "editorMode": "code",
           "range": true,
@@ -303,7 +303,7 @@
     {
       "id": 6,
       "type": "timeseries",
-      "title": "Telemetry scrape health",
+      "title": "Target scrape status (1 = UP, 0 = DOWN)",
       "description": "1 = scrape succeeded, 0 = failed. This is scrape health, not backend readiness.",
       "datasource": {
         "type": "prometheus",
@@ -621,8 +621,8 @@
     {
       "id": 12,
       "type": "timeseries",
-      "title": "Gemini token usage / second",
-      "description": "Token categories overlap; total is already the overall total and must not be added to the other categories.",
+      "title": "Gemini total tokens",
+      "description": "Cumulative total tokens by model across current API instances. Counters reset when an instance restarts; this is not token usage within the selected time range.",
       "datasource": {
         "type": "prometheus",
         "uid": "${prometheus}"
@@ -640,8 +640,8 @@
             "type": "prometheus",
             "uid": "${prometheus}"
           },
-          "expr": "sum by (model, token_type) (rate(fitwork_gemini_tokens_total{service_name=~\"${service:regex}\"}[$__rate_interval]))",
-          "legendFormat": "{{model}} {{token_type}}",
+          "expr": "sum by (model) (fitwork_gemini_tokens_total{service_name=~\"${service:regex}\",token_type=\"total\"})",
+          "legendFormat": "{{model}}",
           "editorMode": "code",
           "range": true,
           "instant": false

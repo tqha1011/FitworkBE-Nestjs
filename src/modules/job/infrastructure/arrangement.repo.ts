@@ -1,3 +1,4 @@
+import { Injectable } from '@nestjs/common';
 import { Result, ok, err } from 'neverthrow';
 import {
   ArrangementData,
@@ -5,6 +6,7 @@ import {
 } from '../domain/repositories/arrangement.repo.interface';
 import { PrismaService } from 'src/shared/infrastructure/database/prisma.service';
 
+@Injectable()
 export class ArrangementRepository implements IArrangementRepository {
   constructor(private readonly prismaService: PrismaService) {}
 

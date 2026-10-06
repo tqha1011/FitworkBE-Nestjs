@@ -66,7 +66,9 @@ function describe(error: unknown, includeStack: boolean): Diagnostic {
       }
     }
   } else {
-    const raw = typeof error === 'string' ? error : error.message;
+    let raw = typeof error === 'string' ? error : error.message;
+    // JSON.parse errors can quote the response, including arbitrary resume text.
+    if (type === 'SyntaxError' && /\bJSON\b/i.test(raw)) raw = 'Invalid JSON';
     // Drop multiline payload/source dumps, SQL and raw paths from summaries.
     message =
       redactDiagnosticText(raw)
@@ -108,15 +110,24 @@ export function errorDiagnostics(
   error: unknown,
   includeStack = true,
 ): Record<string, string> {
-  const chain: Diagnostic[] = [];
-  const seen = new Set<unknown>();
-  let current = error;
-  for (let depth = 0; depth < 4 && !seen.has(current); depth++) {
-    seen.add(current);
-    chain.push(describe(current, includeStack));
-    if (!(current instanceof Error) || current.cause === undefined) break;
-    current = current.cause;
+  try {
+    const chain: Diagnostic[] = [];
+    const seen = new Set<unknown>();
+    let current = error;
+    for (let depth = 0; depth < 4 && !seen.has(current); depth++) {
+      seen.add(current);
+      chain.push(describe(current, includeStack));
+      if (!(current instanceof Error) || current.cause === undefined) break;
+      current = current.cause;
+    }
+    const root = chain[chain.length - 1];
+    return { ...root, error_causes: JSON.stringify(chain) };
+  } catch {
+    // Error properties may be getters supplied by an untrusted dependency.
+    const fallback = {
+      error_type: 'UnknownError',
+      error_message: 'Unreadable exception',
+    };
+    return { ...fallback, error_causes: JSON.stringify([fallback]) };
   }
-  const root = chain[chain.length - 1];
-  return { ...root, error_causes: JSON.stringify(chain) };
 }

@@ -5,7 +5,7 @@ import { ArrangementResponseDto } from '../application/dtos/job.response.dto';
 import { ApiStandardResponse } from 'src/shared/common/swagger/api-standard-response.decorator';
 import { IArrangementService } from '../application/interfaces/arrangement.service.interface';
 
-@Controller('arrangements')
+@Controller('/api/arrangements')
 @ApiTags('arrangements')
 export class ArrangementController {
   constructor(private readonly arrangementService: IArrangementService) {}

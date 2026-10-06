@@ -1,3 +1,4 @@
+import { Injectable } from '@nestjs/common';
 import { err, Result } from 'neverthrow';
 import {
   IJobRepository,
@@ -24,6 +25,7 @@ import {
   mapStatusToPrisma,
 } from './job.mapper';
 
+@Injectable()
 export class JobRepository implements IJobRepository, IJobQueryRepository {
   constructor(private readonly prismaService: PrismaService) {}
   async authorizeJobOwner(

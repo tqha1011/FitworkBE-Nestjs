@@ -42,3 +42,32 @@ describe('diagnostic redaction', () => {
     expect(JSON.stringify(output)).not.toContain('SELECT');
   });
 });
+
+describe('unsafe exception diagnostics', () => {
+  it('omits raw response excerpts from JSON parser errors', () => {
+    let failure: unknown;
+    try {
+      JSON.parse('John Smith has sensitive medical information');
+    } catch (error) {
+      failure = error;
+    }
+    const output = errorDiagnostics(
+      new Error('Gemini JSON validation failed', { cause: failure }),
+    );
+    expect(output.error_type).toBe('SyntaxError');
+    expect(output.error_message).toContain('JSON');
+    expect(output.error_stack).toContain('error-diagnostics.spec.ts');
+    expect(JSON.stringify(output)).not.toContain('John');
+    expect(JSON.stringify(output)).not.toContain('sensitive medical');
+  });
+
+  it('handles an Error with unreadable properties without throwing', () => {
+    const failure = new Error('Processing failed');
+    Object.defineProperty(failure, 'cause', {
+      get: () => {
+        throw new Error('Getter failure');
+      },
+    });
+    expect(() => errorDiagnostics(failure)).not.toThrow();
+  });
+});

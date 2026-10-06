@@ -11,6 +11,7 @@ import {
 } from '../applicant-evaluation-response.schema';
 import { buildJobSnapshotV2 } from 'src/modules/job/domain/value-objects/job-snapshot';
 import { APPLICANT_EVALUATION_PROMPT_VERSION_V2 } from '../../../application/constants/applicant-evaluation.constants';
+import { GeminiMetrics } from 'src/shared/observability/gemini-metrics';
 import { GeminiEvaluateApplicant } from './applicant-evaluation-gemini';
 
 const mockGenerateContent = jest.fn();
@@ -236,6 +237,8 @@ describe('GeminiEvaluateApplicant', () => {
   it('ends a child span after a successful evaluation with safe metadata', async () => {
     const span = {
       setAttribute: jest.fn(),
+      setAttributes: jest.fn(),
+      recordException: jest.fn(),
       setStatus: jest.fn(),
       end: jest.fn(),
     };
@@ -266,6 +269,7 @@ describe('GeminiEvaluateApplicant', () => {
       'evaluation.prompt.version',
       input.promptVersion,
     );
+    expect(span.recordException).not.toHaveBeenCalled();
     expect(span.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
     expect(span.end).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(span.setAttribute.mock.calls)).not.toContain(
@@ -283,6 +287,8 @@ describe('GeminiEvaluateApplicant', () => {
   ])('marks and ends the span for an %s', async (_case, response) => {
     const span = {
       setAttribute: jest.fn(),
+      setAttributes: jest.fn(),
+      recordException: jest.fn(),
       setStatus: jest.fn(),
       end: jest.fn(),
     };
@@ -300,6 +306,16 @@ describe('GeminiEvaluateApplicant', () => {
     const result = await provider.evaluate(input);
 
     expect(result.isErr()).toBe(true);
+    expect(span.recordException).toHaveBeenCalledTimes(1);
+    expect(span.recordException).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: expect.any(String) as string,
+        message: expect.any(String) as string,
+      }),
+    );
+    expect(span.setAttributes).toHaveBeenCalledWith(
+      expect.objectContaining({ error_causes: expect.any(String) as string }),
+    );
     expect(span.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.ERROR });
     expect(span.end).toHaveBeenCalledTimes(1);
   });
@@ -307,6 +323,8 @@ describe('GeminiEvaluateApplicant', () => {
   it('marks and ends the span when Gemini rejects the request', async () => {
     const span = {
       setAttribute: jest.fn(),
+      setAttributes: jest.fn(),
+      recordException: jest.fn(),
       setStatus: jest.fn(),
       end: jest.fn(),
     };
@@ -319,11 +337,47 @@ describe('GeminiEvaluateApplicant', () => {
     provider = new GeminiEvaluateApplicant({
       getOrThrow: jest.fn().mockReturnValue('test-key'),
     } as unknown as ConfigService);
-    mockGenerateContent.mockRejectedValue(new Error('Gemini unavailable'));
+    const root = Object.assign(
+      new Error('Gemini 404 NOT_FOUND token=private alice@example.com'),
+      { name: 'ApiError', code: 'NOT_FOUND' },
+    );
+    const failure = new Error('Dependency request failed', { cause: root });
+    mockGenerateContent.mockRejectedValue(failure);
 
     const result = await provider.evaluate(input);
 
-    expect(result._unsafeUnwrapErr().message).toBe('Gemini unavailable');
+    expect(result._unsafeUnwrapErr()).toBe(failure);
+    expect(span.recordException).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'ApiError',
+        message: expect.stringContaining('404 NOT_FOUND') as string,
+      }),
+    );
+    expect(span.setAttributes).toHaveBeenCalledWith(
+      expect.objectContaining({ error_code: 'NOT_FOUND' }),
+    );
+    expect(
+      JSON.stringify([
+        span.setAttributes.mock.calls,
+        span.recordException.mock.calls,
+      ]),
+    ).not.toContain('private');
+    expect(
+      JSON.stringify([
+        span.setAttributes.mock.calls,
+        span.recordException.mock.calls,
+      ]),
+    ).not.toContain('alice@example.com');
+    expect(span.recordException).toHaveBeenCalledTimes(1);
+    expect(span.recordException).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: expect.any(String) as string,
+        message: expect.any(String) as string,
+      }),
+    );
+    expect(span.setAttributes).toHaveBeenCalledWith(
+      expect.objectContaining({ error_causes: expect.any(String) as string }),
+    );
     expect(span.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.ERROR });
     expect(span.end).toHaveBeenCalledTimes(1);
   });
@@ -335,6 +389,45 @@ describe('GeminiEvaluateApplicant', () => {
     expect(error.cause).toBe(failure);
     expect(error.message).toBe('Gemini evaluation failed: Gemini unavailable');
   });
+
+  it.each(['usage', 'validationFailure'] as const)(
+    'does not let %s telemetry alter an invalid response',
+    async (method) => {
+      const span = {
+        setAttribute: jest.fn(),
+        setAttributes: jest.fn(),
+        recordException: jest.fn(),
+        setStatus: jest.fn(),
+        end: jest.fn(),
+      };
+      jest.spyOn(trace, 'getTracer').mockReturnValue({
+        startActiveSpan: (...args: unknown[]) =>
+          (args[1] as (span: Span) => Promise<unknown>)(
+            span as unknown as Span,
+          ),
+      } as never);
+      provider = new GeminiEvaluateApplicant({
+        getOrThrow: () => 'fake-key',
+      } as unknown as ConfigService);
+      jest.spyOn(GeminiMetrics.prototype, method).mockImplementation(() => {
+        throw new Error('Telemetry failure');
+      });
+      mockGenerateContent.mockResolvedValue({
+        text: 'John Smith has sensitive medical information',
+      });
+      const result = await provider.evaluate(input);
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr()).toBeInstanceOf(SyntaxError);
+      expect(span.recordException).toHaveBeenCalledTimes(1);
+      expect(span.end).toHaveBeenCalledTimes(1);
+      expect(
+        JSON.stringify([
+          span.setAttributes.mock.calls,
+          span.recordException.mock.calls,
+        ]),
+      ).not.toContain('John');
+    },
+  );
 
   it('returns an original Error unchanged', async () => {
     const failure = new Error('Gemini unavailable');

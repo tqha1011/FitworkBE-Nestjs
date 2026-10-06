@@ -1,6 +1,9 @@
 import { JobCriterion } from 'src/modules/job/domain/value-objects/job-snapshot';
 import { EvaluationEvidenceV2 } from '../../domain/value-objects/evaluation';
-import { validateEvaluationV2 } from './evaluation-v2-validator';
+import {
+  resolveEvaluationV2EvidenceOffsets,
+  validateEvaluationV2,
+} from './evaluation-v2-validator';
 
 describe('validateEvaluationV2', () => {
   const jobCriteria: JobCriterion[] = [
@@ -71,6 +74,73 @@ describe('validateEvaluationV2', () => {
       },
       overallScore: 71,
     });
+  });
+
+  it.each([
+    ['TypeScript', 'TypeScript', 2, 8, 0, 10],
+    ['TypeScript', 'TypeScript', 200, 300, 0, 10],
+    ['TypeScript and TypeScript', 'TypeScript', 15, 25, 15, 25],
+    ['TypeScript and TypeScript', 'TypeScript', 2, 8, 2, 8],
+    ['TypeScript', 'Fabricated', 0, 10, 0, 10],
+    ['TypeScript', '', 0, 10, 0, 10],
+  ] as const)(
+    'resolves only an exact unambiguous quote in %s (%s, %i..%i)',
+    (resume, snippet, startOffset, endOffset, expectedStart, expectedEnd) => {
+      const input = {
+        ...evidence,
+        criteria: [
+          {
+            ...evidence.criteria[0],
+            evidence: [
+              { snippet, section: 'resume' as const, startOffset, endOffset },
+            ],
+          },
+        ],
+      };
+      const resolved = resolveEvaluationV2EvidenceOffsets(resume, input);
+      expect(resolved.criteria[0].evidence[0]).toEqual({
+        snippet,
+        section: 'resume',
+        startOffset: expectedStart,
+        endOffset: expectedEnd,
+      });
+      expect(input.criteria[0].evidence[0]).toEqual({
+        snippet,
+        section: 'resume',
+        startOffset,
+        endOffset,
+      });
+    },
+  );
+
+  it('reports the evidence mismatch without exposing resume text', () => {
+    const wrongEvidence = {
+      ...evidence,
+      criteria: [
+        {
+          ...evidence.criteria[0],
+          evidence: [
+            {
+              ...evidence.criteria[0].evidence[0],
+              snippet: 'private fabricated claim',
+            },
+          ],
+        },
+        evidence.criteria[1],
+      ],
+    };
+    try {
+      validateEvaluationV2(jobCriteria, resumeText, wrongEvidence);
+      throw new Error('Expected rejection');
+    } catch (error) {
+      expect(error).toEqual(
+        expect.objectContaining({ code: 'V2_EVIDENCE_SNIPPET_NOT_FOUND' }),
+      );
+      expect((error as Error).message).toContain(
+        'snippet is not present in resume',
+      );
+      expect((error as Error).message).not.toContain('private fabricated');
+    }
   });
 
   it.each([

@@ -1,3 +1,4 @@
+import { Injectable } from '@nestjs/common';
 import { Result, ok, err } from 'neverthrow';
 import {
   ISkillRepository,
@@ -5,6 +6,7 @@ import {
 } from '../domain/repositories/skill.repo.interface';
 import { PrismaService } from 'src/shared/infrastructure/database/prisma.service';
 
+@Injectable()
 export class SkillRepository implements ISkillRepository {
   constructor(private readonly prismaService: PrismaService) {}
   async getAllSkills(): Promise<Result<SkillData[], Error>> {

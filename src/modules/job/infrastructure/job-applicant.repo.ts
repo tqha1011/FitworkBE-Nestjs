@@ -1,3 +1,4 @@
+import { Injectable } from '@nestjs/common';
 import { err, ok, Result } from 'neverthrow';
 import { Prisma } from 'generated/prisma/client';
 import { IJobApplicantQueryRepo } from '../application/interfaces/job-applicant.query-repo.interface';
@@ -17,6 +18,7 @@ import { CommonJobApplicantStatus } from 'src/shared/domain/enum';
 
 const optimisticLockConflict = new Error('Optimistic lock conflict');
 
+@Injectable()
 export class JobApplicantRepository
   implements IJobApplicantRepository, IJobApplicantQueryRepo
 {

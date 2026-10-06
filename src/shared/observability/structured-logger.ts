@@ -1,6 +1,6 @@
 import { Injectable, LoggerService } from '@nestjs/common';
 import { logs, SeverityNumber } from '@opentelemetry/api-logs';
-import { context, trace } from '@opentelemetry/api';
+import { Attributes, context, trace } from '@opentelemetry/api';
 import { errorDiagnostics } from './error-diagnostics';
 import { requestContext } from './request-context';
 
@@ -24,14 +24,19 @@ export class StructuredLogger implements LoggerService {
   }
 
   error(message: unknown, stack?: unknown): void {
-    if (
+    if (typeof message === 'string' && stack instanceof Error) {
+      message = new Error(message, { cause: stack });
+    } else if (
       typeof message === 'string' &&
       typeof stack === 'string' &&
       /^\s*at\s/m.test(stack)
     ) {
-      const exception = new Error(message);
+      const header = stack.split(/\r?\n/, 1)[0];
+      const match = /^([A-Za-z_][A-Za-z0-9_.-]{0,127}):\s*(.*)$/.exec(header);
+      const exception = new Error(match?.[2] || message);
+      if (match) exception.name = match[1];
       exception.stack = stack;
-      message = exception;
+      message = new Error(message, { cause: exception });
     }
     this.write('app.error', SeverityNumber.ERROR, errorDiagnostics(message));
   }
@@ -100,27 +105,57 @@ export class StructuredLogger implements LoggerService {
   job(record: {
     requestId: string;
     queue: string;
+    jobId?: string;
+    evaluationPublicId?: string;
+    resumePublicId?: string;
+    resumeContentPublicId?: string;
     attempt: number;
+    maxAttempts: number;
     outcome: 'success' | 'error';
     durationMs: number;
     traceId?: string;
     spanId?: string;
+    exception?: unknown;
   }): void {
-    this.write('queue.job.completed', SeverityNumber.INFO, {
-      request_id: record.requestId,
-      queue: record.queue,
-      attempt: record.attempt,
-      outcome: record.outcome,
-      duration_ms: record.durationMs,
-      trace_id: record.traceId ?? '',
-      span_id: record.spanId ?? '',
-    });
+    const finalAttempt = record.attempt >= record.maxAttempts;
+    this.write(
+      record.outcome === 'success' ? 'queue.job.completed' : 'queue.job.failed',
+      record.outcome === 'success'
+        ? SeverityNumber.INFO
+        : finalAttempt
+          ? SeverityNumber.ERROR
+          : SeverityNumber.WARN,
+      {
+        request_id: record.requestId,
+        queue: record.queue,
+        job_id: record.jobId ?? '',
+        ...(record.evaluationPublicId
+          ? { evaluation_public_id: record.evaluationPublicId }
+          : {}),
+        ...(record.resumePublicId
+          ? { resume_public_id: record.resumePublicId }
+          : {}),
+        ...(record.resumeContentPublicId
+          ? { resume_content_public_id: record.resumeContentPublicId }
+          : {}),
+        attempt: record.attempt,
+        max_attempts: record.maxAttempts,
+        final_attempt: finalAttempt,
+        outcome: record.outcome,
+        duration_ms: record.durationMs,
+        trace_id: record.traceId ?? '',
+        span_id: record.spanId ?? '',
+        ...(record.outcome === 'error'
+          ? errorDiagnostics(record.exception)
+          : {}),
+      },
+    );
   }
 
   private write(
     event: string,
     severityNumber: SeverityNumber,
-    fields: Record<string, string | number>,
+    fields: Attributes,
   ): void {
     const stored = requestContext.getStore();
     const span =
@@ -136,12 +171,14 @@ export class StructuredLogger implements LoggerService {
     const payload = {
       timestamp: new Date().toISOString(),
       event,
+      severity_text: SeverityNumber[severityNumber],
       ...fields,
     };
     process.stdout.write(`${JSON.stringify(payload)}\n`);
     this.otel.emit({
       body: event,
       severityNumber,
+      severityText: SeverityNumber[severityNumber],
       attributes: { 'event.domain': 'fitwork', 'event.name': event, ...fields },
     });
   }

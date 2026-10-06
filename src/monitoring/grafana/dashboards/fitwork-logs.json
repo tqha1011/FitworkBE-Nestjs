@@ -2,11 +2,11 @@
   "id": null,
   "uid": "fitwork-logs",
   "title": "FitWork - Logs",
-  "description": "Structured FitWork application logs. Search matches the full log line: use a request ID, trace ID, route or keyword. Expand a line to inspect attributes.",
+  "description": "Structured FitWork application logs. Search matches the full log line: use an evaluation/resume publicId, job ID, request ID, trace ID, route or keyword. Expand a line to inspect attributes.",
   "tags": ["fitwork"],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 2,
+  "version": 3,
   "editable": true,
   "refresh": "30s",
   "time": {
@@ -47,7 +47,7 @@
       },
       {
         "name": "search",
-        "label": "Search (request / trace ID / text)",
+        "label": "Search (evaluation / resume / job / request / trace ID / text)",
         "type": "textbox",
         "query": "",
         "current": {
@@ -162,7 +162,7 @@
       "id": 4,
       "type": "logs",
       "title": "Error details",
-      "description": "HTTP failures with sanitized cause and stack. Expand an entry for extracted details. This panel always shows failures and respects Search.",
+      "description": "HTTP, queue and application failures with sanitized root errors, causes and stacks. Expand an entry for details and trace_id. Queue final_attempt only describes the configured attempt limit; it does not guarantee a retry or database status. This panel always shows failures and respects Search.",
       "datasource": {
         "type": "loki",
         "uid": "${loki}"
@@ -180,7 +180,7 @@
             "type": "loki",
             "uid": "${loki}"
           },
-          "expr": "{event_domain=\"fitwork\",event_name=\"http.request.failed\"} |= ${search:doublequote} | json | line_format \"{{.attributes_method}} {{.attributes_route_template}} {{.attributes_status_code}} | {{.attributes_error_type}}: {{.attributes_error_message}}\"",
+          "expr": "{event_domain=\"fitwork\",event_name=~\"http.request.failed|queue.job.failed|app.error\"} |= ${search:doublequote} | json | line_format \"{{if eq .event_name \\\"http.request.failed\\\"}}{{.attributes_method}} {{.attributes_route_template}} {{.attributes_status_code}}{{else if eq .event_name \\\"queue.job.failed\\\"}}{{.attributes_queue}} job={{.attributes_job_id}} attempt={{.attributes_attempt}}/{{.attributes_max_attempts}} final_attempt={{.attributes_final_attempt}}{{else}}app.error{{end}} | {{.attributes_error_type}}: {{.attributes_error_message}}\"",
           "legendFormat": "",
           "editorMode": "code",
           "queryType": "range",

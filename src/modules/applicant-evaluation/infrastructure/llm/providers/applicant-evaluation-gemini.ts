@@ -20,6 +20,10 @@ import {
 import { APPLICANT_EVALUATION_PROMPT_VERSION_V2 } from '../../../application/constants/applicant-evaluation.constants';
 import { SpanStatusCode, trace } from '@opentelemetry/api';
 import { GeminiMetrics } from 'src/shared/observability/gemini-metrics';
+import {
+  bestEffortTelemetry,
+  recordSpanError,
+} from 'src/shared/observability/span-diagnostics';
 
 @Injectable()
 export class GeminiEvaluateApplicant implements IApplicantEvaluationLlm {
@@ -43,8 +47,12 @@ export class GeminiEvaluateApplicant implements IApplicantEvaluationLlm {
         const started = performance.now();
         let outcome: 'success' | 'error' = 'error';
         let stage: 'request' | 'json' | 'schema' = 'request';
-        span.setAttribute('gen_ai.request.model', input.model);
-        span.setAttribute('evaluation.prompt.version', input.promptVersion);
+        bestEffortTelemetry(() =>
+          span.setAttribute('gen_ai.request.model', input.model),
+        );
+        bestEffortTelemetry(() =>
+          span.setAttribute('evaluation.prompt.version', input.promptVersion),
+        );
         try {
           const prompt = buildApplicantEvaluationPrompt(input);
           const isV2 =
@@ -61,63 +69,85 @@ export class GeminiEvaluateApplicant implements IApplicantEvaluationLlm {
                 : APPLICANT_EVALUATION_RESPONSE_SCHEMA,
             },
           });
-          this.telemetry.usage(
-            input.model,
-            input.promptVersion,
-            generatedResponse.usageMetadata,
-          );
-          if (!generatedResponse.text) {
-            this.telemetry.validationFailure(
+          bestEffortTelemetry(() =>
+            this.telemetry.usage(
               input.model,
               input.promptVersion,
-              'empty_response',
+              generatedResponse.usageMetadata,
+            ),
+          );
+          if (!generatedResponse.text) {
+            bestEffortTelemetry(() =>
+              this.telemetry.validationFailure(
+                input.model,
+                input.promptVersion,
+                'empty_response',
+              ),
             );
-            span.setStatus({ code: SpanStatusCode.ERROR });
-            return err(new Error('Gemini returned an empty response'));
+            const failure = new Error('Gemini returned an empty response');
+            recordSpanError(span, failure);
+            return err(failure);
           }
           stage = 'json';
           const output: unknown = JSON.parse(generatedResponse.text);
           stage = 'schema';
           if (isV2) {
             if (!validateApplicantEvaluationOutputV2(output)) {
+              bestEffortTelemetry(() =>
+                this.telemetry.validationFailure(
+                  input.model,
+                  input.promptVersion,
+                  'schema',
+                ),
+              );
+              const failure = new Error(
+                'Gemini returned an invalid evaluation response',
+              );
+              recordSpanError(span, failure);
+              return err(failure);
+            }
+            outcome = 'success';
+            bestEffortTelemetry(() =>
+              span.setStatus({ code: SpanStatusCode.OK }),
+            );
+            return ok(output);
+          }
+          if (!validateApplicantEvaluationOutput(output)) {
+            bestEffortTelemetry(() =>
               this.telemetry.validationFailure(
                 input.model,
                 input.promptVersion,
                 'schema',
-              );
-              span.setStatus({ code: SpanStatusCode.ERROR });
-              return err(
-                new Error('Gemini returned an invalid evaluation response'),
-              );
-            }
-            outcome = 'success';
-            span.setStatus({ code: SpanStatusCode.OK });
-            return ok(output);
-          }
-          if (!validateApplicantEvaluationOutput(output)) {
-            this.telemetry.validationFailure(
-              input.model,
-              input.promptVersion,
-              'schema',
+              ),
             );
-            span.setStatus({ code: SpanStatusCode.ERROR });
-            return err(
-              new Error('Gemini returned an invalid evaluation response'),
+            const failure = new Error(
+              'Gemini returned an invalid evaluation response',
             );
+            recordSpanError(span, failure);
+            return err(failure);
           }
           outcome = 'success';
-          span.setStatus({ code: SpanStatusCode.OK });
+          bestEffortTelemetry(() =>
+            span.setStatus({ code: SpanStatusCode.OK }),
+          );
           return ok(output);
         } catch (error) {
           if (stage === 'json') {
-            this.telemetry.validationFailure(
-              input.model,
-              input.promptVersion,
-              'json',
+            bestEffortTelemetry(() =>
+              this.telemetry.validationFailure(
+                input.model,
+                input.promptVersion,
+                'json',
+              ),
             );
           }
-          span.setStatus({ code: SpanStatusCode.ERROR });
-          this.logger.error('Failed to evaluate applicant with Gemini', error);
+          recordSpanError(span, error);
+          bestEffortTelemetry(() =>
+            this.logger.error(
+              'Failed to evaluate applicant with Gemini',
+              error,
+            ),
+          );
 
           return err(
             error instanceof Error
@@ -127,13 +157,15 @@ export class GeminiEvaluateApplicant implements IApplicantEvaluationLlm {
                 }),
           );
         } finally {
-          this.telemetry.complete(
-            input.model,
-            input.promptVersion,
-            (performance.now() - started) / 1000,
-            outcome,
+          bestEffortTelemetry(() =>
+            this.telemetry.complete(
+              input.model,
+              input.promptVersion,
+              (performance.now() - started) / 1000,
+              outcome,
+            ),
           );
-          span.end();
+          bestEffortTelemetry(() => span.end());
         }
       },
     );
