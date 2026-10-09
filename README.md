@@ -6,6 +6,8 @@ Fitwork is a recruitment and project hiring API that connects applicants with co
 
 This repository contains the NestJS backend, including REST endpoints, background workers, and Socket.IO gateways. Interactive API documentation is available at `/docs`.
 
+Frontend integration guide: [Job API — endpoints, requests, responses, and FE usage (Vietnamese)](docs/api/job.md).
+
 ## Core Features
 
 | Feature           | Capabilities                                                                                                                                                                                         |
@@ -85,7 +87,7 @@ flowchart TD
 ### Company
 
 1. Register as `COMPANY` and log in.
-2. Read available reference data at `GET /categories`, `GET /skills`, and `GET /arrangements`.
+2. Read available reference data at `GET /api/categories`, `GET /api/skills`, and `GET /api/arrangements`.
 3. Publish a job at `POST /api/job`. Update its details or open/closed status at `PATCH /api/job/:jobPublicId`.
 4. Review a completed evaluation at `GET /api/applicant-evaluation/jobs/:jobPublicId/:evaluationPublicId`. Access is restricted to the job owner.
 5. Set an application status at `PATCH /api/job/applicants/:jobApplicantPublicId/status`. Allowed transitions are `PENDING → ACCEPTED`, `PENDING → REJECTED`, and `ACCEPTED → COMPLETED`.
