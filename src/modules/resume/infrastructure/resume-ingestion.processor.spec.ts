@@ -29,12 +29,24 @@ describe('ResumeIngestionProcessor', () => {
 
   let ingest: jest.Mock;
   let startActiveSpan: jest.Mock;
-  let span: { setAttribute: jest.Mock; setStatus: jest.Mock; end: jest.Mock };
+  let span: {
+    setAttribute: jest.Mock;
+    setAttributes: jest.Mock;
+    recordException: jest.Mock;
+    spanContext: jest.Mock;
+    setStatus: jest.Mock;
+    end: jest.Mock;
+  };
   let processor: ResumeIngestionProcessor;
 
   beforeEach(() => {
     span = {
       setAttribute: jest.fn(),
+      setAttributes: jest.fn(),
+      recordException: jest.fn(),
+      spanContext: jest
+        .fn()
+        .mockReturnValue({ traceId: 'trace-id', spanId: 'span-id' }),
       setStatus: jest.fn(),
       end: jest.fn(),
     };
@@ -65,11 +77,13 @@ describe('ResumeIngestionProcessor', () => {
       expect.anything(),
       expect.any(Function),
     );
-    expect(span.setAttribute).toHaveBeenCalledWith(
-      'fitwork.queue.name',
-      QueueName.ResumeIngestion,
+    expect(span.setAttributes).toHaveBeenCalledWith(
+      expect.objectContaining({
+        'fitwork.queue.name': QueueName.ResumeIngestion,
+        'fitwork.queue.attempt': 2,
+        resume_public_id: payload.resumePublicId,
+      }),
     );
-    expect(span.setAttribute).toHaveBeenCalledWith('fitwork.queue.attempt', 2);
     expect(span.setAttribute).toHaveBeenCalledWith(
       'fitwork.queue.outcome',
       'success',
@@ -88,9 +102,7 @@ describe('ResumeIngestionProcessor', () => {
       'fitwork.queue.outcome',
       'error',
     );
-    expect(JSON.stringify(span.setAttribute.mock.calls)).not.toContain(
-      'private-resume-id',
-    );
+    expect(span.recordException).toHaveBeenCalledTimes(1);
     expect(span.end).toHaveBeenCalledTimes(1);
   });
 });

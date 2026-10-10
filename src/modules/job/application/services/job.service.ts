@@ -44,6 +44,7 @@ export class JobService implements IJobService {
         new AppError(
           ErrorCode.InternalServerError,
           'Failed to resolve applicant',
+          { cause: userIdResult.error },
         ),
       );
     }
@@ -61,6 +62,7 @@ export class JobService implements IJobService {
         new AppError(
           ErrorCode.InternalServerError,
           'Failed to get jobs applied',
+          { cause: result.error },
         ),
       );
     }
@@ -90,6 +92,7 @@ export class JobService implements IJobService {
         new AppError(
           ErrorCode.InternalServerError,
           'Failed to resolve postedBy',
+          { cause: postedByIdResult.error },
         ),
       );
     }
@@ -104,7 +107,8 @@ export class JobService implements IJobService {
       return err(
         new AppError(
           ErrorCode.InternalServerError,
-          categoryExistsResult.error.message,
+          'Failed to check category exists',
+          { cause: categoryExistsResult.error },
         ),
       );
     }
@@ -116,7 +120,8 @@ export class JobService implements IJobService {
       return err(
         new AppError(
           ErrorCode.InternalServerError,
-          arrangementExistsResult.error.message,
+          'Failed to check arrangement exists',
+          { cause: arrangementExistsResult.error },
         ),
       );
     }
@@ -128,7 +133,8 @@ export class JobService implements IJobService {
       return err(
         new AppError(
           ErrorCode.InternalServerError,
-          existingSkillIdsResult.error.message,
+          'Failed to validate skill ids',
+          { cause: existingSkillIdsResult.error },
         ),
       );
     }
@@ -158,13 +164,19 @@ export class JobService implements IJobService {
       arrangementId: request.arrangementId,
     });
     if (job.isErr()) {
-      return err(new AppError(ErrorCode.BadRequest, job.error.message));
+      return err(
+        new AppError(ErrorCode.BadRequest, job.error.message, {
+          cause: job.error,
+        }),
+      );
     }
     // add job + skills
     const addJobResult = await this.jobRepository.addJob(job.value, skillIds);
     if (addJobResult.isErr()) {
       return err(
-        new AppError(ErrorCode.InternalServerError, 'Failed to create job'),
+        new AppError(ErrorCode.InternalServerError, 'Failed to create job', {
+          cause: addJobResult.error,
+        }),
       );
     }
     return ok(undefined);
@@ -187,7 +199,9 @@ export class JobService implements IJobService {
     );
     if (result.isErr()) {
       return err(
-        new AppError(ErrorCode.InternalServerError, 'Failed to search jobs'),
+        new AppError(ErrorCode.InternalServerError, 'Failed to search jobs', {
+          cause: result.error,
+        }),
       );
     }
     return ok(result.value);
@@ -208,6 +222,7 @@ export class JobService implements IJobService {
         new AppError(
           ErrorCode.InternalServerError,
           'Failed to resolve job owner',
+          { cause: userIdResult.error },
         ),
       );
     }
@@ -217,7 +232,9 @@ export class JobService implements IJobService {
 
     if (jobResult.isErr()) {
       return err(
-        new AppError(ErrorCode.InternalServerError, 'Failed to get job'),
+        new AppError(ErrorCode.InternalServerError, 'Failed to get job', {
+          cause: jobResult.error,
+        }),
       );
     }
     if (!jobResult.value) {
@@ -235,7 +252,9 @@ export class JobService implements IJobService {
     const updatedJobResult = jobResult.value.update(request);
     if (updatedJobResult.isErr()) {
       return err(
-        new AppError(ErrorCode.BadRequest, updatedJobResult.error.message),
+        new AppError(ErrorCode.BadRequest, updatedJobResult.error.message, {
+          cause: updatedJobResult.error,
+        }),
       );
     }
 
@@ -244,7 +263,9 @@ export class JobService implements IJobService {
     );
     if (updateResult.isErr()) {
       return err(
-        new AppError(ErrorCode.InternalServerError, 'Failed to update job'),
+        new AppError(ErrorCode.InternalServerError, 'Failed to update job', {
+          cause: updateResult.error,
+        }),
       );
     }
     return ok(undefined);

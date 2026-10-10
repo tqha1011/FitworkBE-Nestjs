@@ -18,18 +18,20 @@ import { AppError, ErrorCode } from './errorCode';
 export function toHttpException(error: AppError): HttpException {
   switch (error.code) {
     case ErrorCode.Conflict:
-      return new ConflictException(error.message);
+      return new ConflictException(error.message, { cause: error });
     case ErrorCode.NotFound:
-      return new NotFoundException(error.message);
+      return new NotFoundException(error.message, { cause: error });
     case ErrorCode.BadRequest:
-      return new BadRequestException(error.message);
+      return new BadRequestException(error.message, { cause: error });
     case ErrorCode.Unauthorized:
-      return new UnauthorizedException(error.message);
+      return new UnauthorizedException(error.message, { cause: error });
     case ErrorCode.Forbidden:
-      return new ForbiddenException(error.message);
+      return new ForbiddenException(error.message, { cause: error });
     case ErrorCode.TooManyRequests:
-      return new HttpException(error.message, HttpStatus.TOO_MANY_REQUESTS);
+      return new HttpException(error.message, HttpStatus.TOO_MANY_REQUESTS, {
+        cause: error,
+      });
     case ErrorCode.InternalServerError:
-      return new InternalServerErrorException(error.message);
+      return new InternalServerErrorException(error.message, { cause: error });
   }
 }

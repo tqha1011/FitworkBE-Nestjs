@@ -13,6 +13,10 @@ import {
 import { randomUUID } from 'node:crypto';
 import { StructuredLogger } from 'src/shared/observability/structured-logger';
 import { queueMetrics } from 'src/shared/observability/queue-metrics';
+import {
+  bestEffortTelemetry,
+  recordSpanError,
+} from 'src/shared/observability/span-diagnostics';
 
 @Processor(QueueName.LlmEvaluation)
 export class ApplicantEvaluationProcessor extends WorkerHost {
@@ -42,6 +46,23 @@ export class ApplicantEvaluationProcessor extends WorkerHost {
       async (span) => {
         const started = performance.now();
         let outcome: 'success' | 'error' = 'error';
+        let processingError: unknown;
+        const attempt = job.attemptsMade + 1;
+        const maxAttempts = job.opts.attempts ?? 1;
+        const requestId = job.data.telemetry?.requestId ?? randomUUID();
+        bestEffortTelemetry(() =>
+          span.setAttributes({
+            queue: QueueName.LlmEvaluation,
+            job_id: job.id ?? '',
+            request_id: requestId,
+            attempt,
+            max_attempts: maxAttempts,
+            final_attempt: attempt >= maxAttempts,
+            evaluation_public_id: job.data.evaluationPublicId,
+            'fitwork.queue.name': QueueName.LlmEvaluation,
+            'fitwork.queue.attempt': attempt,
+          }),
+        );
         try {
           const result = await this.processingService.process(
             job.data.evaluationPublicId,
@@ -51,33 +72,52 @@ export class ApplicantEvaluationProcessor extends WorkerHost {
           if (result.isErr()) {
             throw result.error;
           }
-          span.setStatus({ code: SpanStatusCode.OK });
-          span.setAttribute('evaluation.processor.success', 'success');
+          bestEffortTelemetry(() =>
+            span.setStatus({ code: SpanStatusCode.OK }),
+          );
+          bestEffortTelemetry(() =>
+            span.setAttribute('evaluation.processor.success', 'success'),
+          );
           outcome = 'success';
         } catch (error) {
-          span.setStatus({ code: SpanStatusCode.ERROR });
-          span.setAttribute('evaluation.processor.error', 'failed');
+          processingError = error;
+          recordSpanError(span, error);
+          bestEffortTelemetry(() =>
+            span.setAttribute('evaluation.processor.error', 'failed'),
+          );
           throw error;
         } finally {
           const durationMs = Math.round(performance.now() - started);
-          queueMetrics.attempt(
-            QueueName.LlmEvaluation,
-            job.attemptsMade,
-            job.opts.attempts ?? 1,
-            outcome,
-            durationMs / 1000,
+          bestEffortTelemetry(() => span.setAttribute('outcome', outcome));
+          bestEffortTelemetry(() =>
+            span.setAttribute('fitwork.queue.outcome', outcome),
           );
-          const spanContext = span.spanContext?.();
-          this.jobLogger.job({
-            requestId: job.data.telemetry?.requestId ?? randomUUID(),
-            queue: QueueName.LlmEvaluation,
-            attempt: job.attemptsMade + 1,
-            outcome,
-            durationMs,
-            traceId: spanContext?.traceId,
-            spanId: spanContext?.spanId,
+          bestEffortTelemetry(() =>
+            queueMetrics.attempt(
+              QueueName.LlmEvaluation,
+              job.attemptsMade,
+              job.opts.attempts ?? 1,
+              outcome,
+              durationMs / 1000,
+            ),
+          );
+          bestEffortTelemetry(() => {
+            const spanContext = span.spanContext();
+            this.jobLogger.job({
+              requestId,
+              jobId: job.id,
+              evaluationPublicId: job.data.evaluationPublicId,
+              queue: QueueName.LlmEvaluation,
+              attempt,
+              maxAttempts,
+              outcome,
+              durationMs,
+              traceId: spanContext?.traceId,
+              spanId: spanContext?.spanId,
+              exception: processingError,
+            });
           });
-          span.end();
+          bestEffortTelemetry(() => span.end());
         }
       },
     );

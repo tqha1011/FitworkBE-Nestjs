@@ -194,4 +194,27 @@ describe('JobApplicantService confirmJobApplicantAsync', () => {
 
     expect(result._unsafeUnwrapErr().code).toBe(ErrorCode.Conflict);
   });
+
+  it.each(['actor', 'context', 'accept', 'transition'])(
+    'preserves the %s failure and hides its details',
+    async (stage) => {
+      const failure = new Error('private dependency payload');
+      const dependencies: Record<string, jest.Mock> = {
+        actor: userRepository.resolvePublicIdToId,
+        context: jobApplicantRepository.getStatusContext,
+        accept: jobApplicantRepository.acceptApplicantAndRejectOthers,
+        transition: jobApplicantRepository.transitionStatus,
+      };
+      dependencies[stage].mockResolvedValue(err(failure));
+      const status =
+        stage === 'transition'
+          ? CommonJobApplicantStatus.REJECTED
+          : CommonJobApplicantStatus.ACCEPTED;
+      const error = (
+        await service.confirmJobApplicantAsync('actor', 'application', status)
+      )._unsafeUnwrapErr();
+      expect(error.cause).toBe(failure);
+      expect(error.message).not.toContain('private dependency payload');
+    },
+  );
 });

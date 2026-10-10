@@ -36,7 +36,11 @@ export class CategoryService implements ICategoryService {
     const result = await this.categoryRepository.getAllCategories();
     if (result.isErr()) {
       return err(
-        new AppError(ErrorCode.InternalServerError, result.error.message),
+        new AppError(
+          ErrorCode.InternalServerError,
+          'Failed to get all categories',
+          { cause: result.error },
+        ),
       );
     }
 

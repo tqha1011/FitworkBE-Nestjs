@@ -10,7 +10,7 @@ export class PasswordHasher implements IPasswordHasher {
       const passwordHash = await bcrypt.hash(password, 10);
       return ok(passwordHash);
     } catch (error) {
-      return err(new Error(`Error generating password hash. Error: ${error}`));
+      return err(new Error('Error generating password hash', { cause: error }));
     }
   }
   async verifyPassword(
@@ -21,7 +21,7 @@ export class PasswordHasher implements IPasswordHasher {
       const isMatch = await bcrypt.compare(password, hashedPassword);
       return ok(isMatch);
     } catch (error) {
-      return err(new Error(`Error verifying password. Error: ${error}`));
+      return err(new Error('Error verifying password', { cause: error }));
     }
   }
 }

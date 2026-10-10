@@ -22,7 +22,13 @@
     "scaffold": "tsx scripts/scaffold-cli.ts",
     "doctor": "tsx scripts/doctor-cli.ts",
     "seed": "prisma db seed",
-    "test:seed": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config test/jest-seed.json --runInBand"
+    "test:seed": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config test/jest-seed.json --runInBand",
+    "seed:perf": "tsx scripts/perf/seed-cli.ts",
+    "bench:job": "tsx scripts/perf/bench-cli.ts",
+    "bench:api": "npm run build && node dist/scripts/perf/serve-cli.js",
+    "test:perf": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config test/jest-perf.json --runInBand",
+    "bench:job:k6": "tsx scripts/perf/k6-run-cli.ts",
+    "bench:applicant:k6": "tsx scripts/perf/k6-run-cli.ts --profile applicant"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1133.0",
@@ -112,6 +118,7 @@
     "rootDir": "src",
     "testRegex": ".*\\.spec\\.ts$",
     "moduleNameMapper": {
+      "^(\\.{1,2}/.*)\\.js$": "$1",
       "^src/(.*)$": "<rootDir>/$1",
       "^generated/(.*)$": "<rootDir>/../generated/$1"
     },

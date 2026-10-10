@@ -9,7 +9,10 @@ import {
   validateApplicantEvaluationOutput,
   validateApplicantEvaluationOutputV2,
 } from '../../infrastructure/llm/applicant-evaluation-response.validator';
-import { validateEvaluationV2 } from './evaluation-v2-validator';
+import {
+  resolveEvaluationV2EvidenceOffsets,
+  validateEvaluationV2,
+} from './evaluation-v2-validator';
 
 @Injectable()
 export class ApplicantEvaluationProcessingService implements IApplicantEvaluationProcessingService {
@@ -84,13 +87,16 @@ export class ApplicantEvaluationProcessingService implements IApplicantEvaluatio
         const validated = validateEvaluationV2(
           snapshot.criteria,
           evaluationData.value.resumeRedactedText,
-          output.evidence,
+          resolveEvaluationV2EvidenceOffsets(
+            evaluationData.value.resumeRedactedText,
+            output.evidence,
+          ),
         );
         completion = { evaluationPublicId, ...validated };
-      } catch {
+      } catch (error) {
         return this.handleFailure(
           evaluationPublicId,
-          new Error('Invalid evaluation V2 response'),
+          new Error('Invalid evaluation V2 response', { cause: error }),
           attemptsMade,
           maxAttempts,
         );
@@ -176,6 +182,6 @@ export class ApplicantEvaluationProcessingService implements IApplicantEvaluatio
   }
 
   private toError(cause: unknown): Error {
-    return cause instanceof Error ? cause : new Error(String(cause));
+    return cause instanceof Error ? cause : new Error(String(cause), { cause });
   }
 }

@@ -12,5 +12,5 @@ generator client {
 
 datasource db {
   provider   = "postgresql" // change provider to match your database (e.g., "mysql", "sqlite", etc.)
-  extensions = [vector]
+  extensions = [vector, pg_trgm]
 }

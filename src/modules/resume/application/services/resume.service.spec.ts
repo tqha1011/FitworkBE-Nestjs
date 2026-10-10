@@ -1,3 +1,4 @@
+import { toHttpException } from 'src/shared/common/app-error.mapper';
 import { err, ok } from 'neverthrow';
 import { IUserRepository } from 'src/modules/users/domain/repositories/users.repo.interface';
 import { ErrorCode } from 'src/shared/common/errorCode';
@@ -491,7 +492,8 @@ describe('ResumeService', () => {
           ingestionStatus: CommonResumeIngestionStatus.PENDING,
         }),
       );
-      ingestionQueue.enqueue.mockRejectedValue(new Error('Redis unavailable'));
+      const failure = new Error('Redis unavailable');
+      ingestionQueue.enqueue.mockRejectedValue(failure);
       contentRepository.markFailed.mockResolvedValue(
         ok({
           publicId: 'ingestion-id',
@@ -511,6 +513,10 @@ describe('ResumeService', () => {
       if (result.isErr()) {
         expect(result.error.code).toBe(ErrorCode.InternalServerError);
       }
+      expect(result._unsafeUnwrapErr().cause).toBe(failure);
+      expect(result._unsafeUnwrapErr().message).not.toContain(
+        'Redis unavailable',
+      );
       expect(contentRepository.markFailed).toHaveBeenCalledWith(
         'ingestion-id',
         expect.stringContaining('Redis unavailable'),
@@ -521,5 +527,39 @@ describe('ResumeService', () => {
         }),
       );
     });
+  });
+
+  it('keeps lookup failures private through HTTP mapping', async () => {
+    const failure = new Error('private dependency payload');
+    userRepository.resolvePublicIdToId.mockResolvedValue(err(failure));
+    resumeRepository.getResumeByPublicId.mockResolvedValue(ok(null));
+    const error = (
+      await service.deleteResumeAsync(userPublicId, 'resume')
+    )._unsafeUnwrapErr();
+    const http = toHttpException(error);
+    expect(error.cause).toBe(failure);
+    expect(http.cause).toBe(error);
+    expect(http.getStatus()).toBe(500);
+    expect(JSON.stringify(http.getResponse())).not.toContain(
+      'private dependency payload',
+    );
+    expect(JSON.stringify(http.getResponse())).not.toContain('cause');
+  });
+
+  it('keeps domain validation message and status with the original cause', async () => {
+    userRepository.resolvePublicIdToId.mockResolvedValue(ok(42));
+    fileStorage.getObjectMetadata.mockResolvedValue(
+      ok({ contentType: 'application/pdf', contentLength: 0 }),
+    );
+    const error = (
+      await service.createResumeAsync(userPublicId, {
+        storageKey,
+        name: 'Resume.pdf',
+      })
+    )._unsafeUnwrapErr();
+    expect(error.cause).toBeInstanceOf(Error);
+    expect(error.message).toBe((error.cause as Error).message);
+    expect(error.code).toBe(ErrorCode.BadRequest);
+    expect(toHttpException(error).getStatus()).toBe(400);
   });
 });

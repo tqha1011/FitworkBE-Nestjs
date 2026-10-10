@@ -4,13 +4,15 @@ import { toHttpException } from 'src/shared/common/app-error.mapper';
 import { CategoryResponseDto } from '../application/dtos/job.response.dto';
 import { ApiStandardResponse } from 'src/shared/common/swagger/api-standard-response.decorator';
 import { ICategoryService } from '../application/interfaces/category.service.interface';
+import { Auth } from 'src/shared/common/swagger/auth-swagger.decorator';
 
-@Controller('categories')
+@Controller('/api/categories')
 @ApiTags('categories')
 export class CategoryController {
   constructor(private readonly categoryService: ICategoryService) {}
 
   @Get()
+  @Auth()
   @ApiOperation({ summary: 'List job categories' })
   @ApiStandardResponse(CategoryResponseDto, { isArray: true })
   async getCategories(): Promise<CategoryResponseDto[]> {

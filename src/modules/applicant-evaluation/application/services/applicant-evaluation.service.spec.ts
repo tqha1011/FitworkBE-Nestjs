@@ -676,4 +676,26 @@ describe('ApplicantEvaluationService', () => {
 
     expect(result._unsafeUnwrapErr().code).toBe(ErrorCode.InternalServerError);
   });
+
+  it.each(['job', 'resume', 'redaction', 'prepare', 'enqueue'])(
+    'keeps the %s failure private with its cause',
+    async (stage) => {
+      const failure = new Error('private dependency payload');
+      const dependencies: Record<string, jest.Mock> = {
+        job: jobRepository.getJobDataForSnapshot,
+        resume: resumeContentRepository.getCurrentForOwner,
+        redaction: resumeRedaction.redactResumeAsync,
+        prepare: applicantEvaluationRepository.prepare,
+      };
+      if (stage === 'enqueue')
+        applicantEvaluationQueue.enqueue.mockRejectedValue(failure);
+      else dependencies[stage].mockResolvedValue(err(failure));
+      const error = (
+        await service.evaluateApplicantAsync('applicant', request)
+      )._unsafeUnwrapErr();
+      expect(error.cause).toBe(failure);
+      expect(error.code).toBe(ErrorCode.InternalServerError);
+      expect(error.message).not.toContain('private dependency payload');
+    },
+  );
 });

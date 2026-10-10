@@ -26,6 +26,8 @@ model Job {
   @@index([arrangementId])
   @@index([categoryId])
   @@index([status])
+  @@index([status, createdAt(sort: Desc), dueAt(sort: Desc)], map: "job_status_createdAt_dueAt_index")
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin, map: "job_title_trgm_idx")
   @@map("job")
 }
 
@@ -57,6 +59,7 @@ model JobApplicant {
   @@index([applicantId])
   @@index([resumeId])
   @@index([resumeContentId])
+  @@index([status])
   @@map("job_applicant")
 }
 

@@ -1,3 +1,4 @@
+import { Injectable } from '@nestjs/common';
 import { err, Result } from 'neverthrow';
 import {
   IJobRepository,
@@ -24,6 +25,7 @@ import {
   mapStatusToPrisma,
 } from './job.mapper';
 
+@Injectable()
 export class JobRepository implements IJobRepository, IJobQueryRepository {
   constructor(private readonly prismaService: PrismaService) {}
   async authorizeJobOwner(
@@ -43,7 +45,7 @@ export class JobRepository implements IJobRepository, IJobQueryRepository {
       if (!owner) return ok(null);
       return ok(undefined);
     } catch (error) {
-      return err(new Error(`Failed to authorize job owner: ${error}`));
+      return err(new Error('Failed to authorize job owner', { cause: error }));
     }
   }
 
@@ -101,7 +103,9 @@ export class JobRepository implements IJobRepository, IJobQueryRepository {
         },
       });
     } catch (error) {
-      return err(new Error(`Failed to get job data for snapshot: ${error}`));
+      return err(
+        new Error('Failed to get job data for snapshot', { cause: error }),
+      );
     }
   }
 
@@ -140,7 +144,7 @@ export class JobRepository implements IJobRepository, IJobQueryRepository {
         }),
       );
     } catch (error) {
-      return err(new Error(`Failed to get job by publicId ${error}`));
+      return err(new Error('Failed to get job by publicId', { cause: error }));
     }
   }
 
@@ -164,7 +168,7 @@ export class JobRepository implements IJobRepository, IJobQueryRepository {
       });
       return ok(undefined);
     } catch (error) {
-      return err(new Error(`Failed to update job ${error}`));
+      return err(new Error('Failed to update job', { cause: error }));
     }
   }
 
@@ -261,7 +265,7 @@ export class JobRepository implements IJobRepository, IJobQueryRepository {
       };
       return ok(jobDetailResponse);
     } catch (error) {
-      return err(new Error(`Failed to get job details ${error}`));
+      return err(new Error('Failed to get job details', { cause: error }));
     }
   }
   async getListJobs(
@@ -367,7 +371,7 @@ export class JobRepository implements IJobRepository, IJobQueryRepository {
         ),
       );
     } catch (error) {
-      return err(new Error(`Failed to get list jobs ${error}`));
+      return err(new Error('Failed to get list jobs', { cause: error }));
     }
   }
 
@@ -403,7 +407,7 @@ export class JobRepository implements IJobRepository, IJobQueryRepository {
       });
       return ok(undefined);
     } catch (error) {
-      return err(new Error(`Failed to add job ${error}`));
+      return err(new Error('Failed to add job', { cause: error }));
     }
   }
 
@@ -419,7 +423,7 @@ export class JobRepository implements IJobRepository, IJobQueryRepository {
       }
       return ok(job.id);
     } catch (error) {
-      return err(new Error(`Failed to get job by publicId ${error}`));
+      return err(new Error('Failed to get job by publicId', { cause: error }));
     }
   }
 }

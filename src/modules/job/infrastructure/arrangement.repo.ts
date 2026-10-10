@@ -1,3 +1,4 @@
+import { Injectable } from '@nestjs/common';
 import { Result, ok, err } from 'neverthrow';
 import {
   ArrangementData,
@@ -5,6 +6,7 @@ import {
 } from '../domain/repositories/arrangement.repo.interface';
 import { PrismaService } from 'src/shared/infrastructure/database/prisma.service';
 
+@Injectable()
 export class ArrangementRepository implements IArrangementRepository {
   constructor(private readonly prismaService: PrismaService) {}
 
@@ -18,7 +20,7 @@ export class ArrangementRepository implements IArrangementRepository {
       });
       return ok(arrangements);
     } catch (error) {
-      return err(new Error(`Failed to get all arrangements: ${error}`));
+      return err(new Error('Failed to get all arrangements', { cause: error }));
     }
   }
 
@@ -31,7 +33,9 @@ export class ArrangementRepository implements IArrangementRepository {
       });
       return ok(count > 0);
     } catch (error) {
-      return err(new Error(`Failed to check arrangement exists: ${error}`));
+      return err(
+        new Error('Failed to check arrangement exists', { cause: error }),
+      );
     }
   }
 }

@@ -117,12 +117,14 @@ describe('Swagger response documentation', () => {
       document.paths['/api/job/applied']?.get?.responses?.['200'],
     ).toBeDefined();
     expect(
-      document.paths['/categories']?.get?.responses?.['200'],
+      document.paths['/api/categories']?.get?.responses?.['200'],
     ).toBeDefined();
     expect(
-      document.paths['/arrangements']?.get?.responses?.['200'],
+      document.paths['/api/arrangements']?.get?.responses?.['200'],
     ).toBeDefined();
-    expect(document.paths['/skills']?.get?.responses?.['200']).toBeDefined();
+    expect(
+      document.paths['/api/skills']?.get?.responses?.['200'],
+    ).toBeDefined();
 
     const jobSearch = document.paths['/api/job']?.get?.responses?.['200'] as {
       content?: Record<

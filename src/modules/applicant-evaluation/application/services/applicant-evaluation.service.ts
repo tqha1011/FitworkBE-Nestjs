@@ -53,6 +53,7 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
         new AppError(
           ErrorCode.InternalServerError,
           'Failed to authorize job owner',
+          { cause: isOwner.error },
         ),
       );
     }
@@ -90,6 +91,7 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
         new AppError(
           ErrorCode.InternalServerError,
           'Failed to get applicant evaluation for job owner',
+          { cause: result.error },
         ),
       );
     }
@@ -153,6 +155,7 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
         new AppError(
           ErrorCode.InternalServerError,
           'Failed to get applicant evaluation detail',
+          { cause: result.error },
         ),
       );
     }
@@ -206,11 +209,21 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
         applicantPublicId,
       ),
     ]);
-    if (jobResult.isErr() || resumeResult.isErr()) {
+    if (jobResult.isErr()) {
       return err(
         new AppError(
           ErrorCode.InternalServerError,
           `Failed to evaluate applicant`,
+          { cause: jobResult.error },
+        ),
+      );
+    }
+    if (resumeResult.isErr()) {
+      return err(
+        new AppError(
+          ErrorCode.InternalServerError,
+          `Failed to evaluate applicant`,
+          { cause: resumeResult.error },
         ),
       );
     }
@@ -240,7 +253,9 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
     );
     if (redactionResult.isErr()) {
       return err(
-        new AppError(ErrorCode.InternalServerError, 'Failed to redact resume'),
+        new AppError(ErrorCode.InternalServerError, 'Failed to redact resume', {
+          cause: redactionResult.error,
+        }),
       );
     }
 
@@ -287,6 +302,7 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
         new AppError(
           ErrorCode.InternalServerError,
           'Failed to prepare applicant evaluation',
+          { cause: prepareResult.error },
         ),
       );
     }
@@ -313,7 +329,8 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
       return err(
         new AppError(
           ErrorCode.InternalServerError,
-          `Failed to enqueue applicant evaluation: ${error instanceof Error ? error.message : String(error)}`,
+          'Failed to enqueue applicant evaluation',
+          { cause: error },
         ),
       );
     }

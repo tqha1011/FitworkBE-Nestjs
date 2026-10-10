@@ -34,7 +34,11 @@ export class SkillService implements ISkillService {
     const result = await this.skillRepository.getAllSkills();
     if (result.isErr()) {
       return err(
-        new AppError(ErrorCode.InternalServerError, result.error.message),
+        new AppError(
+          ErrorCode.InternalServerError,
+          'Failed to get all skills',
+          { cause: result.error },
+        ),
       );
     }
 

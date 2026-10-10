@@ -414,7 +414,7 @@ describe('ApplicantEvaluationRepository', () => {
       const result = await repository.claimForProcessing('evaluation-id');
 
       expect(result.isErr()).toBe(true);
-      expect(result._unsafeUnwrapErr().message).toContain(
+      expect((result._unsafeUnwrapErr().cause as Error).message).toContain(
         'Evaluation input is unavailable',
       );
       expect(tx.applicantEvaluation.updateMany).not.toHaveBeenCalled();
@@ -481,7 +481,7 @@ describe('ApplicantEvaluationRepository', () => {
       const result = await repository.claimForProcessing('evaluation-id');
 
       expect(result.isErr()).toBe(true);
-      expect(result._unsafeUnwrapErr().message).toContain(
+      expect((result._unsafeUnwrapErr().cause as Error).message).toContain(
         'Evaluation resume content is incomplete',
       );
     });
@@ -494,7 +494,7 @@ describe('ApplicantEvaluationRepository', () => {
 
       const result = await repository.claimForProcessing('evaluation-id');
 
-      expect(result._unsafeUnwrapErr().message).toContain(
+      expect((result._unsafeUnwrapErr().cause as Error).message).toContain(
         'Evaluation redacted resume hash does not match',
       );
       expect(tx.applicantEvaluation.updateMany).not.toHaveBeenCalled();
@@ -542,7 +542,7 @@ describe('ApplicantEvaluationRepository', () => {
       const result = await repository.claimForProcessing('evaluation-id');
 
       expect(result.isErr()).toBe(true);
-      expect(result._unsafeUnwrapErr().message).toContain(
+      expect((result._unsafeUnwrapErr().cause as Error).message).toContain(
         'Evaluation job snapshot hash does not match',
       );
     });
@@ -556,7 +556,7 @@ describe('ApplicantEvaluationRepository', () => {
       const result = await repository.claimForProcessing('evaluation-id');
 
       expect(result.isErr()).toBe(true);
-      expect(result._unsafeUnwrapErr().message).toContain(
+      expect((result._unsafeUnwrapErr().cause as Error).message).toContain(
         'Evaluation resume content hash does not match',
       );
     });
@@ -570,7 +570,7 @@ describe('ApplicantEvaluationRepository', () => {
       const result = await repository.claimForProcessing('evaluation-id');
 
       expect(result.isErr()).toBe(true);
-      expect(result._unsafeUnwrapErr().message).toContain(
+      expect((result._unsafeUnwrapErr().cause as Error).message).toContain(
         'Evaluation parser version does not match',
       );
     });
@@ -742,5 +742,75 @@ describe('ApplicantEvaluationRepository', () => {
         'Failed to fail applicant evaluation',
       );
     });
+  });
+});
+
+describe('ApplicantEvaluationRepository error causes', () => {
+  const operations: Array<
+    [
+      string,
+      (
+        repository: ApplicantEvaluationRepository,
+      ) => Promise<import('neverthrow').Result<unknown, Error>>,
+    ]
+  > = [
+    [
+      'getApplicantEvaluationForJobOwner',
+      (repository) =>
+        repository.getApplicantEvaluationForJobOwner('evaluation', 'job'),
+    ],
+    [
+      'getApplicantEvaluationDetail',
+      (repository) =>
+        repository.getApplicantEvaluationDetail('user', 'evaluation'),
+    ],
+    [
+      'getRealtimeStateForApplicant',
+      (repository) =>
+        repository.getRealtimeStateForApplicant('user', 'evaluation'),
+    ],
+    ['prepare', (repository) => repository.prepare({} as never)],
+    [
+      'claimForProcessing',
+      (repository) => repository.claimForProcessing('evaluation'),
+    ],
+    ['markCompleted', (repository) => repository.markCompleted({} as never)],
+    [
+      'markPending',
+      (repository) => repository.markPending('evaluation', 'failed'),
+    ],
+    [
+      'markFailed',
+      (repository) => repository.markFailed('evaluation', 'failed'),
+    ],
+  ];
+
+  describe.each([
+    ['Error', new Error('private dependency payload')],
+    ['non-Error', { message: 'private dependency payload', code: 'PRIVATE' }],
+  ])('%s failures', (_kind, failure) => {
+    it.each(operations)(
+      'preserves the cause and hides dependency details in %s',
+      async (_method, invoke) => {
+        const delegate = {
+          findUnique: jest.fn().mockRejectedValue(failure),
+          findFirst: jest.fn().mockRejectedValue(failure),
+          findMany: jest.fn().mockRejectedValue(failure),
+          count: jest.fn().mockRejectedValue(failure),
+          create: jest.fn().mockRejectedValue(failure),
+          update: jest.fn().mockRejectedValue(failure),
+          updateMany: jest.fn().mockRejectedValue(failure),
+        };
+        const repository = new ApplicantEvaluationRepository({
+          applicantEvaluation: delegate,
+          resume: delegate,
+          $transaction: jest.fn().mockRejectedValue(failure),
+        } as unknown as PrismaService);
+        const error = (await invoke(repository))._unsafeUnwrapErr();
+        expect(error.cause).toBe(failure);
+        expect(error.message).not.toContain('private dependency payload');
+        expect(error.message).not.toContain('[object Object]');
+      },
+    );
   });
 });

@@ -12,7 +12,8 @@ export class AppError extends Error {
   constructor(
     public code: ErrorCode,
     message: string,
+    options?: ErrorOptions,
   ) {
-    super(message);
+    super(message, options);
   }
 }

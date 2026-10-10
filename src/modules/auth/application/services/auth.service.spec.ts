@@ -1,3 +1,4 @@
+import { toHttpException } from 'src/shared/common/app-error.mapper';
 import {
   SpanStatusCode,
   trace,
@@ -10,11 +11,7 @@ import { err, ok } from 'neverthrow';
 import { IUserRepository } from 'src/modules/users/domain/repositories/users.repo.interface';
 import { AppError, ErrorCode } from 'src/shared/common/errorCode';
 import { CommonUserRole } from 'src/shared/domain/enum';
-import {
-  IPasswordHasher,
-  IRefreshTokenProvider,
-  IRefreshTokenRepository,
-} from '../../domain/repositories/auth.repo.interface';
+import { IRefreshTokenRepository } from '../../domain/repositories/auth.repo.interface';
 import { AuthService } from './auth.service';
 
 describe('AuthService login span', () => {
@@ -36,6 +33,11 @@ describe('AuthService login span', () => {
   let verifyPassword: jest.Mock;
   let generateAccessToken: jest.Mock;
   let addRefreshToken: jest.Mock;
+  let generateHashPassword: jest.Mock;
+  let create: jest.Mock;
+  let findById: jest.Mock;
+  let getRefreshTokenByHash: jest.Mock;
+  let revokeRefreshToken: jest.Mock;
   let getTracer: jest.SpyInstance;
   let startActiveSpan: jest.Mock;
   let span: { setAttribute: jest.Mock; setStatus: jest.Mock; end: jest.Mock };
@@ -62,17 +64,34 @@ describe('AuthService login span', () => {
       .mockResolvedValue(ok('private-access-token'));
     addRefreshToken = jest.fn().mockResolvedValue(ok({ publicId: 'token-id' }));
 
+    generateHashPassword = jest.fn().mockResolvedValue(ok('hash'));
+    create = jest.fn().mockResolvedValue(ok({ publicId: 'user-id' }));
+    findById = jest.fn().mockResolvedValue(ok(user));
+    getRefreshTokenByHash = jest.fn().mockResolvedValue(
+      ok({
+        publicId: 'token-id',
+        userId: user.id,
+        revokedAt: null,
+        expiresAt: new Date(Date.now() + 86400000),
+      }),
+    );
+    revokeRefreshToken = jest.fn().mockResolvedValue(ok(undefined));
     service = new AuthService(
-      { findByEmail } as unknown as IUserRepository,
-      { verifyPassword } as unknown as IPasswordHasher,
+      { findByEmail, findById, create } as unknown as IUserRepository,
+      { verifyPassword, generateHashPassword },
       { generateAccessToken },
       {
+        hash: jest.fn().mockReturnValue('token-hash'),
         generate: jest.fn().mockReturnValue({
           rawToken: 'private-refresh-token',
           tokenHash: 'private-token-hash',
         }),
-      } as unknown as IRefreshTokenProvider,
-      { addRefreshToken } as unknown as IRefreshTokenRepository,
+      },
+      {
+        addRefreshToken,
+        getRefreshTokenByHash,
+        revokeRefreshToken,
+      } as unknown as IRefreshTokenRepository,
       {
         get: jest.fn((_name: string, fallback: string) => fallback),
       } as unknown as ConfigService,
@@ -181,4 +200,101 @@ describe('AuthService login span', () => {
     expect(span.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.ERROR });
     expect(span.end).toHaveBeenCalledTimes(1);
   });
+
+  it.each(['lookup', 'password', 'access token', 'refresh token'])(
+    'keeps the %s failure private through HTTP mapping',
+    async (stage) => {
+      const failure = new Error('private dependency payload');
+      const dependencies: Record<string, jest.Mock> = {
+        lookup: findByEmail,
+        password: verifyPassword,
+        'access token': generateAccessToken,
+        'refresh token': addRefreshToken,
+      };
+      dependencies[stage].mockResolvedValue(err(failure));
+      const error = (
+        await service.loginAsync(email, password)
+      )._unsafeUnwrapErr();
+      const http = toHttpException(error);
+      expect(error.cause).toBe(failure);
+      expect(http.cause).toBe(error);
+      expect(http.getStatus()).toBe(500);
+      expect(JSON.stringify(http.getResponse())).not.toContain(
+        'private dependency payload',
+      );
+      expect(JSON.stringify(http.getResponse())).not.toContain('cause');
+    },
+  );
+
+  it('creates invalid-credential errors without a synthetic cause', async () => {
+    verifyPassword.mockResolvedValue(ok(false));
+    const error = (
+      await service.loginAsync(email, password)
+    )._unsafeUnwrapErr();
+    expect(error.cause).toBeUndefined();
+    expect(error.message).toBe('Invalid email or password');
+    expect(toHttpException(error).getStatus()).toBe(401);
+  });
+
+  it.each(['lookup', 'hash', 'create'])(
+    'preserves registration %s failures without exposing details',
+    async (stage) => {
+      findByEmail.mockResolvedValue(ok(null));
+      const failure = new Error('private dependency payload');
+      const dependencies: Record<string, jest.Mock> = {
+        lookup: findByEmail,
+        hash: generateHashPassword,
+        create,
+      };
+      dependencies[stage].mockResolvedValue(err(failure));
+      const error = (
+        await service.registerAsync({
+          email,
+          username: 'user',
+          fullName: 'User',
+          password,
+          userType: UserType.APPLICANT,
+        })
+      )._unsafeUnwrapErr();
+      expect(error.cause).toBe(failure);
+      expect(error.message).not.toContain('private dependency payload');
+    },
+  );
+
+  it.each(['lookup', 'user', 'revoke', 'access', 'refresh'])(
+    'preserves refresh %s failures without exposing details',
+    async (stage) => {
+      const failure = new Error('private dependency payload');
+      const dependencies: Record<string, jest.Mock> = {
+        lookup: getRefreshTokenByHash,
+        user: findById,
+        revoke: revokeRefreshToken,
+        access: generateAccessToken,
+        refresh: addRefreshToken,
+      };
+      dependencies[stage].mockResolvedValue(err(failure));
+      const error = (
+        await service.refreshTokensAsync('refresh-token')
+      )._unsafeUnwrapErr();
+      expect(error.cause).toBe(failure);
+      expect(error.message).not.toContain('private dependency payload');
+    },
+  );
+
+  it.each(['lookup', 'revoke'])(
+    'preserves logout %s failures without exposing details',
+    async (stage) => {
+      const failure = new Error('private dependency payload');
+      const dependencies: Record<string, jest.Mock> = {
+        lookup: getRefreshTokenByHash,
+        revoke: revokeRefreshToken,
+      };
+      dependencies[stage].mockResolvedValue(err(failure));
+      const error = (
+        await service.logoutAsync('refresh-token')
+      )._unsafeUnwrapErr();
+      expect(error.cause).toBe(failure);
+      expect(error.message).not.toContain('private dependency payload');
+    },
+  );
 });

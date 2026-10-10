@@ -49,7 +49,8 @@ export class JobController {
   ) {}
 
   @Post()
-  @Auth()
+  @Auth(RolesGuard)
+  @Roles([CommonUserRole.ROLE_COMPANY])
   @ApiOperation({ summary: 'Create a new job posting' })
   @ApiResponse({ status: HttpStatus.CREATED, description: 'Job created' })
   async createJob(
@@ -63,6 +64,7 @@ export class JobController {
   }
 
   @Get()
+  @Auth()
   @ApiOperation({ summary: 'Search job postings' })
   @ApiPaginatedResponse(JobItemResponseDto)
   async searchJobs(

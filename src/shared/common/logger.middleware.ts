@@ -68,6 +68,10 @@ export class LoggerMiddleware implements NestMiddleware {
     res.once('finish', () => finish(false));
     res.once('close', () => finish(true));
 
-    requestContext.run({ requestId }, next);
+    const spanContext = initialSpan?.spanContext();
+    requestContext.run(
+      { requestId, traceId: spanContext?.traceId, spanId: spanContext?.spanId },
+      next,
+    );
   }
 }

@@ -1,0 +1,270 @@
+{
+  "id": null,
+  "uid": "fitwork-logs",
+  "title": "FitWork - Logs",
+  "description": "Structured FitWork application logs. Search matches the full log line: use an evaluation/resume publicId, job ID, request ID, trace ID, route or keyword. Expand a line to inspect attributes.",
+  "tags": ["fitwork"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 3,
+  "editable": true,
+  "refresh": "30s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "templating": {
+    "list": [
+      {
+        "name": "loki",
+        "type": "datasource",
+        "query": "loki",
+        "regex": "/^Loki$/",
+        "hide": 2,
+        "refresh": 1,
+        "current": {},
+        "options": []
+      },
+      {
+        "name": "event",
+        "label": "Event",
+        "type": "query",
+        "datasource": {
+          "type": "loki",
+          "uid": "${loki}"
+        },
+        "query": "label_values({event_domain=\"fitwork\"}, event_name)",
+        "refresh": 1,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "options": []
+      },
+      {
+        "name": "search",
+        "label": "Search (evaluation / resume / job / request / trace ID / text)",
+        "type": "textbox",
+        "query": "",
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "options": []
+      }
+    ]
+  },
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Log events / second",
+      "description": "",
+      "datasource": {
+        "type": "loki",
+        "uid": "${loki}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "${loki}"
+          },
+          "expr": "sum by (event_name) (rate({event_domain=\"fitwork\",event_name=~\"${event:regex}\"} |= ${search:doublequote} [$__auto]))",
+          "legendFormat": "{{event_name}}",
+          "editorMode": "code",
+          "queryType": "range"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Log events in selected period",
+      "description": "",
+      "datasource": {
+        "type": "loki",
+        "uid": "${loki}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "${loki}"
+          },
+          "expr": "sum by (event_name) (count_over_time({event_domain=\"fitwork\",event_name=~\"${event:regex}\"} |= ${search:doublequote} [$__range]))",
+          "legendFormat": "{{event_name}}",
+          "editorMode": "code",
+          "queryType": "range"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "type": "logs",
+      "title": "Error details",
+      "description": "HTTP, queue and application failures with sanitized root errors, causes and stacks. Expand an entry for details and trace_id. Queue final_attempt only describes the configured attempt limit; it does not guarantee a retry or database status. This panel always shows failures and respects Search.",
+      "datasource": {
+        "type": "loki",
+        "uid": "${loki}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 24,
+        "h": 14
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "${loki}"
+          },
+          "expr": "{event_domain=\"fitwork\",event_name=~\"http.request.failed|queue.job.failed|app.error\"} |= ${search:doublequote} | json | line_format \"{{if eq .event_name \\\"http.request.failed\\\"}}{{.attributes_method}} {{.attributes_route_template}} {{.attributes_status_code}}{{else if eq .event_name \\\"queue.job.failed\\\"}}{{.attributes_queue}} job={{.attributes_job_id}} attempt={{.attributes_attempt}}/{{.attributes_max_attempts}} final_attempt={{.attributes_final_attempt}}{{else}}app.error{{end}} | {{.attributes_error_type}}: {{.attributes_error_message}}\"",
+          "legendFormat": "",
+          "editorMode": "code",
+          "queryType": "range",
+          "maxLines": 500
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": true,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "type": "logs",
+      "title": "Application logs",
+      "description": "",
+      "datasource": {
+        "type": "loki",
+        "uid": "${loki}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 22,
+        "w": 24,
+        "h": 14
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "${loki}"
+          },
+          "expr": "{event_domain=\"fitwork\",event_name=~\"${event:regex}\"} |= ${search:doublequote}",
+          "legendFormat": "",
+          "editorMode": "code",
+          "queryType": "range",
+          "maxLines": 500
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": true,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      }
+    }
+  ],
+  "links": [
+    {
+      "title": "FitWork - Metrics",
+      "type": "link",
+      "url": "/d/fitwork-metrics",
+      "keepTime": true,
+      "includeVars": false,
+      "targetBlank": false
+    }
+  ]
+}

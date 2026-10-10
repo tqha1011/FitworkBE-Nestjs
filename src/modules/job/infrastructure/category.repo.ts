@@ -1,3 +1,4 @@
+import { Injectable } from '@nestjs/common';
 import { Result, ok, err } from 'neverthrow';
 import {
   CategoryData,
@@ -5,6 +6,7 @@ import {
 } from '../domain/repositories/category.repo.interface';
 import { PrismaService } from 'src/shared/infrastructure/database/prisma.service';
 
+@Injectable()
 export class CategoryRepository implements ICategoryRepository {
   constructor(private readonly prismaService: PrismaService) {}
 
@@ -18,7 +20,7 @@ export class CategoryRepository implements ICategoryRepository {
       });
       return ok(categories);
     } catch (error) {
-      return err(new Error(`Failed to get all categories: ${error}`));
+      return err(new Error('Failed to get all categories', { cause: error }));
     }
   }
 
@@ -29,7 +31,9 @@ export class CategoryRepository implements ICategoryRepository {
       });
       return ok(count > 0);
     } catch (error) {
-      return err(new Error(`Failed to check category exists: ${error}`));
+      return err(
+        new Error('Failed to check category exists', { cause: error }),
+      );
     }
   }
 }

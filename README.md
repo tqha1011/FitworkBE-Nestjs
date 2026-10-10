@@ -1,10 +1,26 @@
 # Fitwork Backend
 
+## Table of Contents
+
+- [Overview](#overview)
+- [Core Features](#core-features)
+- [Technical Highlights](#technical-highlights)
+- [Performance Optimization](#performance-optimization)
+- [Tech Stack](#tech-stack)
+- [User Flow](#user-flow)
+- [Monitoring and Gmail Alerts](#monitoring-and-gmail-alerts)
+- [Getting Started](#getting-started)
+- [Project Structure](#project-structure)
+- [Development Commands](#development-commands)
+- [Load Testing with k6](#load-testing-with-k6)
+
 ## Overview
 
 Fitwork is a recruitment and project hiring API that connects applicants with companies. Companies publish jobs with requirements, skills, budgets, and deadlines. Applicants upload resumes, submit proposals, and track their applications. AI evaluation compares resume content with a job and provides scores and supporting evidence for human review.
 
 This repository contains the NestJS backend, including REST endpoints, background workers, and Socket.IO gateways. Interactive API documentation is available at `/docs`.
+
+Frontend integration guide: [Job API — endpoints, requests, responses, and FE usage (Vietnamese)](docs/api/job.md).
 
 ## Core Features
 
@@ -25,7 +41,7 @@ This repository contains the NestJS backend, including REST endpoints, backgroun
 - **Hexagonal architecture:** Feature modules separate HTTP controllers, application services, domain entities and contracts, and infrastructure adapters. Abstract classes define injectable service and repository contracts.
 - **Explicit error handling:** Domain and application operations use `neverthrow` results. Controllers translate application errors into HTTP responses, with a global exception filter and DTO validation.
 - **Asynchronous processing:** BullMQ queues handle resume ingestion and AI evaluation with three attempts, exponential backoff, and stable job IDs. Workers persist processing and failure states.
-- **Evidence validation:** V2 evaluations use one criterion per structured job skill, with equal weights totaling 100. Each result is `MATCHED`, `PARTIAL`, or `MISSING`; cited snippets and character offsets must match the exact redacted resume snapshot. The backend computes the score from validated contributions.
+- **Evidence validation:** V2 evaluations use one criterion per structured job skill, with equal weights totaling 100. Each result is `MATCHED`, `PARTIAL`, or `MISSING`; cited snippets and character offsets must match the exact redacted resume snapshot. If Gemini supplies wrong offsets but the quote occurs exactly once, the backend resolves its positions before validation. Missing quotes and ambiguous positions are rejected with specific error codes. The backend computes the score from validated contributions.
 - **Versioned evaluation inputs:** Stored job snapshots, resume content hashes, redacted text hashes, and parser, redaction, model, and prompt versions tie results to the inputs used. Matching input and model versions reuse existing evaluations.
 - **Privacy reduction:** A versioned text preprocessing step redacts detected emails, phone numbers, URLs, and contact header names and addresses before evaluation. Redaction is best effort; names outside the contact header may remain.
 - **Structured AI output:** Gemini responses are constrained by JSON schemas and validated with AJV. The V2 prompt treats job and resume text as untrusted data and instructs the model to ignore embedded instructions.
@@ -35,13 +51,74 @@ This repository contains the NestJS backend, including REST endpoints, backgroun
 
 Jobs with structured skills use evaluation V2. Jobs without skills use V1, which provides category scores and narrative evidence. In V2, free-form requirements remain context; they are not automatically converted into scored criteria.
 
+## Performance Optimization
+
+PostgreSQL indexing improvements to the NestJS job-search REST API reduced **p95 search latency by 41.9%** and increased the **reported search request rate by 51.9%** in two local k6 runs with **500 concurrent virtual users**. Both runs completed with **zero HTTP errors** and **100% successful checks**.
+
+### Workload and Database Changes
+
+The applicant workload logs in 500 distinct accounts before search starts, then runs a **10-second warm-up and 60-second measurement**. Each VU reuses its JWT, rotates through 12 search queries against `GET /api/job`, and waits 1–3 seconds between searches. The benchmark database contained **50,060 jobs** and **50,151 job applications**; counts across all 13 application tables were unchanged by the migration.
+
+The [Prisma migration](prisma/migrations/20261010101808_add_job_search_indexes/migration.sql) enables `pg_trgm` and adds three indexes:
+
+- **Composite B-tree:** `job(status, created_at DESC, due_at DESC)`.
+- **GIN trigram:** `job(title gin_trgm_ops)`.
+- **B-tree:** `job_applicant(status)`.
+
+The migration was deployed successfully, and all three indexes were verified as valid and ready. The application queries and benchmark configuration were preserved.
+
+### Before Index Optimization
+
+| Metric | Result |
+| --- | --- |
+| Measured search latency (`job_search_measured`) | **Median 4.38s · p95 5.25s · p99 5.34s** |
+| Search latency including warm-up (`job_search_sample`) | Median 4.64s · p95 5.35s · p99 5.62s |
+| Search requests | 5,957 |
+| Reported search request rate | 70.89 req/s |
+| Login requests | 500 |
+| Login latency | Median 109.35ms · p95 161.50ms · p99 166.87ms |
+| Login setup duration | 8.08s |
+| All HTTP request latency | Median 4.49s · p95 5.34s · p99 5.62s |
+| Total HTTP requests / reported rate | 6,457 / 76.84 req/s |
+| HTTP failures | 0 / 6,457 (0%) |
+| Successful checks | 6,457 / 6,457 (100%) |
+| Iteration duration | Median 6.26s · p95 8.13s · p99 8.54s |
+
+### After Index Optimization
+
+| Metric | Result |
+| --- | --- |
+| Measured search latency (`job_search_measured`) | **Median 2.10s · p95 3.05s · p99 3.73s** |
+| Search latency including warm-up (`job_search_sample`) | Median 2.10s · p95 3.71s · p99 3.99s |
+| Search requests | 8,769 |
+| Reported search request rate | 107.68 req/s |
+| Login requests | 500 |
+| Login latency | Median 110.11ms · p95 162.17ms · p99 169.11ms |
+| Login setup duration | 8.14s |
+| All HTTP request latency | Median 2.07s · p95 3.70s · p99 3.98s |
+| Total HTTP requests / reported rate | 9,269 / 113.82 req/s |
+| HTTP failures | 0 / 9,269 (0%) |
+| Successful checks | 9,269 / 9,269 (100%) |
+| Iteration duration | Median 3.88s · p95 5.99s · p99 6.86s |
+
+### Assessment
+
+- **Faster typical responses:** measured search median fell from 4.38s to 2.10s, a **52.1% reduction**.
+- **Lower tail latency:** measured p95 fell from 5.25s to 3.05s (**41.9% lower**), and p99 from 5.34s to 3.73s (**30.1% lower**).
+- **More work completed at the same configured concurrency:** the reported search rate rose from 70.89 to 107.68 req/s (**51.9% higher**), with 8,769 searches completed after optimization versus 5,957 before.
+- **Successful responses under load:** every check passed in both runs, including HTTP 200 and repository-matching payload validation. Login median remained around 110ms, with no HTTP failures across login and search.
+
+Latency comparisons use `job_search_measured`, which records valid searches started after warm-up. The request rates above are native k6 counter averages over the entire run, including login setup, warm-up, and final drain; they are not measurement-window-only throughput. These two runs demonstrate an observed improvement for this workload. Repeated runs under the same environment are needed to quantify variability; measured p95 remains 3.05s at 500 VUs, leaving room for further optimization.
+
+See [Load Testing with k6](#load-testing-with-k6) for reproduction commands and before/after comparison instructions. Figures above are transcribed from the two terminal summaries reported on October 10, 2026.
+
 ## Tech Stack
 
 | Area                          | Technologies                                                                                 |
 | ----------------------------- | -------------------------------------------------------------------------------------------- |
 | Runtime and language          | Node.js 24, TypeScript 5                                                                     |
 | API framework                 | NestJS 11, Express, Swagger / OpenAPI                                                        |
-| Database                      | PostgreSQL, Prisma 7.8, PostgreSQL driver adapter; schema declares the `vector` extension    |
+| Database                      | PostgreSQL, Prisma 7.8, PostgreSQL driver adapter; `vector` and `pg_trgm` extensions         |
 | Queues and caching            | Redis, BullMQ, ioredis, NestJS Cache Manager, Keyv                                           |
 | AI                            | Google Gemini through `@google/genai`, AJV JSON schema validation                            |
 | File storage                  | S3-compatible object storage through AWS SDK v3                                              |
@@ -85,7 +162,7 @@ flowchart TD
 ### Company
 
 1. Register as `COMPANY` and log in.
-2. Read available reference data at `GET /categories`, `GET /skills`, and `GET /arrangements`.
+2. Read available reference data at `GET /api/categories`, `GET /api/skills`, and `GET /api/arrangements`.
 3. Publish a job at `POST /api/job`. Update its details or open/closed status at `PATCH /api/job/:jobPublicId`.
 4. Review a completed evaluation at `GET /api/applicant-evaluation/jobs/:jobPublicId/:evaluationPublicId`. Access is restricted to the job owner.
 5. Set an application status at `PATCH /api/job/applicants/:jobApplicantPublicId/status`. Allowed transitions are `PENDING → ACCEPTED`, `PENDING → REJECTED`, and `ACCEPTED → COMPLETED`.
@@ -124,10 +201,10 @@ flowchart LR
 - **Collector** accepts OTLP traces, metrics, and logs, applies memory limits and batching, and forwards them to Alloy.
 - **Alloy** sends metrics to Prometheus's remote write receiver, logs to Loki, and traces to Jaeger. It copies the OTEL `service.name` resource attribute onto metrics as the Prometheus label `service_name`.
 - **Prometheus** also scrapes itself, Redis exporter, Loki, and Alloy's HTTP metrics endpoint on port `4201`. Every 15 seconds, it evaluates the rules in `src/monitoring/prometheus/alert.rule.yml` and forwards alerts to `alertmanager:9093`.
-- **Grafana** provisions Prometheus and Loki data sources automatically. Open the Jaeger UI separately to inspect traces.
+- **Grafana** provisions Prometheus, Loki, and Jaeger data sources automatically, plus the `FitWork - Metrics` and `FitWork - Logs` dashboards in the `FitWork` folder. Jaeger traces can be inspected in Grafana Explore or the separate Jaeger UI.
 - **Alertmanager** groups and deduplicates alerts, supports silences, and sends firing and resolved email notifications. It runs when the Compose `alerting` profile is enabled. Loki's ruler also points to Alertmanager, but this repository does not include log alert rules.
 
-**Current API instrumentation:** `src/instrumentation.ts` starts the Node.js OpenTelemetry SDK before NestJS loads. Compose sends automatic instrumentation data to the Collector over OTLP gRPC at port `4317`; local runs leave exporters disabled unless `OTEL_TRACES_EXPORTER`, `OTEL_METRICS_EXPORTER`, or `OTEL_LOGS_EXPORTER` is configured. Business spans, structured application logs, and the `fitwork_*` metrics are still planned. `BackendTelemetryMissing` will fire if the required runtime metric is absent. The backend rules currently match `service_name="fitwork-nestjs-api"`; update those selectors if you change `OTEL_SERVICE_NAME`.
+**Current API instrumentation:** `src/instrumentation.ts` starts the Node.js OpenTelemetry SDK before NestJS loads. Compose sends automatic instrumentation data to the Collector over OTLP gRPC at port `4317`; local runs leave exporters disabled unless `OTEL_TRACES_EXPORTER`, `OTEL_METRICS_EXPORTER`, or `OTEL_LOGS_EXPORTER` is configured. Structured application logs and the `fitwork_*` metrics cover HTTP requests, queue jobs, Gemini usage, cache accesses, and dependency errors. `BackendTelemetryMissing` will fire if the required runtime metric is absent. The backend rules currently match `service_name="fitwork-nestjs-api"`; update those selectors if you change `OTEL_SERVICE_NAME`.
 
 ### Monitoring Interfaces
 
@@ -142,6 +219,35 @@ flowchart LR
 | Collector    | `localhost:4317`         | `OTEL_PORT`; OTLP gRPC ingestion, not an HTTP UI.                                                                 |
 
 Grafana uses port `3001` so it can run alongside the API on port `3000`. Prometheus, Loki, Grafana, Alloy, and Alertmanager have named volumes for local state. Configuration files are mounted from `src/monitoring/`.
+
+### FitWork Dashboards
+
+Start or update the monitoring services with `docker compose up -d prometheus loki grafana`. The one-shot `monitoring-volume-init` service prepares the named-volume ownership for the non-root Prometheus and Loki processes without deleting data.
+
+- [FitWork - Metrics](http://localhost:3001/d/fitwork-metrics): request rate, HTTP errors and latency, event loop utilization, queue backlog and outcomes, Gemini latency and tokens, cache accesses, dependency errors, Redis, and scrape health. Set the **Service** filter if you change `OTEL_SERVICE_NAME`; Redis and scrape-health panels are independent of this filter.
+- [FitWork - Logs](http://localhost:3001/d/fitwork-logs): log volume and structured logs. Filter by **Event**, or enter an evaluation/resume publicId, BullMQ job ID, request ID, trace ID, route, or text in **Search**. Expand log entries to inspect their attributes.
+
+The **Error details** panel shows `http.request.failed` events with a readable error summary. Expand an entry to inspect `error_message`, `error_code` (when available), `error_stack`, and the sanitized `error_causes` chain. Search the same request ID or trace ID to find its `http.request.completed` event. Server failures include up to 20 stack frames; client errors are warnings without stacks. Diagnostic redaction covers known credential and PII formats; avoid putting raw user payloads in error messages. Prisma query dumps and arbitrary thrown objects are excluded from diagnostics. Cause propagation is supported by `AppError`; the job-search repository and service preserve their underlying errors.
+
+Dashboard JSON files live in `src/monitoring/grafana/dashboards/`. Grafana polls them every 30 seconds after startup; edit those files to persist changes. Business panels can show **No data** until the corresponding traffic or jobs occur. Empty error series do not prove the absence of errors; check scrape health and API telemetry as well. Logs use the `event_domain="fitwork"` and `event_name` labels set by Alloy.
+
+The dashboards resolve the provisioned data sources by name (`Prometheus` and `Loki`) through hidden datasource variables. Datasource provisioning preserves existing generated UIDs, so these dashboards also work with a Grafana volume created before explicit UIDs were introduced.
+
+
+To diagnose a queue failure, open [FitWork - Logs](http://localhost:3001/d/fitwork-logs) and paste the evaluation publicId (for example `smoke-evaluation-...`) into **Search**. For resume ingestion, use `resume_public_id`, `resume_content_public_id`, or the BullMQ `job_id` value. **Application logs** follows the **Event** selector; **Error details** always includes `http.request.failed`, `queue.job.failed`, and `app.error`, and applies Search to the full record before formatting it.
+
+Each new processing attempt emits exactly one outcome event: `queue.job.completed` at INFO on success, or `queue.job.failed` on failure. A failure is WARN while `attempt < max_attempts`, and ERROR with `final_attempt=true` when the configured limit has been reached. These fields describe the attempt budget; they do not guarantee BullMQ will retry or that the database status is `FAILED`. Retry configuration, API responses, database transitions, and metrics are unchanged. Historical logs retain their original event names, including older failed attempts recorded as `queue.job.completed`.
+
+Expand an error entry to inspect the sanitized root `error_type`, `error_message`, optional `error_code`, `error_stack`, and bounded `error_causes`. Copy `trace_id` into Grafana Explore with the **Jaeger** datasource, or open `http://localhost:16686/trace/<trace_id>` in Jaeger. Queue spans include job/public IDs, attempt limits and outcome; their exception events and Gemini child spans retain sanitized diagnostics. Public IDs are log/trace attributes and are never metric labels or indexed Loki labels.
+
+After changing instrumentation, rebuild and recreate the API with `docker compose up -d --build --no-deps fitwork-nestjs-api`. Grafana reloads the provisioned dashboard within 30 seconds. No migration or new dependency is required. To verify diagnostics using fake services and a stubbed Gemini 404, run:
+
+```bash
+npm run build
+node scripts/bullmq-diagnostics-smoke.cjs
+```
+
+The smoke fixture calls the processors directly, exports telemetry to the local Collector, and checks the provisioned dashboard through Grafana's Loki datasource and the matching traces in Jaeger. It creates synthetic logs/metrics/traces only: it never enqueues a real job, changes application data, or calls Gemini. It reads local port overrides and Grafana credentials from `.env`; the monitoring stack must be running. The final output includes synthetic public IDs and Grafana/Jaeger links.
 
 ### Alert Rules
 
@@ -367,3 +473,74 @@ Each feature follows the `api/`, `application/`, `domain/`, and `infrastructure/
 After Prisma model changes, run `npx prisma format`, `npx prisma validate`, and `npx prisma generate`.
 
 Husky runs lint-staged on commit, a build before push, and Commitlint for Conventional Commit messages. GitHub Actions checks pull requests and pushes to `develop` and `main` with dependency installation, Prisma generation, lint, and build.
+
+## Load Testing with k6
+
+Run commands from the repository root, with dependencies installed and `k6 >= 1.5` available on `PATH` for applicant runs (`k6 version` checks this; search-only matrix/mixed require `>= 0.57`). Keep the API running in another terminal using your usual development or Docker setup. PostgreSQL/Redis must be available, and `.tmp/job-benchmark/manifest.json` must describe the existing 50,000-job benchmark dataset. See [seed and benchmark setup](scripts/perf/README.md) if setting up a new database.
+
+### Applicant login and search: 300/500 VUs
+
+This profile reads `.env`, selects distinct active seed/perf applicant accounts from the database, and creates only missing accounts. Before any VU searches, k6 `setup()` logs in all selected accounts through `POST /api/auth/login` in batches of at most 10, then verifies their tokens cover the complete search workload. Only after every account is ready do VUs start the 10-second search warm-up and 60-second measurement. Each VU reuses its own token and rotates through 12 job-search queries with 1–3 seconds between searches. You do not need to obtain an access token manually; no login traffic runs during search measurement.
+
+```sh
+# Check login, sessions and all search queries with 2 VUs first.
+npm run bench:applicant:k6 -- --smoke --label applicant-smoke
+
+# Run 300 VUs, then 500 VUs, sequentially.
+npm run bench:applicant:k6 -- --label applicant-before-index
+
+# Run just one load level.
+npm run bench:applicant:k6 -- --vus 500 --label applicant-500
+```
+
+Each full load level has a 10-second warm-up and 60-second measurement, with a 10-second request timeout/graceful stop. The default 300/500 run takes about 3 minutes plus preflight, login preparation and SQL analysis. Login preparation has a 10-minute timeout and fails before search if any account cannot log in or has insufficient token lifetime. VUs represent concurrent applicant sessions; 500 VUs does not mean 500 requests per second.
+
+The runner shows the native k6 banner, VU/iteration progress and result summary in the terminal. Read **`job_search_measured`** for p50/median, p95 and p99 of valid HTTP 200 searches started after warm-up. Native HTTP statistics include login setup, search, warm-up and errors; `job_search_sample` includes search warm-up/errors. The aggregate report separates login from search and excludes login preparation from search measurement time and throughput. It prints the report path at the end.
+
+Configuration defaults:
+
+| Variable | Applicant profile behavior |
+| --- | --- |
+| `API_BASE_URL` | Defaults to `http://127.0.0.1:$PORT`, or port `3000` when `PORT` is unset. |
+| `PERF_DATABASE_URL` | Defaults to `DATABASE_URL` from `.env`; must be reachable from the terminal running the benchmark. |
+| `API_DATABASE_URL` | Defaults to `DATABASE_URL`, then `PERF_DATABASE_URL`; must identify the database actually used by the API. |
+| `K6_APPLICANT_PASSWORD` | Uses this value, then `SEED_PASSWORD`, then the demo default `FitworkDemo@123`. |
+
+Export overrides if the running server differs from `.env`. Only accounts under `@seed.fitwork.test`/`@perf.fitwork.test` with a matching password are reused. Existing accounts/passwords and job data are preserved. Add `--no-seed-accounts` to stop when there are too few eligible accounts instead of creating more.
+
+### Run directly with `k6 run`
+
+Prepare the account/config files first, then run the exact command printed by preparation in the same terminal:
+
+```sh
+npm run bench:applicant:k6 -- --prepare-only --vus 500 --label direct-500
+export K6_APPLICANT_PASSWORD='<the password used for seed applicants>'
+# Copy and run the printed K6_CONFIG=... K6_APPLICANT_ACCOUNTS_FILE=... k6 run ... command.
+```
+
+Use `FitworkDemo@123` for unchanged default seed accounts. Preparation verifies the database and API and may create missing accounts; it does not run the load workload or SQL EXPLAIN. Add `--smoke` to prepare a 2-VU smoke instead. If preparing both 300/500 levels, run the printed commands sequentially.
+
+The printed command sets the following file inputs and invokes k6 directly:
+
+```sh
+K6_CONFIG='<run-directory>/applicant-vu500.config.json' \
+K6_APPLICANT_ACCOUNTS_FILE='<run-directory>/applicant-accounts.json' \
+k6 run --new-machine-readable-summary scripts/perf/k6/job-search.js
+```
+
+The actual printed command also exports metrics and a JSON summary. Use the printed `--new-machine-readable-summary` option when exporting a summary: the legacy summary format includes `setup_data`, which can contain session tokens. Config/account files contain queries, expected payloads and account identities; passwords/tokens are not stored in these files or the new-format summary. Direct k6 runs use the same login-before-search sequence and show the native terminal summary, while aggregate reports, baseline comparison, post-load data checks and SQL EXPLAIN require the npm runner. Prepare again if the dataset changes before running the load.
+
+### Reports and before/after comparison
+
+Each runner invocation creates a separate directory under `.tmp/job-benchmark/k6/<label>-<timestamp>/` containing `report.md`, `report.json`, and per-case config, metrics, summary and sanitized logs. Reports include p50/p95/p99, successful requests/second, request counts, timeout/HTTP/transport/payload errors and authenticated VUs. Failed or interrupted runs retain completed artifacts.
+
+Create a new baseline with the login-before-search workflow; reports from the previous overlapping login/search workflow cannot be compared to it. After adding an index, use the same workload, account pool, dataset and environment:
+
+```sh
+npm run bench:applicant:k6 -- --label applicant-after-index \
+  --baseline .tmp/job-benchmark/k6/<applicant-before-index-run>/report.json
+```
+
+Comparison rejects different workloads or data/counts and records index changes. If smoke fails with login HTTP 401/403, check the seed password, account status and permissions. Login HTTP 500 with Prisma `P1001` in server logs indicates a database connection problem; fix the API connection before running the load.
+
+For the search-only index baseline, use `npm run bench:job:k6 -- --smoke`, then `npm run bench:job:k6 -- --label before-index`. This runner requires explicit `API_BASE_URL`, `ACCESS_TOKEN`, `PERF_DATABASE_URL` and `API_DATABASE_URL`; its `matrix` profile tests individual criteria at 1/10/50 VUs, and `mixed` tests 25/50/100 requests/second. See [detailed k6 benchmark instructions](scripts/perf/README.md#k6-job-search-trướcsau-index) for token lifetime, full workload and comparison options.

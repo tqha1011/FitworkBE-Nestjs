@@ -114,7 +114,11 @@ export class ResumeRedactEvaluation implements IResumeRedactEvaluation {
       resumeContentPublicId,
     );
     if (result.isErr()) {
-      return err(new Error('Failed to load resume content for evaluation'));
+      return err(
+        new Error('Failed to load resume content for evaluation', {
+          cause: result.error,
+        }),
+      );
     }
     if (!result.value) {
       return ok(null);
@@ -128,8 +132,12 @@ export class ResumeRedactEvaluation implements IResumeRedactEvaluation {
 
     try {
       return ok(createResumeEvaluationSnapshot(result.value.extractedText));
-    } catch {
-      return err(new Error('Failed to create resume evaluation snapshot'));
+    } catch (error) {
+      return err(
+        new Error('Failed to create resume evaluation snapshot', {
+          cause: error,
+        }),
+      );
     }
   }
 }

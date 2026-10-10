@@ -10,7 +10,6 @@ import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
-import { AllExceptionsFilter } from './shared/common/exceptions.filter';
 import { StructuredLogger } from './shared/observability/structured-logger';
 
 let application: INestApplication | undefined;
@@ -29,7 +28,6 @@ async function bootstrap() {
     }),
   );
 
-  app.useGlobalFilters(new AllExceptionsFilter());
   const options = new DocumentBuilder()
     .setTitle('Fitwork API')
     .setDescription('API documentation for Fitwork application')

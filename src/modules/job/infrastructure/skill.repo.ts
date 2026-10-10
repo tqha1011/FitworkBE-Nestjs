@@ -1,3 +1,4 @@
+import { Injectable } from '@nestjs/common';
 import { Result, ok, err } from 'neverthrow';
 import {
   ISkillRepository,
@@ -5,6 +6,7 @@ import {
 } from '../domain/repositories/skill.repo.interface';
 import { PrismaService } from 'src/shared/infrastructure/database/prisma.service';
 
+@Injectable()
 export class SkillRepository implements ISkillRepository {
   constructor(private readonly prismaService: PrismaService) {}
   async getAllSkills(): Promise<Result<SkillData[], Error>> {
@@ -22,7 +24,7 @@ export class SkillRepository implements ISkillRepository {
         })),
       );
     } catch (error) {
-      return err(new Error(`Failed to get all skills: ${error}`));
+      return err(new Error('Failed to get all skills', { cause: error }));
     }
   }
 
@@ -37,7 +39,7 @@ export class SkillRepository implements ISkillRepository {
       });
       return ok(skills.map((skill) => skill.id));
     } catch (error) {
-      return err(new Error(`Failed to validate skill ids: ${error}`));
+      return err(new Error('Failed to validate skill ids', { cause: error }));
     }
   }
 }
