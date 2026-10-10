@@ -74,7 +74,7 @@ services:
     command: redis-server --requirepass ${REDIS_PASSWORD}
 
     healthcheck:
-      test: ['CMD-SHELL', 'redis-cli ping']
+      test: ['CMD-SHELL', 'REDISCLI_AUTH="$${REDIS_PASSWORD}" redis-cli --raw ping | grep -qx PONG']
       interval: 5s
       timeout: 5s
       retries: 10
@@ -88,7 +88,8 @@ services:
     networks:
       - Fitwork-backend
     environment:
-      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      REDIS_ADDR: redis://redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
 
   grafana:
     image: grafana/grafana:latest

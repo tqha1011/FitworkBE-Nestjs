@@ -1,5 +1,19 @@
 # Fitwork Backend
 
+## Table of Contents
+
+- [Overview](#overview)
+- [Core Features](#core-features)
+- [Technical Highlights](#technical-highlights)
+- [Performance Optimization](#performance-optimization)
+- [Tech Stack](#tech-stack)
+- [User Flow](#user-flow)
+- [Monitoring and Gmail Alerts](#monitoring-and-gmail-alerts)
+- [Getting Started](#getting-started)
+- [Project Structure](#project-structure)
+- [Development Commands](#development-commands)
+- [Load Testing with k6](#load-testing-with-k6)
+
 ## Overview
 
 Fitwork is a recruitment and project hiring API that connects applicants with companies. Companies publish jobs with requirements, skills, budgets, and deadlines. Applicants upload resumes, submit proposals, and track their applications. AI evaluation compares resume content with a job and provides scores and supporting evidence for human review.
@@ -37,13 +51,74 @@ Frontend integration guide: [Job API — endpoints, requests, responses, and FE 
 
 Jobs with structured skills use evaluation V2. Jobs without skills use V1, which provides category scores and narrative evidence. In V2, free-form requirements remain context; they are not automatically converted into scored criteria.
 
+## Performance Optimization
+
+PostgreSQL indexing improvements to the NestJS job-search REST API reduced **p95 search latency by 41.9%** and increased the **reported search request rate by 51.9%** in two local k6 runs with **500 concurrent virtual users**. Both runs completed with **zero HTTP errors** and **100% successful checks**.
+
+### Workload and Database Changes
+
+The applicant workload logs in 500 distinct accounts before search starts, then runs a **10-second warm-up and 60-second measurement**. Each VU reuses its JWT, rotates through 12 search queries against `GET /api/job`, and waits 1–3 seconds between searches. The benchmark database contained **50,060 jobs** and **50,151 job applications**; counts across all 13 application tables were unchanged by the migration.
+
+The [Prisma migration](prisma/migrations/20261010101808_add_job_search_indexes/migration.sql) enables `pg_trgm` and adds three indexes:
+
+- **Composite B-tree:** `job(status, created_at DESC, due_at DESC)`.
+- **GIN trigram:** `job(title gin_trgm_ops)`.
+- **B-tree:** `job_applicant(status)`.
+
+The migration was deployed successfully, and all three indexes were verified as valid and ready. The application queries and benchmark configuration were preserved.
+
+### Before Index Optimization
+
+| Metric | Result |
+| --- | --- |
+| Measured search latency (`job_search_measured`) | **Median 4.38s · p95 5.25s · p99 5.34s** |
+| Search latency including warm-up (`job_search_sample`) | Median 4.64s · p95 5.35s · p99 5.62s |
+| Search requests | 5,957 |
+| Reported search request rate | 70.89 req/s |
+| Login requests | 500 |
+| Login latency | Median 109.35ms · p95 161.50ms · p99 166.87ms |
+| Login setup duration | 8.08s |
+| All HTTP request latency | Median 4.49s · p95 5.34s · p99 5.62s |
+| Total HTTP requests / reported rate | 6,457 / 76.84 req/s |
+| HTTP failures | 0 / 6,457 (0%) |
+| Successful checks | 6,457 / 6,457 (100%) |
+| Iteration duration | Median 6.26s · p95 8.13s · p99 8.54s |
+
+### After Index Optimization
+
+| Metric | Result |
+| --- | --- |
+| Measured search latency (`job_search_measured`) | **Median 2.10s · p95 3.05s · p99 3.73s** |
+| Search latency including warm-up (`job_search_sample`) | Median 2.10s · p95 3.71s · p99 3.99s |
+| Search requests | 8,769 |
+| Reported search request rate | 107.68 req/s |
+| Login requests | 500 |
+| Login latency | Median 110.11ms · p95 162.17ms · p99 169.11ms |
+| Login setup duration | 8.14s |
+| All HTTP request latency | Median 2.07s · p95 3.70s · p99 3.98s |
+| Total HTTP requests / reported rate | 9,269 / 113.82 req/s |
+| HTTP failures | 0 / 9,269 (0%) |
+| Successful checks | 9,269 / 9,269 (100%) |
+| Iteration duration | Median 3.88s · p95 5.99s · p99 6.86s |
+
+### Assessment
+
+- **Faster typical responses:** measured search median fell from 4.38s to 2.10s, a **52.1% reduction**.
+- **Lower tail latency:** measured p95 fell from 5.25s to 3.05s (**41.9% lower**), and p99 from 5.34s to 3.73s (**30.1% lower**).
+- **More work completed at the same configured concurrency:** the reported search rate rose from 70.89 to 107.68 req/s (**51.9% higher**), with 8,769 searches completed after optimization versus 5,957 before.
+- **Successful responses under load:** every check passed in both runs, including HTTP 200 and repository-matching payload validation. Login median remained around 110ms, with no HTTP failures across login and search.
+
+Latency comparisons use `job_search_measured`, which records valid searches started after warm-up. The request rates above are native k6 counter averages over the entire run, including login setup, warm-up, and final drain; they are not measurement-window-only throughput. These two runs demonstrate an observed improvement for this workload. Repeated runs under the same environment are needed to quantify variability; measured p95 remains 3.05s at 500 VUs, leaving room for further optimization.
+
+See [Load Testing with k6](#load-testing-with-k6) for reproduction commands and before/after comparison instructions. Figures above are transcribed from the two terminal summaries reported on October 10, 2026.
+
 ## Tech Stack
 
 | Area                          | Technologies                                                                                 |
 | ----------------------------- | -------------------------------------------------------------------------------------------- |
 | Runtime and language          | Node.js 24, TypeScript 5                                                                     |
 | API framework                 | NestJS 11, Express, Swagger / OpenAPI                                                        |
-| Database                      | PostgreSQL, Prisma 7.8, PostgreSQL driver adapter; schema declares the `vector` extension    |
+| Database                      | PostgreSQL, Prisma 7.8, PostgreSQL driver adapter; `vector` and `pg_trgm` extensions         |
 | Queues and caching            | Redis, BullMQ, ioredis, NestJS Cache Manager, Keyv                                           |
 | AI                            | Google Gemini through `@google/genai`, AJV JSON schema validation                            |
 | File storage                  | S3-compatible object storage through AWS SDK v3                                              |
@@ -398,3 +473,74 @@ Each feature follows the `api/`, `application/`, `domain/`, and `infrastructure/
 After Prisma model changes, run `npx prisma format`, `npx prisma validate`, and `npx prisma generate`.
 
 Husky runs lint-staged on commit, a build before push, and Commitlint for Conventional Commit messages. GitHub Actions checks pull requests and pushes to `develop` and `main` with dependency installation, Prisma generation, lint, and build.
+
+## Load Testing with k6
+
+Run commands from the repository root, with dependencies installed and `k6 >= 1.5` available on `PATH` for applicant runs (`k6 version` checks this; search-only matrix/mixed require `>= 0.57`). Keep the API running in another terminal using your usual development or Docker setup. PostgreSQL/Redis must be available, and `.tmp/job-benchmark/manifest.json` must describe the existing 50,000-job benchmark dataset. See [seed and benchmark setup](scripts/perf/README.md) if setting up a new database.
+
+### Applicant login and search: 300/500 VUs
+
+This profile reads `.env`, selects distinct active seed/perf applicant accounts from the database, and creates only missing accounts. Before any VU searches, k6 `setup()` logs in all selected accounts through `POST /api/auth/login` in batches of at most 10, then verifies their tokens cover the complete search workload. Only after every account is ready do VUs start the 10-second search warm-up and 60-second measurement. Each VU reuses its own token and rotates through 12 job-search queries with 1–3 seconds between searches. You do not need to obtain an access token manually; no login traffic runs during search measurement.
+
+```sh
+# Check login, sessions and all search queries with 2 VUs first.
+npm run bench:applicant:k6 -- --smoke --label applicant-smoke
+
+# Run 300 VUs, then 500 VUs, sequentially.
+npm run bench:applicant:k6 -- --label applicant-before-index
+
+# Run just one load level.
+npm run bench:applicant:k6 -- --vus 500 --label applicant-500
+```
+
+Each full load level has a 10-second warm-up and 60-second measurement, with a 10-second request timeout/graceful stop. The default 300/500 run takes about 3 minutes plus preflight, login preparation and SQL analysis. Login preparation has a 10-minute timeout and fails before search if any account cannot log in or has insufficient token lifetime. VUs represent concurrent applicant sessions; 500 VUs does not mean 500 requests per second.
+
+The runner shows the native k6 banner, VU/iteration progress and result summary in the terminal. Read **`job_search_measured`** for p50/median, p95 and p99 of valid HTTP 200 searches started after warm-up. Native HTTP statistics include login setup, search, warm-up and errors; `job_search_sample` includes search warm-up/errors. The aggregate report separates login from search and excludes login preparation from search measurement time and throughput. It prints the report path at the end.
+
+Configuration defaults:
+
+| Variable | Applicant profile behavior |
+| --- | --- |
+| `API_BASE_URL` | Defaults to `http://127.0.0.1:$PORT`, or port `3000` when `PORT` is unset. |
+| `PERF_DATABASE_URL` | Defaults to `DATABASE_URL` from `.env`; must be reachable from the terminal running the benchmark. |
+| `API_DATABASE_URL` | Defaults to `DATABASE_URL`, then `PERF_DATABASE_URL`; must identify the database actually used by the API. |
+| `K6_APPLICANT_PASSWORD` | Uses this value, then `SEED_PASSWORD`, then the demo default `FitworkDemo@123`. |
+
+Export overrides if the running server differs from `.env`. Only accounts under `@seed.fitwork.test`/`@perf.fitwork.test` with a matching password are reused. Existing accounts/passwords and job data are preserved. Add `--no-seed-accounts` to stop when there are too few eligible accounts instead of creating more.
+
+### Run directly with `k6 run`
+
+Prepare the account/config files first, then run the exact command printed by preparation in the same terminal:
+
+```sh
+npm run bench:applicant:k6 -- --prepare-only --vus 500 --label direct-500
+export K6_APPLICANT_PASSWORD='<the password used for seed applicants>'
+# Copy and run the printed K6_CONFIG=... K6_APPLICANT_ACCOUNTS_FILE=... k6 run ... command.
+```
+
+Use `FitworkDemo@123` for unchanged default seed accounts. Preparation verifies the database and API and may create missing accounts; it does not run the load workload or SQL EXPLAIN. Add `--smoke` to prepare a 2-VU smoke instead. If preparing both 300/500 levels, run the printed commands sequentially.
+
+The printed command sets the following file inputs and invokes k6 directly:
+
+```sh
+K6_CONFIG='<run-directory>/applicant-vu500.config.json' \
+K6_APPLICANT_ACCOUNTS_FILE='<run-directory>/applicant-accounts.json' \
+k6 run --new-machine-readable-summary scripts/perf/k6/job-search.js
+```
+
+The actual printed command also exports metrics and a JSON summary. Use the printed `--new-machine-readable-summary` option when exporting a summary: the legacy summary format includes `setup_data`, which can contain session tokens. Config/account files contain queries, expected payloads and account identities; passwords/tokens are not stored in these files or the new-format summary. Direct k6 runs use the same login-before-search sequence and show the native terminal summary, while aggregate reports, baseline comparison, post-load data checks and SQL EXPLAIN require the npm runner. Prepare again if the dataset changes before running the load.
+
+### Reports and before/after comparison
+
+Each runner invocation creates a separate directory under `.tmp/job-benchmark/k6/<label>-<timestamp>/` containing `report.md`, `report.json`, and per-case config, metrics, summary and sanitized logs. Reports include p50/p95/p99, successful requests/second, request counts, timeout/HTTP/transport/payload errors and authenticated VUs. Failed or interrupted runs retain completed artifacts.
+
+Create a new baseline with the login-before-search workflow; reports from the previous overlapping login/search workflow cannot be compared to it. After adding an index, use the same workload, account pool, dataset and environment:
+
+```sh
+npm run bench:applicant:k6 -- --label applicant-after-index \
+  --baseline .tmp/job-benchmark/k6/<applicant-before-index-run>/report.json
+```
+
+Comparison rejects different workloads or data/counts and records index changes. If smoke fails with login HTTP 401/403, check the seed password, account status and permissions. Login HTTP 500 with Prisma `P1001` in server logs indicates a database connection problem; fix the API connection before running the load.
+
+For the search-only index baseline, use `npm run bench:job:k6 -- --smoke`, then `npm run bench:job:k6 -- --label before-index`. This runner requires explicit `API_BASE_URL`, `ACCESS_TOKEN`, `PERF_DATABASE_URL` and `API_DATABASE_URL`; its `matrix` profile tests individual criteria at 1/10/50 VUs, and `mixed` tests 25/50/100 requests/second. See [detailed k6 benchmark instructions](scripts/perf/README.md#k6-job-search-trướcsau-index) for token lifetime, full workload and comparison options.
