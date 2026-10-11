@@ -20,6 +20,8 @@ Fitwork is a recruitment and project hiring API that connects applicants with co
 
 This repository contains the NestJS backend, including REST endpoints, background workers, and Socket.IO gateways. Interactive API documentation is available at `/docs`.
 
+Project specification: [architecture, database schema, API contracts, workflows, and operations](docs/README.md).
+
 Frontend integration guide: [Job API — endpoints, requests, responses, and FE usage (Vietnamese)](docs/api/job.md).
 
 ## Core Features
