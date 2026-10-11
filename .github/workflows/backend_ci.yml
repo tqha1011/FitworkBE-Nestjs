@@ -26,11 +26,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Validate Prisma
+        run: npx prisma validate
+
       - name: Generate Prisma
         run: npx prisma generate
 
       - name: Run lint
         run: npm run lint
+
+      - name: Run test
+        run: npm test -- --ci --runInBand
 
       - name: Build project
         run: npm run build
