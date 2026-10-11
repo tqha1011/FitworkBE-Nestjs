@@ -21,6 +21,8 @@ import { ResumeIngestionProcessor } from './infrastructure/resume-ingestion.proc
 import { IResumeIngestionNotifier } from './application/interfaces/resume-ingestion-notifier.interface';
 import { ResumeIngestionEventPublisher } from './infrastructure/resume-ingestion-event.publisher';
 import { AuthModule } from '../auth/auth.module';
+import { IResumeQueryRepository } from './application/interfaces/resume.query-repo.interface';
+import { ResumeQueryRepository } from './infrastructure/resume.query-repo';
 
 @Module({
   imports: [UsersModule, AuthModule],
@@ -28,6 +30,8 @@ import { AuthModule } from '../auth/auth.module';
   providers: [
     ResumeRepository,
     { provide: IResumeRepository, useExisting: ResumeRepository },
+    ResumeQueryRepository,
+    { provide: IResumeQueryRepository, useExisting: ResumeQueryRepository },
     ResumeContentRepository,
     {
       provide: IResumeContentRepository,

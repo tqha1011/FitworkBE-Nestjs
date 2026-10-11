@@ -5,6 +5,7 @@ import { AppError, ErrorCode } from 'src/shared/common/errorCode';
 import {
   ResumeResponseDto,
   ResumeUploadResponseDto,
+  ResumeReadResponseDto,
 } from '../dtos/resume.response.dto';
 import {
   CreateResumeRequestDto,
@@ -25,6 +26,8 @@ import { IResumeTextExtractor } from '../interfaces/resume-text-extractor.interf
 import { IResumeContentRepository } from '../../domain/repositories/resume-content.repo.interface';
 import { IResumeIngestionNotifier } from '../interfaces/resume-ingestion-notifier.interface';
 import { CommonResumeIngestionStatus } from 'src/shared/domain/enum';
+import { PageResult, PaginationRequest } from 'src/shared/common/pagination';
+import { IResumeQueryRepository } from '../interfaces/resume.query-repo.interface';
 
 export const extensionByContentType: Record<string, string> = {
   'application/pdf': 'pdf',
@@ -50,7 +53,45 @@ export class ResumeService implements IResumeService {
     private readonly textExtractor: IResumeTextExtractor,
     private readonly contentRepository: IResumeContentRepository,
     private readonly notifier: IResumeIngestionNotifier,
+    private readonly queryRepository: IResumeQueryRepository,
   ) {}
+
+  async getResumesAsync(
+    userPublicId: string,
+    pagination: PaginationRequest,
+  ): Promise<Result<PageResult<ResumeReadResponseDto>, AppError>> {
+    const result = await this.queryRepository.getResumesForOwner(
+      userPublicId,
+      pagination,
+    );
+    return result.mapErr(
+      (cause) =>
+        new AppError(ErrorCode.InternalServerError, 'Failed to get resumes', {
+          cause,
+        }),
+    );
+  }
+
+  async getResumeDetailAsync(
+    userPublicId: string,
+    resumePublicId: string,
+  ): Promise<Result<ResumeReadResponseDto, AppError>> {
+    const result = await this.queryRepository.getResumeDetailForOwner(
+      userPublicId,
+      resumePublicId,
+    );
+    if (result.isErr()) {
+      return err(
+        new AppError(ErrorCode.InternalServerError, 'Failed to get resume', {
+          cause: result.error,
+        }),
+      );
+    }
+    if (!result.value) {
+      return err(new AppError(ErrorCode.NotFound, 'Resume not found'));
+    }
+    return ok(result.value);
+  }
 
   async deleteResumeAsync(
     userPublicId: string,

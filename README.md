@@ -167,6 +167,36 @@ flowchart TD
 4. Review a completed evaluation at `GET /api/applicant-evaluation/jobs/:jobPublicId/:evaluationPublicId`. Access is restricted to the job owner.
 5. Set an application status at `PATCH /api/job/applicants/:jobApplicantPublicId/status`. Allowed transitions are `PENDING → ACCEPTED`, `PENDING → REJECTED`, and `ACCEPTED → COMPLETED`.
 
+### Resume Reads
+
+Both endpoints require `Authorization: Bearer <accessToken>` and resolve the owner from the JWT. They return only the current user's active resumes registered through `POST /api/resume`.
+
+| Endpoint | Response |
+| --- | --- |
+| `GET /api/resume?pageNumber=1&pageSize=20` | Paginated list, newest first (`createdAt DESC`, then internal ID for ties). Defaults: page 1, 20 items; maximum page size: 100. |
+| `GET /api/resume/:resumePublicId` | Metadata and current ingestion status for one owned resume. |
+
+List responses use the existing `PageResult` envelope: `items`, `totalPages`, `pageNumber`, `pageSize`, `hasPrevious`, and `hasNext`. Each item and the detail response have this shape:
+
+```json
+{
+  "publicId": "7867f344-036c-58a1-92f9-296c1385357d",
+  "fileName": "Backend CV",
+  "fileType": "pdf",
+  "fileSize": 204800,
+  "createdAt": "2026-10-01T00:00:00.000Z",
+  "updatedAt": "2026-10-02T00:00:00.000Z",
+  "ingestionPublicId": null,
+  "ingestionStatus": null
+}
+```
+
+`fileType` is `pdf` or `docx`; `fileSize` is in bytes. Ingestion fields describe the current uploaded file, not an earlier file replaced through `PATCH`. Status is `PENDING`, `PROCESSING`, `COMPLETED`, or `FAILED`; both ingestion fields are `null` when there is no content record for the current file. These read endpoints return metadata even when parsing is incomplete or failed. They do not return extracted text, storage keys, or internal ingestion errors.
+
+An empty list or a page beyond the last page returns `200` with `items: []`. Detail returns `404` for a missing, deleted, or another user's resume. Invalid pagination or a malformed detail UUID returns `400`; missing or invalid authentication returns `401`; database failures return `500`.
+
+Use the returned resume `publicId` with `GET /api/resume/:resumePublicId/download-url?disposition=inline` to preview the file, or omit `disposition` to download it.
+
 ### Real-Time Subscriptions
 
 Connect to the Socket.IO namespace with `auth: { token: accessToken }`. Room subscriptions verify that the resume or evaluation belongs to the applicant.
