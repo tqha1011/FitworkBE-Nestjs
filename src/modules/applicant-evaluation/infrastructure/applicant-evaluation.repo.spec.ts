@@ -87,6 +87,7 @@ describe('ApplicantEvaluationRepository', () => {
   };
   let prismaService: {
     $transaction: jest.Mock;
+    job: { findUnique: jest.Mock };
     applicantEvaluation: { findUnique: jest.Mock; updateMany: jest.Mock };
   };
   let repository: ApplicantEvaluationRepository;
@@ -112,6 +113,7 @@ describe('ApplicantEvaluationRepository', () => {
     ): Promise<unknown> => callback(tx);
     prismaService = {
       $transaction: jest.fn(runTransaction),
+      job: { findUnique: jest.fn() },
       applicantEvaluation: {
         findUnique: jest.fn(),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
@@ -120,6 +122,118 @@ describe('ApplicantEvaluationRepository', () => {
     repository = new ApplicantEvaluationRepository(
       prismaService as unknown as PrismaService,
     );
+  });
+
+  describe('getApplicantEvaluationDetail', () => {
+    const scoreBreakdown = {
+      schemaVersion: 1,
+      skills: 90,
+      experience: 85,
+      education: 75,
+      overallFit: 88,
+    };
+    const evidence = {
+      schemaVersion: 1,
+      strengths: ['TypeScript'],
+      gaps: [],
+      explanation: 'Matches requirements.',
+    };
+    const evaluation = {
+      publicId: 'latest-evaluation-id',
+      overallScore: 88,
+      scoreBreakdown,
+      evidence,
+    };
+
+    it('looks up the latest evaluation through the job and authenticated applicant', async () => {
+      prismaService.job.findUnique.mockResolvedValue({
+        jobApplicants: [{ evaluations: [evaluation] }],
+      });
+
+      const result = await repository.getApplicantEvaluationDetail(
+        'applicant-id',
+        'job-id',
+      );
+
+      expect(result._unsafeUnwrap()).toEqual({
+        evaluationPublicId: 'latest-evaluation-id',
+        overallScore: 88,
+        scoreBreakdown,
+        evidence,
+      });
+      expect(prismaService.job.findUnique).toHaveBeenCalledWith({
+        where: { publicId: 'job-id' },
+        select: {
+          jobApplicants: {
+            where: { applicant: { publicId: 'applicant-id' } },
+            take: 1,
+            select: {
+              evaluations: {
+                orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+                take: 1,
+                select: {
+                  publicId: true,
+                  overallScore: true,
+                  scoreBreakdown: true,
+                  evidence: true,
+                },
+              },
+            },
+          },
+        },
+      });
+    });
+
+    it.each([
+      ['job does not exist', null],
+      ['applicant has not applied to this job', { jobApplicants: [] }],
+      [
+        'application has no evaluation',
+        { jobApplicants: [{ evaluations: [] }] },
+      ],
+    ])('returns null when %s', async (_reason, job) => {
+      prismaService.job.findUnique.mockResolvedValue(job);
+
+      expect(
+        (
+          await repository.getApplicantEvaluationDetail(
+            'applicant-id',
+            'job-id',
+          )
+        )._unsafeUnwrap(),
+      ).toBeNull();
+    });
+
+    it('returns an incomplete latest evaluation without falling back to an older result', async () => {
+      prismaService.job.findUnique.mockResolvedValue({
+        jobApplicants: [
+          {
+            evaluations: [
+              {
+                ...evaluation,
+                overallScore: null,
+                scoreBreakdown: null,
+                evidence: null,
+              },
+            ],
+          },
+        ],
+      });
+
+      expect(
+        (
+          await repository.getApplicantEvaluationDetail(
+            'applicant-id',
+            'job-id',
+          )
+        )._unsafeUnwrap(),
+      ).toEqual({
+        evaluationPublicId: 'latest-evaluation-id',
+        overallScore: null,
+        scoreBreakdown: null,
+        evidence: null,
+      });
+    });
   });
 
   describe('getApplicantEvaluationForJobOwner', () => {
@@ -761,8 +875,7 @@ describe('ApplicantEvaluationRepository error causes', () => {
     ],
     [
       'getApplicantEvaluationDetail',
-      (repository) =>
-        repository.getApplicantEvaluationDetail('user', 'evaluation'),
+      (repository) => repository.getApplicantEvaluationDetail('user', 'job'),
     ],
     [
       'getRealtimeStateForApplicant',
@@ -803,6 +916,7 @@ describe('ApplicantEvaluationRepository error causes', () => {
         };
         const repository = new ApplicantEvaluationRepository({
           applicantEvaluation: delegate,
+          job: delegate,
           resume: delegate,
           $transaction: jest.fn().mockRejectedValue(failure),
         } as unknown as PrismaService);

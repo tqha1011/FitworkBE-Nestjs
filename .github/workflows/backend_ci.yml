@@ -78,11 +78,31 @@ jobs:
       - name: Run lint
         run: npm run lint:check
 
+      - name: Action lint
+        run: |
+          bash <(curl https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          ./actionlint -color -format '{{range $err := .}}::error file={{$err.Filepath}},line={{$err.Line}},col={{$err.Column}}::{{$err.Message}}%0A```%0A{{replace $err.Snippet "\\n" "%0A"}}%0A```\n{{end}}' -ignore 'SC2016:'
+
+        shell: bash
+
       - name: Run test
         run: npm test -- --ci --runInBand
 
       - name: Build project
         run: npm run build
+
+      - name: Validate Docker Compose
+        shell: bash
+        run: |
+          cat > .env <<'EOF'
+          POSTGRES_USER=ci
+          POSTGRES_PASSWORD=ci-password
+          POSTGRES_DB=fitwork_ci
+          REDIS_PASSWORD=ci-password
+          REDIS_PORT=6379
+          EOF
+
+          docker compose -f compose.yml config --quiet
 
   integration:
     name: PostgreSQL integration tests

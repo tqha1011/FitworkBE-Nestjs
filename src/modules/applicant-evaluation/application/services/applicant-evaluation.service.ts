@@ -130,25 +130,12 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
   }
   async getApplicantEvaluationDetailAsync(
     applicantPublicId: string,
-    evaluationPublicId: string,
+    jobPublicId: string,
   ): Promise<Result<ApplicantEvaluationDetailDto, AppError>> {
-    try {
-      const cacheResult =
-        await this.cacheManager.get<ApplicantEvaluationDetailDto>(
-          this.buildCacheKey(applicantPublicId, evaluationPublicId),
-        );
-      if (cacheResult !== undefined) {
-        return ok(cacheResult);
-      }
-    } catch (error) {
-      this.logger.error(
-        `Failed to get cached result at ${ApplicantEvaluationService.name}: ${error}`,
-      );
-    }
     const result =
       await this.applicantEvaluationRepository.getApplicantEvaluationDetail(
         applicantPublicId,
-        evaluationPublicId,
+        jobPublicId,
       );
     if (result.isErr()) {
       return err(
@@ -176,20 +163,6 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
         ),
       );
     }
-    try {
-      await this.cacheManager.set(
-        this.buildCacheKey(applicantPublicId, result.value.evaluationPublicId),
-        {
-          publicId: result.value.evaluationPublicId,
-          overallScore: result.value.overallScore,
-          scoreBreakdown: result.value.scoreBreakdown,
-          evidence: result.value.evidence,
-        },
-      );
-    } catch (error) {
-      this.logger.error(`Failed to cache evaluation ${error}`);
-    }
-
     return ok({
       publicId: result.value.evaluationPublicId,
       overallScore: result.value.overallScore,
@@ -335,13 +308,6 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
       );
     }
     return ok({ publicId: prepareResult.value.publicId });
-  }
-
-  private buildCacheKey(
-    applicantPublicId: string,
-    evaluationPublicId: string,
-  ): string {
-    return `applicant:${applicantPublicId}:${evaluationPublicId}`;
   }
 
   private buildJobOwnerCacheKey(

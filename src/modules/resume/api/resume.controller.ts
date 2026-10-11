@@ -8,9 +8,11 @@ import {
   HttpStatus,
   Param,
   ParseEnumPipe,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
+  ValidationPipe,
 } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import type { JwtPayload } from 'src/shared/common/jwt.payload.interface';
@@ -18,16 +20,27 @@ import { toHttpException } from 'src/shared/common/app-error.mapper';
 import { Auth } from 'src/shared/common/swagger/auth-swagger.decorator';
 import { User } from 'src/shared/common/user.decorator';
 import { CommonContentDisposition } from 'src/shared/domain/enum';
-import { ApiStandardResponse } from 'src/shared/common/swagger/api-standard-response.decorator';
+import {
+  ApiPaginatedResponse,
+  ApiStandardResponse,
+} from 'src/shared/common/swagger/api-standard-response.decorator';
+import {
+  ApiBadRequestErrorResponse,
+  ApiInternalErrorResponse,
+  ApiNotFoundErrorResponse,
+} from 'src/shared/common/swagger/api-error-responses.decorator';
+import { PageResult } from 'src/shared/common/pagination';
 import {
   CreateResumeRequestDto,
   UpdateResumeRequestDto,
   UploadResumeRequestDto,
+  GetResumeListRequestDto,
 } from '../application/dtos/resume.request.dto';
 import {
   ResumeDownloadUrlResponseDto,
   ResumeResponseDto,
   ResumeUploadResponseDto,
+  ResumeReadResponseDto,
 } from '../application/dtos/resume.response.dto';
 import { IResumeService } from '../application/interfaces/resume.service.interface';
 
@@ -35,6 +48,52 @@ import { IResumeService } from '../application/interfaces/resume.service.interfa
 @Controller('/api/resume')
 export class ResumeController {
   constructor(private readonly resumeService: IResumeService) {}
+
+  @Get()
+  @Auth()
+  @ApiOperation({ summary: 'Get resumes uploaded by the current user' })
+  @ApiQuery({ type: GetResumeListRequestDto })
+  @ApiPaginatedResponse(ResumeReadResponseDto)
+  @ApiBadRequestErrorResponse()
+  @ApiInternalErrorResponse()
+  async getResumes(
+    @User() user: JwtPayload,
+    @Query(new ValidationPipe({ transform: true, whitelist: true }))
+    query: GetResumeListRequestDto,
+  ): Promise<PageResult<ResumeReadResponseDto>> {
+    const result = await this.resumeService.getResumesAsync(user.sub, query);
+    return result.match(
+      (value) => value,
+      (error) => {
+        throw toHttpException(error);
+      },
+    );
+  }
+
+  @Get(':resumePublicId')
+  @Auth()
+  @ApiOperation({
+    summary: 'Get an owned resume and its current ingestion status',
+  })
+  @ApiStandardResponse(ResumeReadResponseDto)
+  @ApiBadRequestErrorResponse()
+  @ApiNotFoundErrorResponse()
+  @ApiInternalErrorResponse()
+  async getResumeDetail(
+    @User() user: JwtPayload,
+    @Param('resumePublicId', new ParseUUIDPipe()) resumePublicId: string,
+  ): Promise<ResumeReadResponseDto> {
+    const result = await this.resumeService.getResumeDetailAsync(
+      user.sub,
+      resumePublicId,
+    );
+    return result.match(
+      (value) => value,
+      (error) => {
+        throw toHttpException(error);
+      },
+    );
+  }
 
   @Post('upload-url')
   @Auth()

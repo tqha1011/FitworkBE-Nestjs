@@ -403,79 +403,34 @@ describe('ApplicantEvaluationService', () => {
 
       const result = await service.getApplicantEvaluationDetailAsync(
         'applicant-id',
-        'evaluation-id',
+        'job-id',
       );
 
       expect(
         applicantEvaluationRepository.getApplicantEvaluationDetail,
-      ).toHaveBeenCalledWith('applicant-id', 'evaluation-id');
+      ).toHaveBeenCalledWith('applicant-id', 'job-id');
       expect(result._unsafeUnwrap()).toEqual({
         publicId: 'evaluation-id',
         overallScore: 88,
         scoreBreakdown: detail.scoreBreakdown,
         evidence: detail.evidence,
       });
-      expect(applicationCache.set).toHaveBeenCalledWith(
-        'applicant:applicant-id:evaluation-id',
-        {
-          publicId: 'evaluation-id',
-          overallScore: 88,
-          scoreBreakdown: detail.scoreBreakdown,
-          evidence: detail.evidence,
-        },
-      );
     });
 
-    it('returns cached detail without querying the repository', async () => {
-      const cachedDetail = {
-        publicId: 'evaluation-id',
-        overallScore: 88,
-        scoreBreakdown: detail.scoreBreakdown,
-        evidence: detail.evidence,
-      };
-      applicationCache.get.mockResolvedValue(cachedDetail);
+    it('queries the latest evaluation even when an older result is cached', async () => {
+      applicationCache.get.mockResolvedValue({ publicId: 'old-evaluation-id' });
+      applicantEvaluationRepository.getApplicantEvaluationDetail.mockResolvedValue(
+        ok(detail),
+      );
 
       const result = await service.getApplicantEvaluationDetailAsync(
         'applicant-id',
-        'evaluation-id',
+        'job-id',
       );
 
-      expect(result._unsafeUnwrap()).toEqual(cachedDetail);
-      expect(
-        applicantEvaluationRepository.getApplicantEvaluationDetail,
-      ).not.toHaveBeenCalled();
+      expect(result._unsafeUnwrap().publicId).toBe('evaluation-id');
+      expect(applicationCache.get).not.toHaveBeenCalled();
       expect(applicationCache.set).not.toHaveBeenCalled();
-    });
-
-    it('falls back to the repository when reading cache fails', async () => {
-      applicationCache.get.mockRejectedValue(new Error('Redis unavailable'));
-      applicantEvaluationRepository.getApplicantEvaluationDetail.mockResolvedValue(
-        ok(detail),
-      );
-
-      const result = await service.getApplicantEvaluationDetailAsync(
-        'applicant-id',
-        'evaluation-id',
-      );
-
-      expect(result._unsafeUnwrap().publicId).toBe('evaluation-id');
-      expect(
-        applicantEvaluationRepository.getApplicantEvaluationDetail,
-      ).toHaveBeenCalled();
-    });
-
-    it('returns repository detail when writing cache fails', async () => {
-      applicationCache.set.mockRejectedValue(new Error('Redis unavailable'));
-      applicantEvaluationRepository.getApplicantEvaluationDetail.mockResolvedValue(
-        ok(detail),
-      );
-
-      const result = await service.getApplicantEvaluationDetailAsync(
-        'applicant-id',
-        'evaluation-id',
-      );
-
-      expect(result._unsafeUnwrap().publicId).toBe('evaluation-id');
     });
 
     it('returns not found when evaluation does not exist', async () => {
@@ -485,7 +440,7 @@ describe('ApplicantEvaluationService', () => {
 
       const result = await service.getApplicantEvaluationDetailAsync(
         'applicant-id',
-        'evaluation-id',
+        'job-id',
       );
 
       expect(result._unsafeUnwrapErr().code).toBe(ErrorCode.NotFound);
@@ -498,7 +453,7 @@ describe('ApplicantEvaluationService', () => {
 
       const result = await service.getApplicantEvaluationDetailAsync(
         'applicant-id',
-        'evaluation-id',
+        'job-id',
       );
 
       expect(result._unsafeUnwrapErr().code).toBe(ErrorCode.Conflict);
@@ -511,7 +466,7 @@ describe('ApplicantEvaluationService', () => {
 
       const result = await service.getApplicantEvaluationDetailAsync(
         'applicant-id',
-        'evaluation-id',
+        'job-id',
       );
 
       expect(result._unsafeUnwrapErr().code).toBe(

@@ -3,6 +3,7 @@ import { AppError } from 'src/shared/common/errorCode';
 import {
   ResumeResponseDto,
   ResumeUploadResponseDto,
+  ResumeReadResponseDto,
 } from '../dtos/resume.response.dto';
 import {
   CreateResumeRequestDto,
@@ -10,8 +11,19 @@ import {
   UploadResumeRequestDto,
 } from '../dtos/resume.request.dto';
 import { CommonContentDisposition } from 'src/shared/domain/enum';
+import { PageResult, PaginationRequest } from 'src/shared/common/pagination';
 
 export abstract class IResumeService {
+  abstract getResumesAsync(
+    userPublicId: string,
+    pagination: PaginationRequest,
+  ): Promise<Result<PageResult<ResumeReadResponseDto>, AppError>>;
+
+  abstract getResumeDetailAsync(
+    userPublicId: string,
+    resumePublicId: string,
+  ): Promise<Result<ResumeReadResponseDto, AppError>>;
+
   abstract getUploadUrlAsync(
     userPublicId: string,
     resumeUploadRequest: UploadResumeRequestDto,

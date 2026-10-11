@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, Post } from '@nestjs/common';
-import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import type { JwtPayload } from 'src/shared/common/jwt.payload.interface';
 import { toHttpException } from 'src/shared/common/app-error.mapper';
 import { Auth } from 'src/shared/common/swagger/auth-swagger.decorator';
@@ -26,23 +26,43 @@ export class ApplicantEvaluationController {
     private readonly applicantEvaluationService: IApplicantEvaluationService,
   ) {}
 
-  @Get(':evaluationPublicId')
+  @Get(':jobPublicId')
   @Auth(RolesGuard)
   @Roles([CommonUserRole.ROLE_APPLICANT, CommonUserRole.ROLE_COMPANY])
-  @ApiOperation({ summary: 'Get an applicant evaluation result' })
+  @ApiOperation({
+    summary: 'Get the latest applicant evaluation for a job',
+    description:
+      'Resolves the applicant from the JWT and returns the newest evaluation for their application to the specified job.',
+  })
+  @ApiParam({
+    name: 'jobPublicId',
+    description: 'Public ID of the job the authenticated applicant applied to',
+    type: String,
+    format: 'uuid',
+  })
+  @ApiResponse({ status: 403, description: 'User role is not allowed' })
+  @ApiResponse({
+    status: 404,
+    description: 'Job, applicant application, or evaluation not found',
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'The latest applicant evaluation is not completed',
+  })
   @ApiResponse({
     status: 200,
-    description: 'Completed evaluation for the applicant (V1 or V2)',
+    description:
+      'Latest completed evaluation for the applicant and job (V1 or V2)',
     schema: APPLICANT_EVALUATION_DETAIL_RESPONSE_SCHEMA,
   })
   async getApplicantEvaluationDetail(
     @User() user: JwtPayload,
-    @Param('evaluationPublicId') evaluationPublicId: string,
+    @Param('jobPublicId') jobPublicId: string,
   ): Promise<ApplicantEvaluationDetailDto> {
     const result =
       await this.applicantEvaluationService.getApplicantEvaluationDetailAsync(
         user.sub,
-        evaluationPublicId,
+        jobPublicId,
       );
 
     return result.match(

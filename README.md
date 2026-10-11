@@ -20,6 +20,8 @@ Fitwork is a recruitment and project hiring API that connects applicants with co
 
 This repository contains the NestJS backend, including REST endpoints, background workers, and Socket.IO gateways. Interactive API documentation is available at `/docs`.
 
+Project specification: [architecture, database schema, API contracts, workflows, and operations](docs/README.md).
+
 Frontend integration guide: [Job API — endpoints, requests, responses, and FE usage (Vietnamese)](docs/api/job.md).
 
 ## Core Features
@@ -157,7 +159,7 @@ flowchart TD
 3. Register the uploaded file at `POST /api/resume` with its `storageKey` and a `name`. The backend verifies the object and queues ingestion. Subscribe on `/resume` to wait for `COMPLETED`.
 4. Browse `GET /api/job`, then apply at `POST /api/job/:jobPublicId/apply` with `resumePublicId`, `coverLetter`, `proposedRate`, and `estimatedDay`.
 5. After applying and completing resume ingestion, request evaluation at `POST /api/applicant-evaluation` with `jobPublicId` and the application's `resumePublicId`. Save the returned evaluation `publicId`.
-6. Subscribe on `/evaluation` for progress, then fetch the completed result at `GET /api/applicant-evaluation/:evaluationPublicId`. Track applications at `GET /api/job/applied`.
+6. Subscribe on `/evaluation` for progress, then fetch the latest evaluation result at `GET /api/applicant-evaluation/:jobPublicId`. The applicant is resolved from the JWT; only their application to that job is queried. If the latest evaluation is not completed, the endpoint returns `409`. Track applications at `GET /api/job/applied`.
 
 ### Company
 
@@ -166,6 +168,36 @@ flowchart TD
 3. Publish a job at `POST /api/job`. Update its details or open/closed status at `PATCH /api/job/:jobPublicId`.
 4. Review a completed evaluation at `GET /api/applicant-evaluation/jobs/:jobPublicId/:evaluationPublicId`. Access is restricted to the job owner.
 5. Set an application status at `PATCH /api/job/applicants/:jobApplicantPublicId/status`. Allowed transitions are `PENDING → ACCEPTED`, `PENDING → REJECTED`, and `ACCEPTED → COMPLETED`.
+
+### Resume Reads
+
+Both endpoints require `Authorization: Bearer <accessToken>` and resolve the owner from the JWT. They return only the current user's active resumes registered through `POST /api/resume`.
+
+| Endpoint | Response |
+| --- | --- |
+| `GET /api/resume?pageNumber=1&pageSize=20` | Paginated list, newest first (`createdAt DESC`, then internal ID for ties). Defaults: page 1, 20 items; maximum page size: 100. |
+| `GET /api/resume/:resumePublicId` | Metadata and current ingestion status for one owned resume. |
+
+List responses use the existing `PageResult` envelope: `items`, `totalPages`, `pageNumber`, `pageSize`, `hasPrevious`, and `hasNext`. Each item and the detail response have this shape:
+
+```json
+{
+  "publicId": "7867f344-036c-58a1-92f9-296c1385357d",
+  "fileName": "Backend CV",
+  "fileType": "pdf",
+  "fileSize": 204800,
+  "createdAt": "2026-10-01T00:00:00.000Z",
+  "updatedAt": "2026-10-02T00:00:00.000Z",
+  "ingestionPublicId": null,
+  "ingestionStatus": null
+}
+```
+
+`fileType` is `pdf` or `docx`; `fileSize` is in bytes. Ingestion fields describe the current uploaded file, not an earlier file replaced through `PATCH`. Status is `PENDING`, `PROCESSING`, `COMPLETED`, or `FAILED`; both ingestion fields are `null` when there is no content record for the current file. These read endpoints return metadata even when parsing is incomplete or failed. They do not return extracted text, storage keys, or internal ingestion errors.
+
+An empty list or a page beyond the last page returns `200` with `items: []`. Detail returns `404` for a missing, deleted, or another user's resume. Invalid pagination or a malformed detail UUID returns `400`; missing or invalid authentication returns `401`; database failures return `500`.
+
+Use the returned resume `publicId` with `GET /api/resume/:resumePublicId/download-url?disposition=inline` to preview the file, or omit `disposition` to download it.
 
 ### Real-Time Subscriptions
 

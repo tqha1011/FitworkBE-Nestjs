@@ -13,6 +13,7 @@ import { CommonFileType } from 'src/shared/domain/enum';
 import { CommonResumeIngestionStatus } from 'src/shared/domain/enum';
 import { IResumeTextExtractor } from '../interfaces/resume-text-extractor.interface';
 import { IResumeContentRepository } from '../../domain/repositories/resume-content.repo.interface';
+import { PageResult } from 'src/shared/common/pagination';
 
 describe('ResumeService', () => {
   const userPublicId = '8c6cf582-9a29-48ed-a31f-93f9d78bb701';
@@ -42,6 +43,10 @@ describe('ResumeService', () => {
   let textExtractor: { parserVersion: jest.Mock };
   let contentRepository: { markFailed: jest.Mock };
   let notifier: { notify: jest.Mock };
+  let queryRepository: {
+    getResumesForOwner: jest.Mock;
+    getResumeDetailForOwner: jest.Mock;
+  };
   let service: ResumeService;
 
   beforeEach(() => {
@@ -63,6 +68,10 @@ describe('ResumeService', () => {
     };
     contentRepository = { markFailed: jest.fn() };
     notifier = { notify: jest.fn() };
+    queryRepository = {
+      getResumesForOwner: jest.fn(),
+      getResumeDetailForOwner: jest.fn(),
+    };
     service = new ResumeService(
       userRepository as unknown as IUserRepository,
       fileStorage as unknown as IFileStorage,
@@ -71,6 +80,89 @@ describe('ResumeService', () => {
       textExtractor as unknown as IResumeTextExtractor,
       contentRepository as unknown as IResumeContentRepository,
       notifier,
+      queryRepository,
+    );
+  });
+
+  describe('resume reads', () => {
+    const detail = {
+      publicId: 'resume-id',
+      fileName: 'Backend CV',
+      fileType: CommonFileType.PDF,
+      fileSize: 512,
+      createdAt: new Date('2026-10-01T00:00:00Z'),
+      updatedAt: new Date('2026-10-02T00:00:00Z'),
+      ingestionPublicId: null,
+      ingestionStatus: null,
+    };
+
+    it('returns the owner list without using storage or the ingestion queue', async () => {
+      const page = new PageResult([detail], 1, 1, 20);
+      queryRepository.getResumesForOwner.mockResolvedValue(ok(page));
+
+      expect(
+        (
+          await service.getResumesAsync(userPublicId, {
+            pageNumber: 1,
+            pageSize: 20,
+          })
+        )._unsafeUnwrap(),
+      ).toEqual(page);
+      expect(queryRepository.getResumesForOwner).toHaveBeenCalledWith(
+        userPublicId,
+        { pageNumber: 1, pageSize: 20 },
+      );
+      expect(fileStorage.getObjectMetadata).not.toHaveBeenCalled();
+      expect(ingestionQueue.enqueue).not.toHaveBeenCalled();
+    });
+
+    it('returns detail without requiring completed ingestion', async () => {
+      queryRepository.getResumeDetailForOwner.mockResolvedValue(ok(detail));
+
+      expect(
+        (
+          await service.getResumeDetailAsync(userPublicId, 'resume-id')
+        )._unsafeUnwrap(),
+      ).toEqual(detail);
+      expect(queryRepository.getResumeDetailForOwner).toHaveBeenCalledWith(
+        userPublicId,
+        'resume-id',
+      );
+    });
+
+    it('returns not found when the owner-filtered detail does not exist', async () => {
+      queryRepository.getResumeDetailForOwner.mockResolvedValue(ok(null));
+
+      expect(
+        (
+          await service.getResumeDetailAsync(userPublicId, 'resume-id')
+        )._unsafeUnwrapErr().code,
+      ).toBe(ErrorCode.NotFound);
+    });
+
+    it.each(['list', 'detail'] as const)(
+      'maps %s query failures to an internal error',
+      async (operation) => {
+        const cause = new Error('private database error');
+        queryRepository.getResumesForOwner.mockResolvedValue(err(cause));
+        queryRepository.getResumeDetailForOwner.mockResolvedValue(err(cause));
+
+        const result =
+          operation === 'list'
+            ? await service.getResumesAsync(userPublicId, {
+                pageNumber: 1,
+                pageSize: 20,
+              })
+            : await service.getResumeDetailAsync(userPublicId, 'resume-id');
+
+        expect(result._unsafeUnwrapErr().code).toBe(
+          ErrorCode.InternalServerError,
+        );
+        expect(result._unsafeUnwrapErr().cause).toBe(cause);
+        expect(result._unsafeUnwrapErr().message).not.toContain(
+          'private database error',
+        );
+      },
     );
   });
 

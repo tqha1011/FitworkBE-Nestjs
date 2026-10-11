@@ -58,9 +58,8 @@ describe('Swagger response documentation', () => {
       app,
       new DocumentBuilder().setTitle('Fitwork').setVersion('1').build(),
     );
-    const applicant = document.paths[
-      '/api/applicant-evaluation/{evaluationPublicId}'
-    ]?.get?.responses?.['200'] as {
+    const applicant = document.paths['/api/applicant-evaluation/{jobPublicId}']
+      ?.get?.responses?.['200'] as {
       content?: Record<string, { schema?: { oneOf?: unknown[] } }>;
     };
     const owner = document.paths[

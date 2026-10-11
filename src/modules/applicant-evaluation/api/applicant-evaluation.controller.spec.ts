@@ -139,19 +139,17 @@ describe('ApplicantEvaluationController job owner detail', () => {
   });
 
   it('keeps the applicant route wired to applicant ownership checks', async () => {
-    await controller.getApplicantEvaluationDetail(user, 'evaluation-id');
+    await controller.getApplicantEvaluationDetail(user, 'job-id');
 
     expect(service.getApplicantEvaluationDetailAsync).toHaveBeenCalledWith(
       'owner-id',
-      'evaluation-id',
+      'job-id',
     );
     const handler = Reflect.get(
       ApplicantEvaluationController.prototype,
       'getApplicantEvaluationDetail',
     );
-    expect(Reflect.getMetadata(PATH_METADATA, handler)).toBe(
-      ':evaluationPublicId',
-    );
+    expect(Reflect.getMetadata(PATH_METADATA, handler)).toBe(':jobPublicId');
     expect(Reflect.getMetadata(GUARDS_METADATA, handler)).toEqual([
       JwtAuthGuard,
       RolesGuard,
