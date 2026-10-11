@@ -1,10 +1,14 @@
-name: Docker CI & Deploy
+name: Docker CI & Push
 
 on:
   pull_request:
     branches: [main]
   push:
     branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read
 
 jobs:
   detect-change:
@@ -21,9 +25,20 @@ jobs:
         uses: dorny/paths-filter@v3
         id: filter
         with:
+          base: main
           filters: |
             backend_code:
-              - 'src/'
+              - 'src/**'
+              - 'scripts/**'
+              - 'prisma/**'
+              - 'prisma.config.ts'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'tsconfig*.json'
+              - 'nest-cli.json'
+              - 'Dockerfile'
+              - '.dockerignore'
+              - '.github/workflows/docker_ci.yml'
 
   build-and-push:
     needs: detect-change
@@ -40,29 +55,28 @@ jobs:
 
       # 2. Đăng nhập Docker Hub
       - name: Login to Docker Hub
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Docker Meta
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ secrets.DOCKERHUB_USERNAME }}/shoestore-api
+          images: ${{ secrets.DOCKERHUB_USERNAME }}/fitwork-be-nestjs-api
           tags: |
-            # Nếu là nhánh main -> Đặt tag là 'latest'
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-            # Nếu là nhánh develop -> Đặt tag là 'dev'
-            type=raw,value=dev,enable=${{ github.ref == 'refs/heads/develop' }}
+            type=raw,value=latest
 
       # 3. Build và Push
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          context: ./Backend
-          file: ./Backend/src/ShoeStore.Api/Dockerfile # Đường dẫn file Dockerfile
-          push: ${{ github.event_name != 'pull_request' }}
+          context: .
+          file: Dockerfile # Đường dẫn file Dockerfile
+          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
           tags: ${{ steps.meta.outputs.tags }} # Lấy kết quả của Docker Meta
           # Bật Cache để lần sau build nhanh hơn
           cache-from: type=gha
