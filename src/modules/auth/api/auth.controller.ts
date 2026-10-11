@@ -23,7 +23,7 @@ import {
 import { IAuthService } from '../application/interfaces/auth.service.interface';
 
 const REFRESH_TOKEN_COOKIE = 'refresh_token';
-const REFRESH_TOKEN_COOKIE_PATH = '/auth/refresh';
+const REFRESH_TOKEN_COOKIE_PATH = '/api/auth/refresh';
 
 @ApiTags('auth')
 @Controller('/api/auth')

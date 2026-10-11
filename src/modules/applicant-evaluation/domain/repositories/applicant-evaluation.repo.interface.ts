@@ -112,7 +112,7 @@ export abstract class IApplicantEvaluationRepository {
 
   abstract getApplicantEvaluationDetail(
     applicantPublicId: string,
-    evaluationPublicId: string,
+    jobPublicId: string,
   ): Promise<Result<ApplicantEvaluationDetail | null, Error>>;
 
   abstract getApplicantEvaluationForJobOwner(

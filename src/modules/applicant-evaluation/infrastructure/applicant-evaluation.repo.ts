@@ -88,22 +88,31 @@ export class ApplicantEvaluationRepository implements IApplicantEvaluationReposi
   }
   async getApplicantEvaluationDetail(
     applicantPublicId: string,
-    evaluationPublicId: string,
+    jobPublicId: string,
   ): Promise<Result<ApplicantEvaluationDetail | null, Error>> {
     try {
-      const evaluation =
-        await this.prismaService.applicantEvaluation.findUnique({
-          where: {
-            publicId: evaluationPublicId,
-            jobApplicant: { applicant: { publicId: applicantPublicId } },
+      const job = await this.prismaService.job.findUnique({
+        where: { publicId: jobPublicId },
+        select: {
+          jobApplicants: {
+            where: { applicant: { publicId: applicantPublicId } },
+            take: 1,
+            select: {
+              evaluations: {
+                orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+                take: 1,
+                select: {
+                  publicId: true,
+                  overallScore: true,
+                  scoreBreakdown: true,
+                  evidence: true,
+                },
+              },
+            },
           },
-          select: {
-            publicId: true,
-            overallScore: true,
-            scoreBreakdown: true,
-            evidence: true,
-          },
-        });
+        },
+      });
+      const evaluation = job?.jobApplicants[0]?.evaluations[0];
       if (!evaluation) return ok(null);
       return ok({
         evaluationPublicId: evaluation.publicId,

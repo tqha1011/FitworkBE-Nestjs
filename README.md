@@ -157,7 +157,7 @@ flowchart TD
 3. Register the uploaded file at `POST /api/resume` with its `storageKey` and a `name`. The backend verifies the object and queues ingestion. Subscribe on `/resume` to wait for `COMPLETED`.
 4. Browse `GET /api/job`, then apply at `POST /api/job/:jobPublicId/apply` with `resumePublicId`, `coverLetter`, `proposedRate`, and `estimatedDay`.
 5. After applying and completing resume ingestion, request evaluation at `POST /api/applicant-evaluation` with `jobPublicId` and the application's `resumePublicId`. Save the returned evaluation `publicId`.
-6. Subscribe on `/evaluation` for progress, then fetch the completed result at `GET /api/applicant-evaluation/:evaluationPublicId`. Track applications at `GET /api/job/applied`.
+6. Subscribe on `/evaluation` for progress, then fetch the latest evaluation result at `GET /api/applicant-evaluation/:jobPublicId`. The applicant is resolved from the JWT; only their application to that job is queried. If the latest evaluation is not completed, the endpoint returns `409`. Track applications at `GET /api/job/applied`.
 
 ### Company
 
