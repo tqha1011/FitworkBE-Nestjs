@@ -464,6 +464,7 @@ Each feature follows the `api/`, `application/`, `domain/`, and `infrastructure/
 | `npm run seed`                          | Create missing demo data in PostgreSQL.          |
 | `npm run test:seed`                     | Verify seed on an empty disposable database.     |
 | `npm run lint`                          | Run ESLint with automatic fixes.                 |
+| `npm run lint:check`                    | Check ESLint without modifying files.            |
 | `npm run format`                        | Format source and test TypeScript files.         |
 | `npm test`                              | Run unit tests.                                  |
 | `npm run test:cov`                      | Run unit tests with coverage.                    |
@@ -472,7 +473,18 @@ Each feature follows the `api/`, `application/`, `domain/`, and `infrastructure/
 
 After Prisma model changes, run `npx prisma format`, `npx prisma validate`, and `npx prisma generate`.
 
-Husky runs lint-staged on commit, a build before push, and Commitlint for Conventional Commit messages. GitHub Actions checks pull requests and pushes to `develop` and `main` with dependency installation, Prisma generation, lint, and build.
+Husky runs lint-staged on commit, a build before push, and Commitlint for Conventional Commit messages.
+
+GitHub Actions runs two required-check candidates on pull requests and pushes to `develop` and `main`:
+
+- **Backend checks**: installs dependencies with Node.js 24, validates and generates Prisma, checks lint without changing files, runs unit tests, and builds the application.
+- **PostgreSQL integration tests**: starts a disposable `pgvector/pgvector:pg15` service, applies all migrations to separate empty seed and performance test databases, and runs `test:seed` and `test:perf`. The latter includes the tests under `scripts/perf` and real database search tests; it does not run k6 load benchmarks or call external AI services.
+
+For changes to Docker build inputs, PRs targeting `main` also build the image after both checks pass. Every successful push to `main` builds and publishes `fitwork-be-nestjs-api:sha-<full-commit-sha>` to Docker Hub, including documentation-only pushes, so coalesced pending runs cannot lose a code change. The image also gets `latest` when the run's commit matches the current `main` head at the metadata step; rerunning an older commit only publishes its SHA tag. Configure repository Actions secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` (with write access to that image repository). PR builds do not log in or need these secrets. `docker_ci.yml` is a reusable workflow called by `backend_ci.yml`, so image publication cannot bypass the backend checks.
+
+Jobs have time limits. New commits cancel obsolete PR runs; push runs are serialized per branch, with at most one pending run retained. CI does not deploy to a server.
+
+Branch protection on `main` requires **Backend checks** and **PostgreSQL integration tests**, with the PR branch up to date before merging; administrators retain the default bypass. Apply the same requirements when `develop` is created (that branch does not yet exist on GitHub). Both checks run even for documentation-only changes. Branch protection is configured in GitHub repository settings, not in workflow YAML.
 
 ## Load Testing with k6
 
