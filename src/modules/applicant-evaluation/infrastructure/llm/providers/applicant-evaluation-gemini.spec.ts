@@ -66,12 +66,8 @@ describe('GeminiEvaluateApplicant', () => {
       LLM_EVALUATION_KEY: 'test-key',
       LLM_EVALUATION_MODEL: 'gemini-test-model',
     };
-    const configService = {
-      getOrThrow: jest.fn((key: string): string => values[key]),
-    };
-    provider = new GeminiEvaluateApplicant(
-      configService as unknown as ConfigService,
-    );
+    const configService = new ConfigService(values);
+    provider = new GeminiEvaluateApplicant(configService);
   });
 
   afterEach(() => {
@@ -250,7 +246,7 @@ describe('GeminiEvaluateApplicant', () => {
       .spyOn(trace, 'getTracer')
       .mockReturnValue({ startActiveSpan } as never);
     provider = new GeminiEvaluateApplicant({
-      getOrThrow: jest.fn().mockReturnValue('test-key'),
+      get: jest.fn().mockReturnValue('test-key'),
     } as unknown as ConfigService);
     mockGenerateContent.mockResolvedValue({ text: JSON.stringify(output) });
 
@@ -299,7 +295,7 @@ describe('GeminiEvaluateApplicant', () => {
       },
     } as never);
     provider = new GeminiEvaluateApplicant({
-      getOrThrow: jest.fn().mockReturnValue('test-key'),
+      get: jest.fn().mockReturnValue('test-key'),
     } as unknown as ConfigService);
     mockGenerateContent.mockResolvedValue(response);
 
@@ -335,7 +331,7 @@ describe('GeminiEvaluateApplicant', () => {
       },
     } as never);
     provider = new GeminiEvaluateApplicant({
-      getOrThrow: jest.fn().mockReturnValue('test-key'),
+      get: jest.fn().mockReturnValue('test-key'),
     } as unknown as ConfigService);
     const root = Object.assign(
       new Error('Gemini 404 NOT_FOUND token=private alice@example.com'),
@@ -407,7 +403,7 @@ describe('GeminiEvaluateApplicant', () => {
           ),
       } as never);
       provider = new GeminiEvaluateApplicant({
-        getOrThrow: () => 'fake-key',
+        get: () => 'fake-key',
       } as unknown as ConfigService);
       jest.spyOn(GeminiMetrics.prototype, method).mockImplementation(() => {
         throw new Error('Telemetry failure');
@@ -429,6 +425,50 @@ describe('GeminiEvaluateApplicant', () => {
     },
   );
 
+  it('caps demo output and SDK attempts', async () => {
+    mockGenerateContent.mockResolvedValue({ text: JSON.stringify(output) });
+    expect((await provider.evaluate({ ...input, demo: true })).isOk()).toBe(
+      true,
+    );
+    expect(mockGenerateContent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        config: expect.objectContaining({
+          maxOutputTokens: 4096,
+          httpOptions: { retryOptions: { attempts: 1 } },
+        }) as unknown,
+      }),
+    );
+  });
+  it('does not call the SDK for unavailable AI or excessive demo input', async () => {
+    const unavailable = new GeminiEvaluateApplicant(
+      new ConfigService({ LLM_EVALUATION_KEY: '' }),
+    );
+    expect((await unavailable.evaluate({ ...input, demo: true })).isErr()).toBe(
+      true,
+    );
+    expect(
+      (
+        await provider.evaluate({
+          ...input,
+          demo: true,
+          resumeText: 'x'.repeat(16001),
+        })
+      ).isErr(),
+    ).toBe(true);
+    expect(mockGenerateContent).not.toHaveBeenCalled();
+  });
+  it('sanitizes demo SDK errors before queue and telemetry logging', async () => {
+    mockGenerateContent.mockRejectedValue(
+      new Error('private CV body and secret API token'),
+    );
+    const error = (
+      await provider.evaluate({ ...input, demo: true })
+    )._unsafeUnwrapErr();
+    expect(error.message).toBe(
+      'Live AI unavailable. Sample results remain available.',
+    );
+    expect(error.cause).toBeUndefined();
+  });
   it('returns an original Error unchanged', async () => {
     const failure = new Error('Gemini unavailable');
     mockGenerateContent.mockRejectedValue(failure);

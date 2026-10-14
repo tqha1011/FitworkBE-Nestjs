@@ -7,6 +7,7 @@ import {
   InternalServerErrorException,
   NotFoundException,
   UnauthorizedException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { AppError, ErrorCode } from './errorCode';
 
@@ -17,6 +18,8 @@ import { AppError, ErrorCode } from './errorCode';
  */
 export function toHttpException(error: AppError): HttpException {
   switch (error.code) {
+    case ErrorCode.ServiceUnavailable:
+      return new ServiceUnavailableException(error.message, { cause: error });
     case ErrorCode.Conflict:
       return new ConflictException(error.message, { cause: error });
     case ErrorCode.NotFound:

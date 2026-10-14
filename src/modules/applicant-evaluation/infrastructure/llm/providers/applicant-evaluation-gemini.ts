@@ -8,6 +8,7 @@ import {
 } from 'src/modules/applicant-evaluation/application/interfaces/applicant-evaluation-llm.interface';
 import { GoogleGenAI } from '@google/genai';
 import { ConfigService } from '@nestjs/config';
+import { demoConfig } from 'src/modules/demo/domain/demo-policy';
 import { buildApplicantEvaluationPrompt } from '../applicant-evaluation-prompt.builder';
 import {
   APPLICANT_EVALUATION_RESPONSE_SCHEMA,
@@ -30,11 +31,10 @@ export class GeminiEvaluateApplicant implements IApplicantEvaluationLlm {
   private readonly logger = new Logger(GeminiEvaluateApplicant.name);
   private readonly tracer = trace.getTracer('evaluation.llm');
   private readonly telemetry = new GeminiMetrics();
-  private readonly client: GoogleGenAI;
+  private readonly client: GoogleGenAI | undefined;
   constructor(private readonly configService: ConfigService) {
-    this.client = new GoogleGenAI({
-      apiKey: this.configService.getOrThrow<string>('LLM_EVALUATION_KEY'),
-    });
+    const apiKey = this.configService.get<string>('LLM_EVALUATION_KEY');
+    if (apiKey?.trim()) this.client = new GoogleGenAI({ apiKey });
   }
   async evaluate(
     input: ApplicantEvaluationLlmInput,
@@ -54,6 +54,22 @@ export class GeminiEvaluateApplicant implements IApplicantEvaluationLlm {
           span.setAttribute('evaluation.prompt.version', input.promptVersion),
         );
         try {
+          if (!this.client)
+            return err(
+              new Error(
+                'Live AI is not configured. Sample results remain available.',
+              ),
+            );
+          const demoLimits = input.demo
+            ? demoConfig((key) => this.configService.get<string>(key))
+            : undefined;
+          if (
+            demoLimits &&
+            input.resumeText.length > demoLimits.maxResumeCharacters
+          )
+            return err(
+              new Error('Demo CV exceeds the redacted character limit'),
+            );
           const prompt = buildApplicantEvaluationPrompt(input);
           const isV2 =
             prompt.version === APPLICANT_EVALUATION_PROMPT_VERSION_V2;
@@ -61,6 +77,12 @@ export class GeminiEvaluateApplicant implements IApplicantEvaluationLlm {
             model: input.model,
             contents: prompt.user,
             config: {
+              ...(demoLimits
+                ? {
+                    maxOutputTokens: demoLimits.maxOutputTokens,
+                    httpOptions: { retryOptions: { attempts: 1 } },
+                  }
+                : {}),
               temperature: 0,
               systemInstruction: prompt.system,
               responseMimeType: 'application/json',
@@ -132,6 +154,9 @@ export class GeminiEvaluateApplicant implements IApplicantEvaluationLlm {
           );
           return ok(output);
         } catch (error) {
+          const safeError: unknown = input.demo
+            ? new Error('Live AI unavailable. Sample results remain available.')
+            : error;
           if (stage === 'json') {
             bestEffortTelemetry(() =>
               this.telemetry.validationFailure(
@@ -141,19 +166,16 @@ export class GeminiEvaluateApplicant implements IApplicantEvaluationLlm {
               ),
             );
           }
-          recordSpanError(span, error);
+          recordSpanError(span, safeError);
           bestEffortTelemetry(() =>
-            this.logger.error(
-              'Failed to evaluate applicant with Gemini',
-              error,
-            ),
+            this.logger.error('Failed to evaluate applicant with Gemini'),
           );
 
           return err(
-            error instanceof Error
-              ? error
-              : new Error(`Gemini evaluation failed: ${String(error)}`, {
-                  cause: error,
+            safeError instanceof Error
+              ? safeError
+              : new Error(`Gemini evaluation failed: ${String(safeError)}`, {
+                  cause: safeError,
                 }),
           );
         } finally {

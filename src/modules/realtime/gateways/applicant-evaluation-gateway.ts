@@ -1,4 +1,6 @@
 import { OnEvent } from '@nestjs/event-emitter';
+import { Optional } from '@nestjs/common';
+import { DemoAccessService } from 'src/modules/demo/application/demo-access.service';
 import { JwtService } from '@nestjs/jwt';
 import {
   ConnectedSocket,
@@ -31,7 +33,9 @@ export type ApplicantEvaluationSocket = Socket<
 @WebSocketGateway({
   namespace: '/evaluation',
   cors: {
-    origin: ['http://localhost:5173', 'http://localhost:3000'],
+    origin: process.env.CORS_ORIGINS?.split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean) ?? ['http://localhost:5173', 'http://localhost:3000'],
     credentials: true,
   },
 })
@@ -42,6 +46,7 @@ export class ApplicantEvaluationGateway implements OnGatewayConnection {
   constructor(
     private readonly jwtService: JwtService,
     private readonly applicantEvaluationRepo: IApplicantEvaluationRepository,
+    @Optional() private readonly demoAccess?: DemoAccessService,
   ) {}
 
   async handleConnection(client: ApplicantEvaluationSocket) {
@@ -52,11 +57,20 @@ export class ApplicantEvaluationGateway implements OnGatewayConnection {
         return;
       }
       const payload = await this.jwtService.verifyAsync<JwtPayload>(token);
+      await this.demoAccess?.authorize(payload);
       client.data.user = {
-        email: payload.email,
         sub: payload.sub,
+        email: payload.email,
         role: payload.role,
+        ...(payload.demoSessionId
+          ? {
+              demoSessionId: payload.demoSessionId,
+              demoGeneration: payload.demoGeneration,
+              demoExpiresAt: payload.demoExpiresAt,
+            }
+          : {}),
       };
+      this.demoAccess?.watchSocket(client, payload);
     } catch {
       client.disconnect(true);
     }
@@ -72,6 +86,7 @@ export class ApplicantEvaluationGateway implements OnGatewayConnection {
       if (!user) {
         return this.joinResponse(false);
       }
+      await this.demoAccess?.authorize(user);
 
       const authorized =
         await this.applicantEvaluationRepo.getRealtimeStateForApplicant(

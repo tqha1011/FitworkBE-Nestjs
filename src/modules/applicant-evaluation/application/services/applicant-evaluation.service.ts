@@ -1,4 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
+import { IDemoRepository } from 'src/modules/demo/domain/demo.repo.interface';
+import { DemoAccessService } from 'src/modules/demo/application/demo-access.service';
+import { demoMetrics } from 'src/modules/demo/domain/demo-metrics';
 import { ConfigService } from '@nestjs/config';
 import { IApplicantEvaluationService } from '../interfaces/applicant-evaluation.service.interface';
 import { err, ok, Result } from 'neverthrow';
@@ -38,6 +41,8 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
     private readonly configService: ConfigService,
     private readonly cacheManager: IApplicationCache,
     private readonly resumeRedaction: IResumeRedactEvaluation,
+    @Optional() private readonly demoRepo?: IDemoRepository,
+    @Optional() private readonly demoAccess?: DemoAccessService,
   ) {}
   async getApplicantEvaluationForJobOwnerAsync(
     jobOwnerPublicId: string,
@@ -113,6 +118,7 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
       );
     }
     const detail: ApplicantEvaluationForJobOwnerDto = {
+      ...(result.value.source ? { source: result.value.source } : {}),
       publicId: result.value.publicId,
       overallScore: result.value.overallScore,
       scoreBreakdown: result.value.scoreBreakdown,
@@ -131,11 +137,13 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
   async getApplicantEvaluationDetailAsync(
     applicantPublicId: string,
     jobPublicId: string,
+    evaluationPublicId?: string,
   ): Promise<Result<ApplicantEvaluationDetailDto, AppError>> {
     const result =
       await this.applicantEvaluationRepository.getApplicantEvaluationDetail(
         applicantPublicId,
         jobPublicId,
+        ...(evaluationPublicId ? [evaluationPublicId] : []),
       );
     if (result.isErr()) {
       return err(
@@ -164,6 +172,7 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
       );
     }
     return ok({
+      ...(result.value.source ? { source: result.value.source } : {}),
       publicId: result.value.evaluationPublicId,
       overallScore: result.value.overallScore,
       scoreBreakdown: result.value.scoreBreakdown,
@@ -175,6 +184,35 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
     applicantPublicId: string,
     data: CreateApplicantEvaluationRequestDto,
   ): Promise<Result<ApplicantEvaluationResponseDto, AppError>> {
+    let principal:
+      | import('src/shared/common/jwt.payload.interface').JwtPayload
+      | null
+      | undefined;
+    try {
+      principal = await this.demoRepo?.principal(applicantPublicId);
+      if (principal) {
+        await this.demoRepo!.authorizeResources(principal, {
+          jobPublicId: data.jobPublicId,
+          resumePublicId: data.resumePublicId,
+        });
+        if (!this.configService.get<string>('LLM_EVALUATION_KEY')?.trim())
+          return err(
+            new AppError(
+              ErrorCode.ServiceUnavailable,
+              'Live AI is not configured. Sample results remain available.',
+            ),
+          );
+      }
+    } catch (error) {
+      return err(
+        error instanceof AppError
+          ? error
+          : new AppError(
+              ErrorCode.InternalServerError,
+              'Failed to authorize demo evaluation',
+            ),
+      );
+    }
     const [jobResult, resumeResult] = await Promise.all([
       this.jobRepository.getJobDataForSnapshot(data.jobPublicId),
       this.resumeContentRepository.getCurrentForOwner(
@@ -235,11 +273,29 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
     if (!redactionResult.value) {
       return err(new AppError(ErrorCode.BadRequest, 'Can not redact resume'));
     }
+    if (
+      principal &&
+      redactionResult.value.text.length >
+        this.demoAccess!.limits.maxResumeCharacters
+    )
+      return err(
+        new AppError(
+          ErrorCode.BadRequest,
+          'Demo CV exceeds the redacted character limit',
+        ),
+      );
 
     const model = this.configService
       .get<string>('LLM_EVALUATION_MODEL')
       ?.trim();
     if (!model) {
+      if (principal)
+        return err(
+          new AppError(
+            ErrorCode.ServiceUnavailable,
+            'Live AI is not configured. Sample results remain available.',
+          ),
+        );
       return err(
         new AppError(
           ErrorCode.InternalServerError,
@@ -253,6 +309,12 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
       : jobResult.value.snapshot;
     const jobContentHash = hashCanonicalJson(jobSnapshot);
     const prepareResult = await this.applicantEvaluationRepository.prepare({
+      ...(principal
+        ? {
+            demoSessionId: principal.demoSessionId,
+            demoLimits: this.demoAccess!.limits,
+          }
+        : {}),
       applicantPublicId,
       jobId: jobResult.value.jobId,
       resumeId: resumeResult.value.resumeId,
@@ -271,6 +333,14 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
       redactionVersion: redactionResult.value.redactionVersion,
     });
     if (prepareResult.isErr()) {
+      if (
+        principal &&
+        prepareResult.error instanceof AppError &&
+        prepareResult.error.code === ErrorCode.TooManyRequests
+      )
+        demoMetrics.ai('limited');
+      if (prepareResult.error instanceof AppError)
+        return err(prepareResult.error);
       return err(
         new AppError(
           ErrorCode.InternalServerError,
@@ -282,6 +352,7 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
     if (!prepareResult.value) {
       return err(new AppError(ErrorCode.NotFound, 'Job application not found'));
     }
+    if (prepareResult.value.charged) demoMetrics.ai('accepted');
     if (
       prepareResult.value.status === CommonEvaluationStatus.COMPLETED ||
       prepareResult.value.status === CommonEvaluationStatus.PROCESSING
@@ -290,6 +361,7 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
     }
 
     const queuePayload = {
+      ...(principal ? { demo: true } : {}),
       evaluationPublicId: prepareResult.value.publicId,
     };
     try {
@@ -299,6 +371,11 @@ export class ApplicantEvaluationService implements IApplicantEvaluationService {
         await this.applicantEvaluationQueue.enqueue(queuePayload);
       }
     } catch (error) {
+      if (principal)
+        await this.applicantEvaluationRepository.markFailed(
+          prepareResult.value.publicId,
+          'Live AI queue unavailable. Sample results remain available.',
+        );
       return err(
         new AppError(
           ErrorCode.InternalServerError,

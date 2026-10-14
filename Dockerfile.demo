@@ -1,0 +1,31 @@
+FROM node:24-alpine AS dependencies
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+
+FROM dependencies AS migration
+COPY prisma ./prisma
+COPY prisma.config.ts ./
+CMD ["npx", "prisma", "migrate", "deploy"]
+
+FROM dependencies AS assets
+COPY scripts/demo ./scripts/demo
+COPY src/modules/demo/domain/demo-fixtures.ts ./src/modules/demo/domain/demo-fixtures.ts
+COPY assets/demo ./assets/demo
+CMD ["npx", "tsx", "scripts/demo/provision-assets.ts"]
+
+FROM dependencies AS build
+COPY . .
+RUN npx prisma generate
+RUN npm run build
+RUN npm prune --omit=dev
+
+FROM node:24-alpine AS api
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=build --chown=node:node /app/package*.json ./
+COPY --from=build --chown=node:node /app/node_modules ./node_modules
+COPY --from=build --chown=node:node /app/dist ./dist
+USER node
+EXPOSE 3000
+CMD ["node", "dist/src/main.js"]

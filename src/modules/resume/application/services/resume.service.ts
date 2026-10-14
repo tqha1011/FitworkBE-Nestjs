@@ -1,4 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
+import { IDemoRepository } from 'src/modules/demo/domain/demo.repo.interface';
+import { DemoAccessService } from 'src/modules/demo/application/demo-access.service';
 import { IResumeService } from '../interfaces/resume.service.interface';
 import { err, ok, Result } from 'neverthrow';
 import { AppError, ErrorCode } from 'src/shared/common/errorCode';
@@ -54,6 +56,8 @@ export class ResumeService implements IResumeService {
     private readonly contentRepository: IResumeContentRepository,
     private readonly notifier: IResumeIngestionNotifier,
     private readonly queryRepository: IResumeQueryRepository,
+    @Optional() private readonly demoRepo?: IDemoRepository,
+    @Optional() private readonly demoAccess?: DemoAccessService,
   ) {}
 
   async getResumesAsync(
@@ -148,6 +152,24 @@ export class ResumeService implements IResumeService {
     if (!metadataResult.value) {
       return err(new AppError(ErrorCode.NotFound, 'Uploaded resume not found'));
     }
+    try {
+      if (this.demoRepo && this.demoAccess)
+        await this.demoRepo.validateUpload(
+          userPublicId,
+          resumeUpdateRequest.storageKey,
+          metadataResult.value.contentLength,
+          this.demoAccess.limits,
+        );
+    } catch (error) {
+      return err(
+        error instanceof AppError
+          ? error
+          : new AppError(
+              ErrorCode.InternalServerError,
+              'Failed to authorize demo upload',
+            ),
+      );
+    }
 
     const contentType = metadataResult.value.contentType;
     const fileType = contentType
@@ -239,6 +261,24 @@ export class ResumeService implements IResumeService {
     if (!metadataResult.value) {
       return err(new AppError(ErrorCode.NotFound, 'Uploaded resume not found'));
     }
+    try {
+      if (this.demoRepo && this.demoAccess)
+        await this.demoRepo.validateUpload(
+          userPublicId,
+          resumeCreateRequest.storageKey,
+          metadataResult.value.contentLength,
+          this.demoAccess.limits,
+        );
+    } catch (error) {
+      return err(
+        error instanceof AppError
+          ? error
+          : new AppError(
+              ErrorCode.InternalServerError,
+              'Failed to authorize demo upload',
+            ),
+      );
+    }
 
     const contentType = metadataResult.value.contentType;
     const fileType = contentType
@@ -324,7 +364,22 @@ export class ResumeService implements IResumeService {
     if (!resumeStorageData.value) {
       return err(new AppError(ErrorCode.NotFound, `Resume not found`));
     }
-    if (resumeStorageData.value.ownerPublicId !== userPublicId) {
+    let demoReader = false;
+    try {
+      demoReader =
+        (await this.demoRepo?.canReadResume(userPublicId, resumePublicId)) ??
+        false;
+    } catch (error) {
+      return err(
+        error instanceof AppError
+          ? error
+          : new AppError(
+              ErrorCode.InternalServerError,
+              'Failed to authorize demo resume',
+            ),
+      );
+    }
+    if (resumeStorageData.value.ownerPublicId !== userPublicId && !demoReader) {
       return err(
         new AppError(
           ErrorCode.Forbidden,
@@ -332,10 +387,22 @@ export class ResumeService implements IResumeService {
         ),
       );
     }
+    const principal = await this.demoRepo?.principal(userPublicId);
     const downloadUrl = await this.fileStorage.getDownloadUrl(
       resumeStorageData.value.storageKey,
       resumeStorageData.value.fileName,
       disposition,
+      ...(principal?.demoExpiresAt
+        ? [
+            Math.max(
+              1,
+              Math.min(
+                900,
+                Math.floor((principal.demoExpiresAt - Date.now()) / 1000),
+              ),
+            ),
+          ]
+        : []),
     );
     if (downloadUrl.isErr()) {
       return err(downloadUrl.error);
@@ -372,10 +439,35 @@ export class ResumeService implements IResumeService {
         );
       }
       const storageKey = this.buildStorageKey(userPublicId, extension);
+      const principal = await this.demoRepo?.principal(userPublicId);
+      const expiresInSeconds = principal?.demoExpiresAt
+        ? Math.max(
+            1,
+            Math.min(
+              300,
+              Math.floor((principal.demoExpiresAt - Date.now()) / 1000),
+            ),
+          )
+        : 300;
+      const expiresAt = new Date(
+        Math.min(
+          principal?.demoExpiresAt ?? Number.MAX_SAFE_INTEGER,
+          Date.now() + expiresInSeconds * 1000,
+        ),
+      );
+      if (principal && this.demoRepo && this.demoAccess)
+        await this.demoRepo.reserveUpload(
+          principal,
+          storageKey,
+          expiresAt,
+          resumeUploadRequest.fileSize,
+          this.demoAccess.limits,
+        );
       const presigned = await this.fileStorage.getUploadUrl({
         key: storageKey,
         contentType: resumeUploadRequest.contentType,
         contentLength: resumeUploadRequest.fileSize,
+        ...(principal ? { expiresInSeconds, expiresAt } : {}),
       });
       if (presigned.isErr()) {
         return err(presigned.error);
@@ -386,6 +478,7 @@ export class ResumeService implements IResumeService {
         expiresAt: presigned.value.expiresAt,
       });
     } catch (error) {
+      if (error instanceof AppError) return err(error);
       return err(
         new AppError(
           ErrorCode.InternalServerError,

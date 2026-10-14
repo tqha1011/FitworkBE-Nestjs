@@ -1,4 +1,5 @@
 export enum ErrorCode {
+  ServiceUnavailable = 'SERVICE_UNAVAILABLE',
   Conflict = 'CONFLICT',
   NotFound = 'NOT_FOUND',
   BadRequest = 'BAD_REQUEST',

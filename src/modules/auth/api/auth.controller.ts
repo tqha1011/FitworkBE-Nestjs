@@ -7,6 +7,8 @@ import {
   Req,
   Res,
   UnauthorizedException,
+  Optional,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
@@ -21,6 +23,8 @@ import {
   RegisterResponseDto,
 } from '../application/dtos/auth.response.dto';
 import { IAuthService } from '../application/interfaces/auth.service.interface';
+import { DemoService } from 'src/modules/demo/application/demo.service';
+import { DemoOrdinaryAuthGuard } from 'src/modules/demo/api/demo.controller';
 
 const REFRESH_TOKEN_COOKIE = 'refresh_token';
 const REFRESH_TOKEN_COOKIE_PATH = '/api/auth/refresh';
@@ -28,9 +32,13 @@ const REFRESH_TOKEN_COOKIE_PATH = '/api/auth/refresh';
 @ApiTags('auth')
 @Controller('/api/auth')
 export class AuthController {
-  constructor(private readonly authService: IAuthService) {}
+  constructor(
+    private readonly authService: IAuthService,
+    @Optional() private readonly demo?: DemoService,
+  ) {}
 
   @Post('register')
+  @UseGuards(DemoOrdinaryAuthGuard)
   @ApiOperation({ summary: 'Register a new user' })
   @ApiStandardResponse(RegisterResponseDto, { status: HttpStatus.CREATED })
   async register(
@@ -46,6 +54,7 @@ export class AuthController {
   }
 
   @Post('login')
+  @UseGuards(DemoOrdinaryAuthGuard)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Log in with email and password' })
   @ApiStandardResponse(LoginResponseDto)
@@ -87,7 +96,9 @@ export class AuthController {
       throw new UnauthorizedException('Missing refresh token');
     }
 
-    const result = await this.authService.refreshTokensAsync(rawRefreshToken);
+    const result = this.demo?.enabled
+      ? await this.demo.refresh(rawRefreshToken)
+      : await this.authService.refreshTokensAsync(rawRefreshToken);
     return result.match(
       (tokens) => {
         this.setRefreshTokenCookie(
@@ -115,6 +126,18 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ): Promise<void> {
     const rawRefreshToken = this.extractRefreshTokenCookie(req);
+    if (this.demo?.enabled) {
+      const [type, bearer] = req.headers.authorization?.split(' ') ?? [];
+      const result = await this.demo.logout(
+        type === 'Bearer' ? bearer : undefined,
+        rawRefreshToken,
+      );
+      res.clearCookie(REFRESH_TOKEN_COOKIE, {
+        path: REFRESH_TOKEN_COOKIE_PATH,
+      });
+      if (result.isErr()) throw toHttpException(result.error);
+      return;
+    }
     if (rawRefreshToken) {
       const result = await this.authService.logoutAsync(rawRefreshToken);
       if (result.isErr()) {

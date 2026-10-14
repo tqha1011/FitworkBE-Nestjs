@@ -7,6 +7,7 @@ import {
 } from '../../domain/value-objects/evaluation';
 
 export type ApplicantEvaluationLlmInput = {
+  demo?: boolean;
   jobSnapshot: JobSnapshot;
   resumeText: string;
   model: string;

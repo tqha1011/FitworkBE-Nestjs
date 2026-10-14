@@ -185,11 +185,13 @@ export class JobService implements IJobService {
   async searchJobsAsync(
     request: GetJobListRequestDto,
     pagination: PaginationRequest,
+    demoSessionId?: string,
   ): Promise<Result<PageResult<JobItemResponseDto>, AppError>> {
     const result = await this.jobQueryRepository.getListJobs(
       pagination.pageNumber,
       pagination.pageSize,
       {
+        ...(demoSessionId ? { demoSessionId } : {}),
         title: request.title,
         categoryIds: request.categoryIds,
         skillIds: request.skillIds,

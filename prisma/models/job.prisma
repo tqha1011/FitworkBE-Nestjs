@@ -109,6 +109,7 @@ model Category {
 }
 
 model ApplicantEvaluation {
+  source             String           @default("LIVE")
   id                 Int              @id @default(autoincrement())
   publicId           String           @unique @default(uuid()) @map("public_id")
   jobApplicant       JobApplicant     @relation(fields: [jobApplicantId], references: [id])

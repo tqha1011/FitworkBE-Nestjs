@@ -1,4 +1,5 @@
 export type ApplicantEvaluationJobDto = {
+  demo?: boolean;
   evaluationPublicId: string;
   telemetry?: {
     traceparent?: string;

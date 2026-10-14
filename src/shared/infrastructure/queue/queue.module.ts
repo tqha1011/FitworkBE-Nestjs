@@ -1,20 +1,25 @@
 import { Global, Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
-import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ConfigModule } from '@nestjs/config';
 import { QueueName } from './constant/queue-name';
-import Redis from 'ioredis';
+import { QueueConnectionService } from './queue-connection.service';
+
+@Module({
+  imports: [ConfigModule],
+  providers: [QueueConnectionService],
+  exports: [QueueConnectionService],
+})
+class QueueConnectionModule {}
 import { QueueSnapshotService } from './queue-snapshot.service';
 
 @Global()
 @Module({
   imports: [
     BullModule.forRootAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        connection: new Redis(configService.getOrThrow<string>('REDIS_URL'), {
-          maxRetriesPerRequest: null,
-        }),
+      imports: [QueueConnectionModule],
+      inject: [QueueConnectionService],
+      useFactory: (connection: QueueConnectionService) => ({
+        connection: connection.client,
       }),
     }),
 

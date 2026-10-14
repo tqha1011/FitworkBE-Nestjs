@@ -3,6 +3,9 @@ import { Request } from 'express';
 import { CommonUserRole } from '../domain/enum';
 
 export interface JwtPayload {
+  demoSessionId?: string;
+  demoExpiresAt?: number;
+  demoGeneration?: number;
   email: string;
   sub: UUID;
   role: CommonUserRole; // consider using enum type for better type safety
