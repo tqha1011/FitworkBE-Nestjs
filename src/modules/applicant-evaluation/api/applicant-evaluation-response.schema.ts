@@ -99,6 +99,7 @@ const detailV1: Schema = {
   type: 'object',
   required: ['publicId', 'overallScore', 'scoreBreakdown', 'evidence'],
   properties: {
+    source: { type: 'string', enum: ['SAMPLE', 'LIVE'] },
     publicId: { type: 'string', format: 'uuid' },
     overallScore: { type: 'integer', minimum: 0, maximum: 100 },
     scoreBreakdown: breakdownV1,
@@ -110,6 +111,7 @@ const detailV2: Schema = {
   type: 'object',
   required: ['publicId', 'overallScore', 'scoreBreakdown', 'evidence'],
   properties: {
+    source: { type: 'string', enum: ['SAMPLE', 'LIVE'] },
     publicId: { type: 'string', format: 'uuid' },
     overallScore: { type: 'integer', minimum: 0, maximum: 100 },
     scoreBreakdown: breakdownV2,

@@ -20,6 +20,7 @@ import { ApplicantEvaluationModule } from './modules/applicant-evaluation/applic
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { CachingModule } from './shared/infrastructure/cache/cache.module';
 import { StructuredLogger } from './shared/observability/structured-logger';
+import { DemoModule } from './modules/demo/demo.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { StructuredLogger } from './shared/observability/structured-logger';
     EventEmitterModule.forRoot(),
     PrismaModule,
     QueueModule,
+    DemoModule,
     ConfigModule,
     UsersModule,
     AuthModule,

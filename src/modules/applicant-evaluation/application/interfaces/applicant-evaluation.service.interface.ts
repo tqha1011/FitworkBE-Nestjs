@@ -17,6 +17,7 @@ export abstract class IApplicantEvaluationService {
   abstract getApplicantEvaluationDetailAsync(
     applicantPublicId: string,
     jobPublicId: string,
+    evaluationPublicId?: string,
   ): Promise<Result<ApplicantEvaluationDetailDto, AppError>>;
 
   abstract getApplicantEvaluationForJobOwnerAsync(

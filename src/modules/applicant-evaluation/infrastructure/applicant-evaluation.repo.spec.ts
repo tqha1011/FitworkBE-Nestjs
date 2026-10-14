@@ -157,6 +157,7 @@ describe('ApplicantEvaluationRepository', () => {
 
       expect(result._unsafeUnwrap()).toEqual({
         evaluationPublicId: 'latest-evaluation-id',
+        source: 'LIVE',
         overallScore: 88,
         scoreBreakdown,
         evidence,
@@ -173,6 +174,7 @@ describe('ApplicantEvaluationRepository', () => {
                 take: 1,
                 select: {
                   publicId: true,
+                  source: true,
                   overallScore: true,
                   scoreBreakdown: true,
                   evidence: true,
@@ -229,6 +231,7 @@ describe('ApplicantEvaluationRepository', () => {
         )._unsafeUnwrap(),
       ).toEqual({
         evaluationPublicId: 'latest-evaluation-id',
+        source: 'LIVE',
         overallScore: null,
         scoreBreakdown: null,
         evidence: null,
@@ -293,6 +296,7 @@ describe('ApplicantEvaluationRepository', () => {
           },
           select: {
             publicId: true,
+            source: true,
             overallScore: true,
             scoreBreakdown: true,
             evidence: true,
@@ -309,6 +313,7 @@ describe('ApplicantEvaluationRepository', () => {
       );
       expect(result._unsafeUnwrap()).toEqual({
         publicId: 'evaluation-id',
+        source: 'LIVE',
         overallScore: 42,
         scoreBreakdown,
         evidence,

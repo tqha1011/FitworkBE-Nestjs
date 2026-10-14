@@ -1,4 +1,9 @@
 import { Injectable } from '@nestjs/common';
+import { AppError } from 'src/shared/common/errorCode';
+import {
+  consumeDemoAi,
+  lockDemo,
+} from 'src/modules/demo/infrastructure/demo-transaction';
 import { createHash } from 'crypto';
 import { EvaluationStatus } from 'generated/prisma/enums';
 import { Prisma } from 'generated/prisma/client';
@@ -43,6 +48,7 @@ export class ApplicantEvaluationRepository implements IApplicantEvaluationReposi
           },
           select: {
             publicId: true,
+            source: true,
             overallScore: true,
             scoreBreakdown: true,
             evidence: true,
@@ -63,6 +69,7 @@ export class ApplicantEvaluationRepository implements IApplicantEvaluationReposi
       };
       return ok({
         publicId: evaluation.publicId,
+        source: evaluation.source === 'SAMPLE' ? 'SAMPLE' : 'LIVE',
         overallScore: evaluation.overallScore,
         scoreBreakdown: mapEvaluationBreakdown(evaluation.scoreBreakdown),
         evidence: mapEvaluationEvidence(evaluation.evidence),
@@ -89,6 +96,7 @@ export class ApplicantEvaluationRepository implements IApplicantEvaluationReposi
   async getApplicantEvaluationDetail(
     applicantPublicId: string,
     jobPublicId: string,
+    evaluationPublicId?: string,
   ): Promise<Result<ApplicantEvaluationDetail | null, Error>> {
     try {
       const job = await this.prismaService.job.findUnique({
@@ -99,10 +107,14 @@ export class ApplicantEvaluationRepository implements IApplicantEvaluationReposi
             take: 1,
             select: {
               evaluations: {
+                ...(evaluationPublicId
+                  ? { where: { publicId: evaluationPublicId } }
+                  : {}),
                 orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
                 take: 1,
                 select: {
                   publicId: true,
+                  source: true,
                   overallScore: true,
                   scoreBreakdown: true,
                   evidence: true,
@@ -116,6 +128,7 @@ export class ApplicantEvaluationRepository implements IApplicantEvaluationReposi
       if (!evaluation) return ok(null);
       return ok({
         evaluationPublicId: evaluation.publicId,
+        source: evaluation.source === 'SAMPLE' ? 'SAMPLE' : 'LIVE',
         overallScore: evaluation.overallScore,
         scoreBreakdown: mapEvaluationBreakdown(evaluation.scoreBreakdown),
         evidence: mapEvaluationEvidence(evaluation.evidence),
@@ -172,11 +185,20 @@ export class ApplicantEvaluationRepository implements IApplicantEvaluationReposi
   ): Promise<Result<PreparedApplicantEvaluation | null, Error>> {
     try {
       const prepared = await this.prismaService.$transaction(async (tx) => {
+        if (input.demoSessionId) await lockDemo(tx);
         const application = await tx.jobApplicant.findFirst({
           where: {
             jobId: input.jobId,
             resumeId: input.resumeId,
-            applicant: { publicId: input.applicantPublicId },
+            applicant: {
+              publicId: input.applicantPublicId,
+              ...(input.demoSessionId
+                ? { demoSessionId: input.demoSessionId }
+                : {}),
+            },
+            ...(input.demoSessionId
+              ? { job: { user: { demoSessionId: input.demoSessionId } } }
+              : {}),
           },
           select: { id: true },
         });
@@ -202,6 +224,20 @@ export class ApplicantEvaluationRepository implements IApplicantEvaluationReposi
           model: input.model,
           promptVersion: input.promptVersion,
         };
+        let charged = false;
+        if (input.demoSessionId && input.demoLimits) {
+          const existing = await tx.applicantEvaluation.findUnique({
+            where: {
+              jobApplicantId_resumeContentHash_jobContentHash_parserVersion_model_promptVersion:
+                uniqueInput,
+            },
+            select: { status: true },
+          });
+          if (!existing || existing.status === EvaluationStatus.FAILED) {
+            await consumeDemoAi(tx, input.demoSessionId, input.demoLimits);
+            charged = true;
+          }
+        }
         const evaluation = await tx.applicantEvaluation.upsert({
           where: {
             jobApplicantId_resumeContentHash_jobContentHash_parserVersion_model_promptVersion:
@@ -233,6 +269,7 @@ export class ApplicantEvaluationRepository implements IApplicantEvaluationReposi
           });
           return {
             publicId: evaluation.publicId,
+            ...(input.demoSessionId ? { charged } : {}),
             status: CommonEvaluationStatus.PENDING,
             resetFromFailed: true,
           };
@@ -240,6 +277,7 @@ export class ApplicantEvaluationRepository implements IApplicantEvaluationReposi
 
         return {
           publicId: evaluation.publicId,
+          ...(input.demoSessionId ? { charged } : {}),
           status: this.toCommonStatus(evaluation.status),
           resetFromFailed: false,
         };
@@ -247,6 +285,7 @@ export class ApplicantEvaluationRepository implements IApplicantEvaluationReposi
 
       return ok(prepared);
     } catch (error) {
+      if (error instanceof AppError) return err(error);
       return err(
         new Error('Failed to prepare applicant evaluation', { cause: error }),
       );
@@ -265,6 +304,9 @@ export class ApplicantEvaluationRepository implements IApplicantEvaluationReposi
               publicId: true,
               status: true,
               resumeContentHash: true,
+              jobApplicant: {
+                select: { applicant: { select: { demoSession: true } } },
+              },
               jobContentHash: true,
               parserVersion: true,
               model: true,
@@ -285,6 +327,12 @@ export class ApplicantEvaluationRepository implements IApplicantEvaluationReposi
           if (!evaluation) {
             return null;
           }
+          const demoSession = evaluation.jobApplicant?.applicant?.demoSession;
+          if (
+            demoSession &&
+            (demoSession.revokedAt || demoSession.expiresAt <= new Date())
+          )
+            return null;
           if (
             evaluation.status !== EvaluationStatus.PENDING &&
             evaluation.status !== EvaluationStatus.PROCESSING
@@ -392,6 +440,7 @@ export class ApplicantEvaluationRepository implements IApplicantEvaluationReposi
           }
 
           return {
+            ...(demoSession ? { demo: true } : {}),
             publicId: evaluation.publicId,
             jobSnapshot,
             resumeRedactedText: snapshot.text,

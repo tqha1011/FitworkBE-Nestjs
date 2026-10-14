@@ -20,6 +20,7 @@ export abstract class IJobService {
   abstract searchJobsAsync(
     request: GetJobListRequestDto,
     pagination: PaginationRequest,
+    demoSessionId?: string,
   ): Promise<Result<PageResult<JobItemResponseDto>, AppError>>;
 
   abstract getJobsAppliedAsync(

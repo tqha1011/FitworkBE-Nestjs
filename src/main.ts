@@ -22,6 +22,15 @@ async function bootstrap() {
   application = app;
   app.useLogger(app.get(StructuredLogger));
   app.use(cookieParser());
+  const proxyHops = Number(process.env.TRUST_PROXY_HOPS ?? '0');
+  if (!Number.isSafeInteger(proxyHops) || proxyHops < 0)
+    throw new Error('Invalid TRUST_PROXY_HOPS');
+  if (proxyHops) {
+    const expressApp = app
+      .getHttpAdapter()
+      .getInstance() as import('express').Express;
+    expressApp.set('trust proxy', proxyHops);
+  }
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -43,7 +52,9 @@ async function bootstrap() {
     },
   });
   app.enableCors({
-    origin: [
+    origin: process.env.CORS_ORIGINS?.split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean) ?? [
       'http://localhost:5173',
       'http://localhost:3000',
       'https://fit-work-fe.vercel.app',

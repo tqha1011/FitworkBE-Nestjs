@@ -69,11 +69,16 @@ export class JobController {
   @ApiPaginatedResponse(JobItemResponseDto)
   async searchJobs(
     @Query() query: GetJobListRequestDto,
+    @User() user?: JwtPayload,
   ): Promise<PageResult<JobItemResponseDto>> {
-    const result = await this.jobService.searchJobsAsync(query, {
-      pageNumber: query.pageNumber,
-      pageSize: query.pageSize,
-    });
+    const result = await this.jobService.searchJobsAsync(
+      query,
+      {
+        pageNumber: query.pageNumber,
+        pageSize: query.pageSize,
+      },
+      user?.demoSessionId,
+    );
     return result.match(
       (value) => value,
       (error) => {

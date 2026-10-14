@@ -53,7 +53,19 @@ export class FileStorage implements IFileStorage, OnModuleDestroy {
     input: PresignUploadInput,
   ): Promise<Result<PresignedUpload, AppError>> {
     return traceResult('storage.presign_upload', async () => {
-      const expiresIn = input.expiresInSeconds ?? DEFAULT_UPLOAD_EXPIRY_SECONDS;
+      const signingDate = new Date();
+      const expiresIn = input.expiresAt
+        ? Math.min(
+            input.expiresInSeconds ?? DEFAULT_UPLOAD_EXPIRY_SECONDS,
+            Math.floor(
+              (input.expiresAt.getTime() - signingDate.getTime()) / 1000,
+            ),
+          )
+        : (input.expiresInSeconds ?? DEFAULT_UPLOAD_EXPIRY_SECONDS);
+      if (expiresIn < 1)
+        return err(
+          new AppError(ErrorCode.Unauthorized, 'Upload deadline expired'),
+        );
 
       try {
         const command = new PutObjectCommand({
@@ -62,12 +74,15 @@ export class FileStorage implements IFileStorage, OnModuleDestroy {
           ContentType: input.contentType,
           ContentLength: input.contentLength,
         });
-        const url = await getSignedUrl(this.s3, command, { expiresIn });
+        const url = await getSignedUrl(this.s3, command, {
+          expiresIn,
+          signingDate,
+        });
 
         return ok({
           uploadUrl: url,
           key: input.key,
-          expiresAt: new Date(Date.now() + expiresIn * 1000),
+          expiresAt: new Date(signingDate.getTime() + expiresIn * 1000),
         });
       } catch {
         this.logger.error('Failed to presign an upload');

@@ -2,15 +2,22 @@ import {
   CanActivate,
   ExecutionContext,
   Injectable,
+  Optional,
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
 import { JwtPayload, RequestWithUser } from './jwt.payload.interface';
+import { DemoAccessService } from 'src/modules/demo/application/demo-access.service';
+import { toHttpException } from './app-error.mapper';
+import { AppError } from './errorCode';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
-  constructor(private readonly jwtService: JwtService) {}
+  constructor(
+    private readonly jwtService: JwtService,
+    @Optional() private readonly demoAccess?: DemoAccessService,
+  ) {}
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<RequestWithUser>();
     const token = this.extractTokenFromHeader(request);
@@ -28,6 +35,12 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException(
         'Invalid token. Please provide a valid JWT.',
       );
+    }
+    try {
+      await this.demoAccess?.authorizeHttp(request);
+    } catch (error) {
+      if (error instanceof AppError) throw toHttpException(error);
+      throw error;
     }
     return true;
   }

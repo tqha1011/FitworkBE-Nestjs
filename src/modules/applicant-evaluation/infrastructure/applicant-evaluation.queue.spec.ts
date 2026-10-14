@@ -13,6 +13,23 @@ jest.mock('@nestjs/bullmq', () => ({
 }));
 
 describe('ApplicantEvaluationQueue', () => {
+  it('reconciles a demo retry while the original failed worker is still active', async () => {
+    const original = {
+      getState: jest
+        .fn()
+        .mockResolvedValueOnce('active')
+        .mockResolvedValue('failed'),
+      updateData: jest.fn().mockResolvedValue(undefined),
+      retry: jest.fn().mockResolvedValue(undefined),
+      data: {},
+    };
+    const queue = { getJob: jest.fn().mockResolvedValue(original) };
+    const service = new ApplicantEvaluationQueue(
+      queue as unknown as Queue<ApplicantEvaluationJobDto>,
+    );
+    await service.retry({ evaluationPublicId: 'demo-retry', demo: true });
+    expect(original.retry).toHaveBeenCalledTimes(1);
+  });
   afterEach(() => jest.restoreAllMocks());
 
   const request: ApplicantEvaluationJobDto = {

@@ -18,7 +18,7 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "test:e2e": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config ./test/jest-e2e.json --detectOpenHandles",
     "prepare": "husky",
     "scaffold": "tsx scripts/scaffold-cli.ts",
     "doctor": "tsx scripts/doctor-cli.ts",
@@ -29,7 +29,10 @@
     "bench:api": "npm run build && node dist/scripts/perf/serve-cli.js",
     "test:perf": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config test/jest-perf.json --runInBand",
     "bench:job:k6": "tsx scripts/perf/k6-run-cli.ts",
-    "bench:applicant:k6": "tsx scripts/perf/k6-run-cli.ts --profile applicant"
+    "bench:applicant:k6": "tsx scripts/perf/k6-run-cli.ts --profile applicant",
+    "test:demo": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config test/jest-demo.json --runInBand --detectOpenHandles",
+    "demo:assets": "tsx scripts/demo/provision-assets.ts",
+    "demo:handoff": "cat docs/demo/frontend-handoff.md"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1133.0",
@@ -100,6 +103,7 @@
     "picocolors": "^1.1.1",
     "prettier": "^3.4.2",
     "prisma": "7.8.0",
+    "socket.io-client": "^4.8.4",
     "source-map-support": "^0.5.21",
     "supertest": "^7.0.0",
     "ts-jest": "^29.2.5",

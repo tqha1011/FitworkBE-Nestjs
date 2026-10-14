@@ -275,6 +275,7 @@ export class JobRepository implements IJobRepository, IJobQueryRepository {
   ): Promise<Result<PageResult<JobItemResponseDto>, Error>> {
     try {
       const where: Prisma.JobWhereInput = {
+        user: { demoSessionId: filter?.demoSessionId ?? null },
         status: JobStatus.OPEN,
         ...(filter?.title && {
           title: { contains: filter.title, mode: 'insensitive' },

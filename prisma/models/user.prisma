@@ -1,4 +1,6 @@
 model User {
+  demoSessionId    String?           @map("demo_session_id") @db.Uuid
+  demoSession      DemoSession?      @relation(fields: [demoSessionId], references: [id])
   id               Int               @id @default(autoincrement())
   publicId         String            @unique @default(uuid()) @map("public_id")
   email            String            @unique
@@ -18,6 +20,7 @@ model User {
   applicantProfile ApplicantProfile?
   companyProfile   CompanyProfile?
 
+  @@index([demoSessionId])
   @@map("user")
 }
 

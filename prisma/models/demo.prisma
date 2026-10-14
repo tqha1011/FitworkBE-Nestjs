@@ -1,0 +1,44 @@
+model DemoSession {
+  id                String       @id @default(uuid()) @db.Uuid
+  createdAt         DateTime     @default(now()) @map("created_at")
+  expiresAt         DateTime     @map("expires_at")
+  revokedAt         DateTime?    @map("revoked_at")
+  companyUserId     Int?         @unique @map("company_user_id")
+  applicantUserId   Int?         @unique @map("applicant_user_id")
+  activeUserType    UserType     @default(COMPANY) @map("active_user_type")
+  generation        Int          @default(0)
+  ipHash            String       @map("ip_hash") @db.VarChar(64)
+  aiRuns            Int          @default(0) @map("ai_runs")
+  uploadUrls        Int          @default(0) @map("upload_urls")
+  cleanupStatus     String       @default("PENDING") @map("cleanup_status")
+  cleanupAttempts   Int          @default(0) @map("cleanup_attempts")
+  cleanupLeaseUntil DateTime?    @map("cleanup_lease_until")
+  cleanupOwner      String?      @map("cleanup_owner") @db.Uuid
+  users             User[]
+  uploads           DemoUpload[]
+
+  @@index([expiresAt, cleanupStatus])
+  @@index([ipHash, createdAt])
+  @@map("demo_session")
+}
+
+// Retained after workspace cleanup; UTC windows persist across Redis restarts.
+model DemoUsage {
+  key       String   @id @db.VarChar(160)
+  count     Int      @default(0)
+  expiresAt DateTime @map("expires_at")
+
+  @@index([expiresAt])
+  @@map("demo_usage")
+}
+
+model DemoUpload {
+  key       String      @id
+  sessionId String      @map("session_id") @db.Uuid
+  session   DemoSession @relation(fields: [sessionId], references: [id])
+  expiresAt DateTime    @map("expires_at")
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  @@index([sessionId])
+  @@map("demo_upload")
+}

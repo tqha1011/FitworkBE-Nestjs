@@ -28,6 +28,7 @@ export class ApplicantEvaluationQueue implements IApplicantEvaluationQueueInterf
           propagation.inject(context.active(), carrier);
           const requestId = requestContext.getStore()?.requestId;
           const payload: ApplicantEvaluationJobDto = {
+            ...(request.demo ? { demo: true } : {}),
             evaluationPublicId: request.evaluationPublicId,
             ...(carrier.traceparent || requestId
               ? {
@@ -45,7 +46,7 @@ export class ApplicantEvaluationQueue implements IApplicantEvaluationQueueInterf
           };
           await this.queue.add(EventName.EvaluationApplicant, payload, {
             jobId: request.evaluationPublicId,
-            attempts: APPLICANT_EVALUATION_ATTEMPTS,
+            attempts: request.demo ? 1 : APPLICANT_EVALUATION_ATTEMPTS,
             backoff: { type: 'exponential', delay: 2000 },
             removeOnComplete: { age: 24 * 60 * 60, count: 1000 },
             removeOnFail: { age: 7 * 24 * 60 * 60, count: 5000 },
@@ -64,7 +65,17 @@ export class ApplicantEvaluationQueue implements IApplicantEvaluationQueueInterf
       return;
     }
 
-    const state = await existingJob.getState();
+    let state = await existingJob.getState();
+    if (request.demo) {
+      // FAILED reaches the DB/socket before BullMQ releases the worker lock.
+      const deadline = Date.now() + 2000;
+      while (state === 'active' && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+        state = await existingJob.getState();
+      }
+      if (state === 'active' || state === 'completed' || state === 'unknown')
+        throw new Error('Demo evaluation retry is not ready');
+    }
     if (state === 'failed') {
       await this.tracer.startActiveSpan(
         'evaluation.retry',
@@ -83,6 +94,7 @@ export class ApplicantEvaluationQueue implements IApplicantEvaluationQueueInterf
               ...(requestId ? { requestId } : {}),
             };
             await existingJob.updateData({
+              ...(request.demo ? { demo: true } : {}),
               evaluationPublicId: request.evaluationPublicId,
               ...(Object.keys(telemetry).length ? { telemetry } : {}),
             });

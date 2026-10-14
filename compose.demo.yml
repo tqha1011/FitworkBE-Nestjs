@@ -1,0 +1,49 @@
+name: fitwork-demo
+services:
+  database:
+    image: pgvector/pgvector:pg15
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?set dedicated demo user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set dedicated demo password}
+      POSTGRES_DB: ${POSTGRES_DB:?set dedicated demo database}
+    volumes: [demo_postgres:/var/lib/postgresql/data]
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  redis:
+    image: redis:8.6.1-alpine
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set dedicated demo password}
+    command: ['sh', '-c', 'exec redis-server --requirepass "$$REDIS_PASSWORD" --appendonly yes']
+    volumes: [demo_redis:/data]
+    healthcheck:
+      test: ['CMD-SHELL', 'REDISCLI_AUTH="$$REDIS_PASSWORD" redis-cli ping | grep -qx PONG']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  migration:
+    build: {context: ., dockerfile: Dockerfile.demo, target: migration}
+    env_file: [.env.demo]
+    depends_on:
+      database: {condition: service_healthy}
+  assets:
+    build: {context: ., dockerfile: Dockerfile.demo, target: assets}
+    env_file: [.env.demo]
+    depends_on:
+      migration: {condition: service_completed_successfully}
+  api:
+    build: {context: ., dockerfile: Dockerfile.demo, target: api}
+    env_file: [.env.demo]
+    ports: ['127.0.0.1:${API_PORT:-3010}:3000']
+    restart: unless-stopped
+    depends_on:
+      migration: {condition: service_completed_successfully}
+      assets: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+volumes:
+  demo_postgres:
+  demo_redis:

@@ -7,6 +7,8 @@ export type PresignUploadInput = {
   contentType: string;
   contentLength: number;
   expiresInSeconds?: number;
+  /** Absolute deadline shared with demo upload tracking; never extended by a lock wait. */
+  expiresAt?: Date;
 };
 
 export type PresignedUpload = {

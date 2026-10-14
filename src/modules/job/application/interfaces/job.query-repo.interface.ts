@@ -6,6 +6,7 @@ import {
 import { Result } from 'neverthrow';
 
 export type JobListFilter = {
+  demoSessionId?: string;
   title?: string;
   categoryIds?: number[];
   skillIds?: number[];

@@ -1,12 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Result, err, ok } from 'neverthrow';
-import { PDFParse } from 'pdf-parse';
 import { AppError, ErrorCode } from 'src/shared/common/errorCode';
 
 @Injectable()
 export class PDFParserService {
   private readonly logger = new Logger(PDFParserService.name);
   async parsePDF(buffer: Buffer): Promise<Result<string, AppError>> {
+    const { PDFParse } = await import('pdf-parse');
     const parser = new PDFParse({ data: buffer });
     try {
       const result = await parser.getText();

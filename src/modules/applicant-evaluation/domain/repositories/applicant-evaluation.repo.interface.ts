@@ -8,6 +8,8 @@ import {
 } from '../value-objects/evaluation';
 
 export type PrepareApplicantEvaluationInput = {
+  demoSessionId?: string;
+  demoLimits?: import('src/modules/demo/domain/demo.repo.interface').DemoLimits;
   applicantPublicId: string;
   jobId: number;
   resumeId: number;
@@ -24,12 +26,14 @@ export type PrepareApplicantEvaluationInput = {
 };
 
 export type PreparedApplicantEvaluation = {
+  charged?: boolean;
   publicId: string;
   status: CommonEvaluationStatus;
   resetFromFailed: boolean;
 };
 
 export type ApplicantEvaluationProcessingData = {
+  demo?: boolean;
   publicId: string;
   jobSnapshot: JobSnapshot;
   model: string;
@@ -55,6 +59,7 @@ export type ApplicantEvaluationRealtimeState = {
 };
 
 export type ApplicantEvaluationDetail = {
+  source?: 'SAMPLE' | 'LIVE';
   evaluationPublicId: string;
   overallScore: number | null;
   scoreBreakdown: EvaluationBreakdown | null;
@@ -62,6 +67,7 @@ export type ApplicantEvaluationDetail = {
 };
 
 export type ApplicantEvaluationForJobOwner = {
+  source?: 'SAMPLE' | 'LIVE';
   publicId: string;
   overallScore: number | null;
   scoreBreakdown: EvaluationBreakdown | null;
@@ -113,6 +119,7 @@ export abstract class IApplicantEvaluationRepository {
   abstract getApplicantEvaluationDetail(
     applicantPublicId: string,
     jobPublicId: string,
+    evaluationPublicId?: string,
   ): Promise<Result<ApplicantEvaluationDetail | null, Error>>;
 
   abstract getApplicantEvaluationForJobOwner(

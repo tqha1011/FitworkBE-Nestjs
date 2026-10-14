@@ -1,4 +1,6 @@
 import { JwtService } from '@nestjs/jwt';
+import { Optional } from '@nestjs/common';
+import { DemoAccessService } from 'src/modules/demo/application/demo-access.service';
 import { OnEvent } from '@nestjs/event-emitter';
 import {
   ConnectedSocket,
@@ -35,7 +37,9 @@ export type ResumeIngestionSocket = Socket<
 @WebSocketGateway({
   namespace: '/resume',
   cors: {
-    origin: ['http://localhost:5173', 'http://localhost:3000'],
+    origin: process.env.CORS_ORIGINS?.split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean) ?? ['http://localhost:5173', 'http://localhost:3000'],
     credentials: true,
   },
 })
@@ -46,6 +50,7 @@ export class ResumeGateway implements OnGatewayConnection {
     private readonly jwtService: JwtService,
     private readonly resumeRepository: IResumeRepository,
     private readonly contentRepository: IResumeContentRepository,
+    @Optional() private readonly demoAccess?: DemoAccessService,
   ) {}
 
   async handleConnection(client: ResumeIngestionSocket) {
@@ -56,11 +61,20 @@ export class ResumeGateway implements OnGatewayConnection {
         return;
       }
       const payload = await this.jwtService.verifyAsync<JwtPayload>(token);
+      await this.demoAccess?.authorize(payload);
       client.data.user = {
-        email: payload.email,
         sub: payload.sub,
+        email: payload.email,
         role: payload.role,
+        ...(payload.demoSessionId
+          ? {
+              demoSessionId: payload.demoSessionId,
+              demoGeneration: payload.demoGeneration,
+              demoExpiresAt: payload.demoExpiresAt,
+            }
+          : {}),
       };
+      this.demoAccess?.watchSocket(client, payload);
     } catch {
       client.disconnect(true);
     }
@@ -76,6 +90,7 @@ export class ResumeGateway implements OnGatewayConnection {
       if (!user) {
         return this.joinResponse(false);
       }
+      await this.demoAccess?.authorize(user);
 
       const result = await this.resumeRepository.authorizeResume(
         data.resumePublicId,

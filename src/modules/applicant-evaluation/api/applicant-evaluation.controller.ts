@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  ParseUUIDPipe,
+} from '@nestjs/common';
 import { ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import type { JwtPayload } from 'src/shared/common/jwt.payload.interface';
 import { toHttpException } from 'src/shared/common/app-error.mapper';
@@ -58,11 +66,14 @@ export class ApplicantEvaluationController {
   async getApplicantEvaluationDetail(
     @User() user: JwtPayload,
     @Param('jobPublicId') jobPublicId: string,
+    @Query('evaluationPublicId', new ParseUUIDPipe({ optional: true }))
+    evaluationPublicId?: string,
   ): Promise<ApplicantEvaluationDetailDto> {
     const result =
       await this.applicantEvaluationService.getApplicantEvaluationDetailAsync(
         user.sub,
         jobPublicId,
+        ...(evaluationPublicId ? [evaluationPublicId] : []),
       );
 
     return result.match(

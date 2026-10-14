@@ -9,6 +9,7 @@ export type ApplicantEvaluationResponseDto = {
 };
 
 export type ApplicantEvaluationDetailDto = {
+  source?: 'SAMPLE' | 'LIVE';
   publicId: string;
   overallScore: number;
   evidence: EvaluationEvidenceV1 | EvaluationEvidenceV2;
@@ -16,6 +17,7 @@ export type ApplicantEvaluationDetailDto = {
 };
 
 export type ApplicantEvaluationForJobOwnerDto = {
+  source?: 'SAMPLE' | 'LIVE';
   publicId: string;
   overallScore: number;
   scoreBreakdown: EvaluationBreakdown;

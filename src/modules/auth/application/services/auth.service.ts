@@ -117,7 +117,7 @@ export class AuthService implements IAuthService {
     }
 
     const user = found.value;
-    if (!user || !user.isActive) {
+    if (!user || !user.isActive || user.demoSessionId) {
       return err(
         new AppError(ErrorCode.Unauthorized, 'Invalid email or password'),
       );
@@ -245,7 +245,7 @@ export class AuthService implements IAuthService {
       );
     }
     const user = userResult.value;
-    if (!user || !user.isActive) {
+    if (!user || !user.isActive || user.demoSessionId) {
       return err(new AppError(ErrorCode.Unauthorized, 'Invalid refresh token'));
     }
 

@@ -3,6 +3,7 @@ import { UserType } from 'generated/prisma/enums';
 import { CommonUserRole } from 'src/shared/domain/enum';
 
 export type UserRecord = {
+  demoSessionId?: string | null;
   id: number;
   publicId: string;
   email: string;
