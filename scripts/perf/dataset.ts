@@ -35,6 +35,19 @@ export function applicationSlots(index: number, total: number): number[] {
   return [];
 }
 
+// job_applicant_one_accepted_per_job allows one ACCEPTED/COMPLETED row per job,
+// so only the first application of a job may take a closed status.
+export function applicationStatus(
+  jobIndex: number,
+  applicationIndex: number,
+): 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'COMPLETED' {
+  const statuses =
+    applicationIndex === 0
+      ? (['PENDING', 'ACCEPTED', 'REJECTED', 'COMPLETED'] as const)
+      : (['PENDING', 'REJECTED'] as const);
+  return statuses[(jobIndex + applicationIndex) % statuses.length];
+}
+
 export function generateJob(index: number, _total: number, refs: References) {
   const bucket = Math.floor(index / 5) % 100;
   const specialty = [45, 65, 75, 82, 88, 93, 96, 98, 99, 100].findIndex(
