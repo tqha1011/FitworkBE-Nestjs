@@ -15,6 +15,12 @@ const statusToDomain: Record<JobApplicantStatus, CommonJobApplicantStatus> = {
   [JobApplicantStatus.COMPLETED]: CommonJobApplicantStatus.COMPLETED,
 };
 
+// Statuses covered by the job_applicant_one_accepted_per_job partial unique index.
+export const ACCEPTED_JOB_APPLICANT_STATUSES: JobApplicantStatus[] = [
+  JobApplicantStatus.ACCEPTED,
+  JobApplicantStatus.COMPLETED,
+];
+
 export function mapJobApplicantStatusToPrisma(
   status: CommonJobApplicantStatus,
 ): JobApplicantStatus {

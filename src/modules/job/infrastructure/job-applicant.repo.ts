@@ -11,6 +11,7 @@ import { PrismaService } from 'src/shared/infrastructure/database/prisma.service
 import { JobApplicant } from '../domain/entities/job-applicant.entity';
 import { PageResult } from 'src/shared/common/pagination';
 import {
+  ACCEPTED_JOB_APPLICANT_STATUSES,
   mapJobApplicantStatusToDomain,
   mapJobApplicantStatusToPrisma,
 } from './job-applicant.mapper';
@@ -79,6 +80,12 @@ export class JobApplicantRepository
       return ok(transitioned);
     } catch (error) {
       if (error === optimisticLockConflict) return ok(false);
+      // Only status changes here, so P2002 can only come from the one-accepted-per-job index.
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      )
+        return ok(false);
       return err(
         new Error('Failed to accept applicant and reject others', {
           cause: error,
@@ -111,7 +118,17 @@ export class JobApplicantRepository
         select: {
           jobId: true,
           status: true,
-          job: { select: { postedBy: true, version: true } },
+          job: {
+            select: {
+              postedBy: true,
+              version: true,
+              jobApplicants: {
+                where: { status: { in: ACCEPTED_JOB_APPLICANT_STATUSES } },
+                select: { id: true },
+                take: 1,
+              },
+            },
+          },
         },
       });
 
@@ -121,6 +138,7 @@ export class JobApplicantRepository
         jobOwnerId: jobApplicant.job.postedBy,
         status: mapJobApplicantStatusToDomain(jobApplicant.status),
         version: jobApplicant.job.version,
+        hasAcceptedApplicant: jobApplicant.job.jobApplicants.length > 0,
       });
     } catch (error) {
       return err(

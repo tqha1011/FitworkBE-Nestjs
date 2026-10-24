@@ -1,5 +1,6 @@
 import { JobApplicant } from '../domain/entities/job-applicant.entity';
 import { JobApplicantStatus } from 'generated/prisma/enums';
+import { Prisma } from 'generated/prisma/client';
 import { PrismaService } from 'src/shared/infrastructure/database/prisma.service';
 import { CommonJobApplicantStatus } from 'src/shared/domain/enum';
 import { JobApplicantRepository } from './job-applicant.repo';
@@ -36,7 +37,7 @@ describe('JobApplicantRepository', () => {
       prismaService.jobApplicant.findUnique.mockResolvedValue({
         jobId: 10,
         status: JobApplicantStatus.PENDING,
-        job: { postedBy: 20, version: 3 },
+        job: { postedBy: 20, version: 3, jobApplicants: [] },
       });
 
       const result = await repository.getStatusContext('application-id');
@@ -46,14 +47,46 @@ describe('JobApplicantRepository', () => {
         jobOwnerId: 20,
         status: CommonJobApplicantStatus.PENDING,
         version: 3,
+        hasAcceptedApplicant: false,
       });
       expect(prismaService.jobApplicant.findUnique).toHaveBeenCalledWith({
         where: { publicId: 'application-id' },
         select: {
           jobId: true,
           status: true,
-          job: { select: { postedBy: true, version: true } },
+          job: {
+            select: {
+              postedBy: true,
+              version: true,
+              jobApplicants: {
+                where: {
+                  status: {
+                    in: [
+                      JobApplicantStatus.ACCEPTED,
+                      JobApplicantStatus.COMPLETED,
+                    ],
+                  },
+                },
+                select: { id: true },
+                take: 1,
+              },
+            },
+          },
         },
+      });
+    });
+
+    it('reports when the job already has an accepted applicant', async () => {
+      prismaService.jobApplicant.findUnique.mockResolvedValue({
+        jobId: 10,
+        status: JobApplicantStatus.PENDING,
+        job: { postedBy: 20, version: 3, jobApplicants: [{ id: 7 }] },
+      });
+
+      const result = await repository.getStatusContext('application-id');
+
+      expect(result._unsafeUnwrap()).toMatchObject({
+        hasAcceptedApplicant: true,
       });
     });
 
@@ -130,6 +163,44 @@ describe('JobApplicantRepository', () => {
       expect(result._unsafeUnwrapErr().message).toContain(
         'Failed to transition job applicant status',
       );
+    });
+  });
+
+  describe('acceptApplicantAndRejectOthers', () => {
+    const accept = (applicantUpdate: jest.Mock) =>
+      new JobApplicantRepository({
+        $transaction: (callback: (tx: unknown) => Promise<unknown>) =>
+          callback({
+            job: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+            jobApplicant: { updateMany: applicantUpdate },
+          }),
+      } as unknown as PrismaService).acceptApplicantAndRejectOthers(
+        'application-id',
+        10,
+        CommonJobApplicantStatus.PENDING,
+        3,
+      );
+
+    it('returns false when the one-accepted-per-job index rejects the accept', async () => {
+      const uniqueViolation = new Prisma.PrismaClientKnownRequestError(
+        'Unique constraint failed',
+        { code: 'P2002', clientVersion: '7.8.0' },
+      );
+
+      const result = await accept(jest.fn().mockRejectedValue(uniqueViolation));
+
+      expect(result._unsafeUnwrap()).toBe(false);
+    });
+
+    it('still returns an error for other Prisma failures', async () => {
+      const failure = new Prisma.PrismaClientKnownRequestError('Timed out', {
+        code: 'P1008',
+        clientVersion: '7.8.0',
+      });
+
+      const result = await accept(jest.fn().mockRejectedValue(failure));
+
+      expect(result._unsafeUnwrapErr().cause).toBe(failure);
     });
   });
 

@@ -8,7 +8,10 @@ import { IJobApplicantRepository } from '../../domain/repositories/job-applicant
 import { IUserRepository } from 'src/modules/users/domain/repositories/users.repo.interface';
 import { IResumeRepository } from 'src/modules/resume/domain/repositories/resume.repo.interface';
 import { JobApplicant } from '../../domain/entities/job-applicant.entity';
-import { CommonJobApplicantStatus } from 'src/shared/domain/enum';
+import {
+  CommonJobApplicantStatus,
+  CommonJobStatus,
+} from 'src/shared/domain/enum';
 import { canTransitionJobApplicantStatus } from '../../domain/value-objects/job-applicant-status-transition';
 
 @Injectable()
@@ -74,6 +77,13 @@ export class JobApplicantService implements IJobApplicantService {
 
     // automatically reject the others applicant if the applicant is accepted
     if (nextStatus === CommonJobApplicantStatus.ACCEPTED) {
+      if (contextResult.value.hasAcceptedApplicant)
+        return err(
+          new AppError(
+            ErrorCode.Conflict,
+            'Job already has an accepted applicant',
+          ),
+        );
       const result =
         await this.jobApplicantRepository.acceptApplicantAndRejectOthers(
           jobApplicantPublicId,
@@ -127,9 +137,9 @@ export class JobApplicantService implements IJobApplicantService {
     jobPublicId: string,
     request: JobApplicantRequestDto,
   ): Promise<Result<undefined, AppError>> {
-    const [userId, jobId, resume] = await Promise.all([
+    const [userId, job, resume] = await Promise.all([
       this.userRepository.resolvePublicIdToId(userPublicId),
-      this.jobRepository.getJobIdByPublicId(jobPublicId),
+      this.jobRepository.getApplicationTarget(jobPublicId),
       this.resumeRepository.getResumeByPublicId(request.resumePublicId),
     ]);
     if (userId.isErr())
@@ -142,14 +152,25 @@ export class JobApplicantService implements IJobApplicantService {
       );
     if (!userId.value)
       return err(new AppError(ErrorCode.NotFound, 'User not found'));
-    if (jobId.isErr())
+    if (job.isErr())
       return err(
         new AppError(ErrorCode.InternalServerError, 'Failed to resolve job', {
-          cause: jobId.error,
+          cause: job.error,
         }),
       );
-    if (!jobId.value)
+    if (!job.value)
       return err(new AppError(ErrorCode.NotFound, 'Job not found'));
+    if (job.value.status !== CommonJobStatus.OPEN)
+      return err(
+        new AppError(ErrorCode.BadRequest, 'Job is not open for applications'),
+      );
+    if (job.value.hasAcceptedApplicant)
+      return err(
+        new AppError(
+          ErrorCode.Conflict,
+          'Job already has an accepted applicant',
+        ),
+      );
     if (resume.isErr())
       return err(
         new AppError(ErrorCode.InternalServerError, 'Failed to get resume', {
@@ -165,7 +186,7 @@ export class JobApplicantService implements IJobApplicantService {
       );
 
     const jobApplicantResult = JobApplicant.create({
-      jobId: jobId.value,
+      jobId: job.value.jobId,
       applicantId: userId.value,
       resumeId: resume.value.id,
       coverLetter: request.coverLetter,

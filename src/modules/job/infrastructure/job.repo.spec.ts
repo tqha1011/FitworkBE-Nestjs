@@ -4,6 +4,7 @@ import { CommonJobStatus } from 'src/shared/domain/enum';
 import { PrismaService } from 'src/shared/infrastructure/database/prisma.service';
 import { JobRepository } from './job.repo';
 import { ok } from 'neverthrow';
+import { JobApplicantStatus, JobStatus } from 'generated/prisma/enums';
 
 describe('JobRepository getJobsAppliedAsync', () => {
   let prismaService: {
@@ -58,6 +59,48 @@ describe('JobRepository getJobsAppliedAsync', () => {
           await repository.authorizeJobOwner('other-owner', 'job-id')
         )._unsafeUnwrap(),
       ).toBeNull();
+    });
+  });
+
+  describe('getApplicationTarget', () => {
+    it('returns the job status and whether an applicant is already accepted', async () => {
+      prismaService.job.findUnique.mockResolvedValue({
+        id: 10,
+        status: JobStatus.OPEN,
+        jobApplicants: [{ id: 7 }],
+      });
+
+      const result = await repository.getApplicationTarget('job-id');
+
+      expect(result._unsafeUnwrap()).toEqual({
+        jobId: 10,
+        status: CommonJobStatus.OPEN,
+        hasAcceptedApplicant: true,
+      });
+      expect(prismaService.job.findUnique).toHaveBeenCalledWith({
+        where: { publicId: 'job-id' },
+        select: {
+          id: true,
+          status: true,
+          jobApplicants: {
+            where: {
+              status: {
+                in: [JobApplicantStatus.ACCEPTED, JobApplicantStatus.COMPLETED],
+              },
+            },
+            select: { id: true },
+            take: 1,
+          },
+        },
+      });
+    });
+
+    it('returns null when the job does not exist', async () => {
+      prismaService.job.findUnique.mockResolvedValue(null);
+
+      const result = await repository.getApplicationTarget('missing-job');
+
+      expect(result._unsafeUnwrap()).toBeNull();
     });
   });
 
@@ -216,8 +259,8 @@ describe('JobRepository error causes', () => {
         ),
     ],
     [
-      'getJobIdByPublicId',
-      (repository) => repository.getJobIdByPublicId('job'),
+      'getApplicationTarget',
+      (repository) => repository.getApplicationTarget('job'),
     ],
   ];
 

@@ -1,7 +1,10 @@
 import { err, ok } from 'neverthrow';
 import { IUserRepository } from 'src/modules/users/domain/repositories/users.repo.interface';
 import { ErrorCode } from 'src/shared/common/errorCode';
-import { CommonJobApplicantStatus } from 'src/shared/domain/enum';
+import {
+  CommonJobApplicantStatus,
+  CommonJobStatus,
+} from 'src/shared/domain/enum';
 import { IResumeRepository } from 'src/modules/resume/domain/repositories/resume.repo.interface';
 import { IJobRepository } from '../../domain/repositories/job.repo.interface';
 import { IJobApplicantRepository } from '../../domain/repositories/job-applicant.repo.interface';
@@ -27,6 +30,7 @@ describe('JobApplicantService confirmJobApplicantAsync', () => {
           jobOwnerId: 20,
           status: CommonJobApplicantStatus.PENDING,
           version: 3,
+          hasAcceptedApplicant: false,
         }),
       ),
       transitionStatus: jest.fn().mockResolvedValue(ok(true)),
@@ -57,6 +61,32 @@ describe('JobApplicantService confirmJobApplicantAsync', () => {
       3,
     );
     expect(jobApplicantRepository.transitionStatus).not.toHaveBeenCalled();
+  });
+
+  it('returns conflict without touching the database when the job already has an accepted applicant', async () => {
+    jobApplicantRepository.getStatusContext.mockResolvedValue(
+      ok({
+        jobId: 10,
+        jobOwnerId: 20,
+        status: CommonJobApplicantStatus.PENDING,
+        version: 3,
+        hasAcceptedApplicant: true,
+      }),
+    );
+
+    const result = await service.confirmJobApplicantAsync(
+      'actor-id',
+      'application-id',
+      CommonJobApplicantStatus.ACCEPTED,
+    );
+
+    expect(result._unsafeUnwrapErr()).toMatchObject({
+      code: ErrorCode.Conflict,
+      message: 'Job already has an accepted applicant',
+    });
+    expect(
+      jobApplicantRepository.acceptApplicantAndRejectOthers,
+    ).not.toHaveBeenCalled();
   });
 
   it('uses the regular transition for a rejected applicant', async () => {
@@ -217,4 +247,91 @@ describe('JobApplicantService confirmJobApplicantAsync', () => {
       expect(error.message).not.toContain('private dependency payload');
     },
   );
+});
+
+describe('JobApplicantService applyJobAsync', () => {
+  const request = {
+    resumePublicId: 'resume-id',
+    coverLetter: 'Hello',
+    proposedRate: 100,
+    estimatedDay: 1,
+  };
+  let jobRepository: { getApplicationTarget: jest.Mock };
+  let jobApplicantRepository: { addJobApplicant: jest.Mock };
+  let service: JobApplicantService;
+
+  beforeEach(() => {
+    jobRepository = {
+      getApplicationTarget: jest.fn().mockResolvedValue(
+        ok({
+          jobId: 10,
+          status: CommonJobStatus.OPEN,
+          hasAcceptedApplicant: false,
+        }),
+      ),
+    };
+    jobApplicantRepository = {
+      addJobApplicant: jest.fn().mockResolvedValue(ok(undefined)),
+    };
+    service = new JobApplicantService(
+      jobRepository as unknown as IJobRepository,
+      jobApplicantRepository as unknown as IJobApplicantRepository,
+      {
+        resolvePublicIdToId: jest.fn().mockResolvedValue(ok(30)),
+      } as unknown as IUserRepository,
+      {
+        getResumeByPublicId: jest
+          .fn()
+          .mockResolvedValue(ok({ id: 40, userId: 30 })),
+      } as unknown as IResumeRepository,
+    );
+  });
+
+  it('adds the application to an open job', async () => {
+    const result = await service.applyJobAsync('user-id', 'job-id', request);
+
+    expect(result.isOk()).toBe(true);
+    expect(jobRepository.getApplicationTarget).toHaveBeenCalledWith('job-id');
+    expect(jobApplicantRepository.addJobApplicant).toHaveBeenCalledWith(
+      expect.objectContaining({ jobId: 10, applicantId: 30, resumeId: 40 }),
+    );
+  });
+
+  it('rejects applying to a closed job', async () => {
+    jobRepository.getApplicationTarget.mockResolvedValue(
+      ok({
+        jobId: 10,
+        status: CommonJobStatus.CLOSED,
+        hasAcceptedApplicant: false,
+      }),
+    );
+
+    const result = await service.applyJobAsync('user-id', 'job-id', request);
+
+    expect(result._unsafeUnwrapErr().code).toBe(ErrorCode.BadRequest);
+    expect(jobApplicantRepository.addJobApplicant).not.toHaveBeenCalled();
+  });
+
+  it('rejects applying once an applicant has been accepted', async () => {
+    jobRepository.getApplicationTarget.mockResolvedValue(
+      ok({
+        jobId: 10,
+        status: CommonJobStatus.OPEN,
+        hasAcceptedApplicant: true,
+      }),
+    );
+
+    const result = await service.applyJobAsync('user-id', 'job-id', request);
+
+    expect(result._unsafeUnwrapErr().code).toBe(ErrorCode.Conflict);
+    expect(jobApplicantRepository.addJobApplicant).not.toHaveBeenCalled();
+  });
+
+  it('returns not found when the job does not exist', async () => {
+    jobRepository.getApplicationTarget.mockResolvedValue(ok(null));
+
+    const result = await service.applyJobAsync('user-id', 'job-id', request);
+
+    expect(result._unsafeUnwrapErr().code).toBe(ErrorCode.NotFound);
+  });
 });
