@@ -302,6 +302,7 @@ export class JobRepository implements IJobRepository, IJobQueryRepository {
         this.prismaService.job.findMany({
           where,
           select: {
+            id: true,
             publicId: true,
             title: true,
             description: true,
@@ -309,20 +310,6 @@ export class JobRepository implements IJobRepository, IJobQueryRepository {
             budget: true,
             currency: true,
             dueAt: true,
-            _count: {
-              select: {
-                jobApplicants: {
-                  where: {
-                    status: {
-                      in: [
-                        JobApplicantStatus.PENDING,
-                        JobApplicantStatus.ACCEPTED,
-                      ],
-                    },
-                  },
-                },
-              },
-            },
             jobSkills: {
               select: {
                 skill: {
@@ -352,6 +339,23 @@ export class JobRepository implements IJobRepository, IJobQueryRepository {
         }),
         this.prismaService.job.count({ where }),
       ]);
+      // Count applicants only for this page; a relation _count here makes
+      // Postgres aggregate every job_applicant row and sort all matching jobs.
+      const applicantCounts = jobs.length
+        ? await this.prismaService.jobApplicant.groupBy({
+            by: ['jobId'],
+            where: {
+              jobId: { in: jobs.map((job) => job.id) },
+              status: {
+                in: [JobApplicantStatus.PENDING, JobApplicantStatus.ACCEPTED],
+              },
+            },
+            _count: { _all: true },
+          })
+        : [];
+      const applicantCountByJobId = new Map(
+        applicantCounts.map((row) => [row.jobId, row._count._all]),
+      );
       const jobItemListResponse: JobItemResponseDto[] = jobs.map((job) => ({
         publicId: job.publicId,
         title: job.title,
@@ -363,7 +367,7 @@ export class JobRepository implements IJobRepository, IJobQueryRepository {
         category: job.category,
         arrangement: job.arrangement,
         dueAt: job.dueAt,
-        totalApplicants: job._count.jobApplicants,
+        totalApplicants: applicantCountByJobId.get(job.id) ?? 0,
       }));
       return ok(
         new PageResult<JobItemResponseDto>(

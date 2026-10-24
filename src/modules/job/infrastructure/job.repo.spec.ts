@@ -38,6 +38,69 @@ describe('JobRepository getJobsAppliedAsync', () => {
     expect(result._unsafeUnwrapErr().message).not.toContain('private');
   });
 
+  describe('getListJobs', () => {
+    const jobRow = (id: number) => ({
+      id,
+      publicId: `job-${id}`,
+      title: `Job ${id}`,
+      description: 'Description',
+      location: 'Remote',
+      budget: { toNumber: () => 1000 },
+      currency: 'VND',
+      dueAt: new Date('2026-12-01T00:00:00.000Z'),
+      jobSkills: [],
+      category: { id: 1, name: 'Category' },
+      arrangement: { id: 1, name: 'Arrangement' },
+    });
+
+    it('counts active applicants only for the jobs on the returned page', async () => {
+      const groupBy = jest
+        .fn()
+        .mockResolvedValue([{ jobId: 10, _count: { _all: 3 } }]);
+      const findMany = jest.fn().mockResolvedValue([jobRow(10), jobRow(11)]);
+      const repo = new JobRepository({
+        job: { findMany, count: jest.fn().mockResolvedValue(2) },
+        jobApplicant: { groupBy },
+      } as unknown as PrismaService);
+
+      const result = await repo.getListJobs(1, 20);
+
+      expect(
+        result._unsafeUnwrap().items.map((item) => item.totalApplicants),
+      ).toEqual([3, 0]);
+      const [[findManyArgs]] = findMany.mock.calls as [
+        [{ select: Record<string, unknown> }],
+      ];
+      expect(findManyArgs.select).not.toHaveProperty('_count');
+      expect(groupBy).toHaveBeenCalledWith({
+        by: ['jobId'],
+        where: {
+          jobId: { in: [10, 11] },
+          status: {
+            in: [JobApplicantStatus.PENDING, JobApplicantStatus.ACCEPTED],
+          },
+        },
+        _count: { _all: true },
+      });
+    });
+
+    it('does not query applicant counts for an empty page', async () => {
+      const groupBy = jest.fn();
+      const repo = new JobRepository({
+        job: {
+          findMany: jest.fn().mockResolvedValue([]),
+          count: jest.fn().mockResolvedValue(0),
+        },
+        jobApplicant: { groupBy },
+      } as unknown as PrismaService);
+
+      const result = await repo.getListJobs(1, 20);
+
+      expect(result._unsafeUnwrap().items).toEqual([]);
+      expect(groupBy).not.toHaveBeenCalled();
+    });
+  });
+
   describe('authorizeJobOwner', () => {
     it('checks the job public ID and owner public ID', async () => {
       prismaService.job.findUnique.mockResolvedValue({ id: 10 });
