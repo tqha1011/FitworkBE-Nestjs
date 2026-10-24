@@ -1,4 +1,9 @@
-import { applicationSlots, generateJob, perfId } from './dataset';
+import {
+  applicationSlots,
+  applicationStatus,
+  generateJob,
+  perfId,
+} from './dataset';
 import { fixtureId } from '../../prisma/seed/fixtures';
 
 const references = {
@@ -48,6 +53,25 @@ describe('performance dataset', () => {
     expect(categories[1]).toBeGreaterThan(categories[10] * 10);
     expect(titles.size).toBe(50_000);
     expect([...currencies].sort()).toEqual(['USD', 'VND']);
+  });
+
+  it('gives each job at most one ACCEPTED/COMPLETED application', () => {
+    for (let i = 0; i < 50_000; i++) {
+      const closed = applicationSlots(i, 50_000)
+        .map((_slot, applicationIndex) =>
+          applicationStatus(i, applicationIndex),
+        )
+        .filter((status) => status === 'ACCEPTED' || status === 'COMPLETED');
+      expect(closed.length).toBeLessThanOrEqual(1);
+    }
+  });
+  it('keeps the original status cycle for single-application jobs', () => {
+    expect([0, 1, 2, 3].map((i) => applicationStatus(i, 0))).toEqual([
+      'PENDING',
+      'ACCEPTED',
+      'REJECTED',
+      'COMPLETED',
+    ]);
   });
 
   it('assigns 40k single, 1k ten and 9k zero applications without duplicate owners', () => {

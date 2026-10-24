@@ -143,10 +143,11 @@ databaseTests('performance seed and real search on PostgreSQL', () => {
     expect(second.totalPages).toBe(12);
     expect(second.hasPrevious).toBe(true);
     expect((await search(1000, 20, { title: 'Perf ' })).items).toEqual([]);
-    // Jobs 40 and 90 each have ten applications. Status cycling yields 6 and 4 active.
+    // Jobs 40 and 90 each have ten applications; only the first may be ACCEPTED/COMPLETED,
+    // the rest alternate PENDING/REJECTED. That yields 5 and 4 active.
     expect(
       all.items.find((x) => x.publicId === perfId('job:40'))!.totalApplicants,
-    ).toBe(6);
+    ).toBe(5);
     expect(
       all.items.find((x) => x.publicId === perfId('job:90'))!.totalApplicants,
     ).toBe(4);
