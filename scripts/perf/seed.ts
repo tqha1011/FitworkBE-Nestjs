@@ -7,7 +7,13 @@ import {
   specialties,
 } from '../../prisma/seed/fixtures';
 import { seedDemo } from '../../prisma/seed/seed-demo';
-import { applicationSlots, generateJob, perfId, References } from './dataset';
+import {
+  applicationSlots,
+  applicationStatus,
+  generateJob,
+  perfId,
+  References,
+} from './dataset';
 
 export async function loadReferences(prisma: PrismaClient) {
   const [users, categories, skills, arrangements, resumes, contents] =
@@ -177,9 +183,7 @@ export async function seedPerf(
                 'Synthetic perf:v1 application for search count benchmarking.',
               proposedRate: job.budget,
               estimatedDay: 7 + ((fixture.index + slot) % 84),
-              status: (
-                ['PENDING', 'ACCEPTED', 'REJECTED', 'COMPLETED'] as const
-              )[(fixture.index + applicationIndex) % 4],
+              status: applicationStatus(fixture.index, applicationIndex),
               appliedAt: job.createdAt,
             });
           }

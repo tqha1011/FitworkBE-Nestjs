@@ -7,7 +7,7 @@ generator client {
   provider        = "prisma-client"
   output          = "../generated/prisma"
   moduleFormat    = "cjs"
-  previewFeatures = ["postgresqlExtensions"]
+  previewFeatures = ["postgresqlExtensions", "partialIndexes"]
 }
 
 datasource db {

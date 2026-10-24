@@ -2,8 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { err, Result } from 'neverthrow';
 import {
   IJobRepository,
+  JobApplicationTarget,
   JobSnapshotData,
 } from '../domain/repositories/job.repo.interface';
+import { ACCEPTED_JOB_APPLICANT_STATUSES } from './job-applicant.mapper';
 import { PrismaService } from 'src/shared/infrastructure/database/prisma.service';
 import { ok } from 'neverthrow';
 import { Job } from '../domain/entities/job.entity';
@@ -412,17 +414,30 @@ export class JobRepository implements IJobRepository, IJobQueryRepository {
     }
   }
 
-  async getJobIdByPublicId(
+  async getApplicationTarget(
     publicId: string,
-  ): Promise<Result<number | null, Error>> {
+  ): Promise<Result<JobApplicationTarget | null, Error>> {
     try {
       const job = await this.prismaService.job.findUnique({
         where: { publicId },
+        select: {
+          id: true,
+          status: true,
+          jobApplicants: {
+            where: { status: { in: ACCEPTED_JOB_APPLICANT_STATUSES } },
+            select: { id: true },
+            take: 1,
+          },
+        },
       });
       if (!job) {
         return ok(null);
       }
-      return ok(job.id);
+      return ok({
+        jobId: job.id,
+        status: mapStatusToDomain(job.status),
+        hasAcceptedApplicant: job.jobApplicants.length > 0,
+      });
     } catch (error) {
       return err(new Error('Failed to get job by publicId', { cause: error }));
     }

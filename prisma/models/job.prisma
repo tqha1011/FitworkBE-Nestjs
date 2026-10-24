@@ -55,6 +55,8 @@ model JobApplicant {
   evaluations     ApplicantEvaluation[]
 
   @@unique([jobId, applicantId])
+  /// At most one applicant per job may be accepted; enforced by the DB so concurrent accepts or late applies cannot break it.
+  @@unique([jobId], map: "job_applicant_one_accepted_per_job", where: raw("status IN ('ACCEPTED', 'COMPLETED')"))
   @@index([jobId])
   @@index([applicantId])
   @@index([resumeId])
