@@ -19,6 +19,16 @@ export class ApplicantEvaluationQueue implements IApplicantEvaluationQueueInterf
   ) {}
 
   async enqueue(request: ApplicantEvaluationJobDto): Promise<void> {
+    const existingJob = await this.queue.getJob(request.evaluationPublicId);
+    if (existingJob) {
+      const state = await existingJob.getState();
+      if (!isFinished(state)) return;
+      await this.queue.remove(request.evaluationPublicId);
+    }
+    await this.addJob(request);
+  }
+
+  private async addJob(request: ApplicantEvaluationJobDto): Promise<void> {
     await this.tracer.startActiveSpan(
       'evaluation.enqueue',
       { kind: SpanKind.PRODUCER },
@@ -61,7 +71,7 @@ export class ApplicantEvaluationQueue implements IApplicantEvaluationQueueInterf
   async retry(request: ApplicantEvaluationJobDto): Promise<void> {
     const existingJob = await this.queue.getJob(request.evaluationPublicId);
     if (!existingJob) {
-      await this.enqueue(request);
+      await this.addJob(request);
       return;
     }
 
@@ -104,6 +114,17 @@ export class ApplicantEvaluationQueue implements IApplicantEvaluationQueueInterf
           }
         },
       );
+      return;
+    }
+    if (state === 'completed' || state === 'unknown') {
+      await this.queue.remove(request.evaluationPublicId);
+      await this.addJob(request);
     }
   }
+}
+
+// BullMQ silently ignores add() for a jobId that still exists, so a finished
+// job must be removed first or the evaluation stays PENDING with nothing to run it.
+function isFinished(state: string): boolean {
+  return state === 'completed' || state === 'failed' || state === 'unknown';
 }

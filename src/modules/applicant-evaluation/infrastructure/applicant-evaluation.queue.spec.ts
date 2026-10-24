@@ -40,6 +40,7 @@ describe('ApplicantEvaluationQueue', () => {
     const add = jest.fn().mockResolvedValue(undefined);
     const queue = new ApplicantEvaluationQueue({
       add,
+      getJob: jest.fn().mockResolvedValue(undefined),
     } as unknown as Queue<ApplicantEvaluationJobDto>);
 
     await queue.enqueue(request);
@@ -65,6 +66,7 @@ describe('ApplicantEvaluationQueue', () => {
     const add = jest.fn().mockResolvedValue(undefined);
     const queue = new ApplicantEvaluationQueue({
       add,
+      getJob: jest.fn().mockResolvedValue(undefined),
     } as unknown as Queue<ApplicantEvaluationJobDto>);
 
     await queue.enqueue(request);
@@ -166,5 +168,76 @@ describe('ApplicantEvaluationQueue', () => {
 
     expect(retry).not.toHaveBeenCalled();
     expect(add).not.toHaveBeenCalled();
+  });
+
+  it.each(['waiting', 'delayed', 'active'])(
+    'does not re-add a job that is still %s',
+    async (state) => {
+      const add = jest.fn().mockResolvedValue(undefined);
+      const remove = jest.fn().mockResolvedValue(1);
+      const queue = new ApplicantEvaluationQueue({
+        add,
+        remove,
+        getJob: jest.fn().mockResolvedValue({
+          getState: jest.fn().mockResolvedValue(state),
+        }),
+      } as unknown as Queue<ApplicantEvaluationJobDto>);
+
+      await queue.enqueue(request);
+
+      expect(remove).not.toHaveBeenCalled();
+      expect(add).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['completed', 'failed', 'unknown'])(
+    'replaces a %s job instead of letting BullMQ ignore the add',
+    async (state) => {
+      const add = jest.fn().mockResolvedValue(undefined);
+      const remove = jest.fn().mockResolvedValue(1);
+      const queue = new ApplicantEvaluationQueue({
+        add,
+        remove,
+        getJob: jest.fn().mockResolvedValue({
+          getState: jest.fn().mockResolvedValue(state),
+        }),
+      } as unknown as Queue<ApplicantEvaluationJobDto>);
+
+      await queue.enqueue(request);
+
+      expect(remove).toHaveBeenCalledWith(request.evaluationPublicId);
+      expect(add).toHaveBeenCalledWith(
+        EventName.EvaluationApplicant,
+        request,
+        expect.objectContaining({ jobId: request.evaluationPublicId }),
+      );
+      expect(remove.mock.invocationCallOrder[0]).toBeLessThan(
+        add.mock.invocationCallOrder[0],
+      );
+    },
+  );
+
+  it('re-adds a completed job on retry instead of leaving the evaluation pending', async () => {
+    const add = jest.fn().mockResolvedValue(undefined);
+    const remove = jest.fn().mockResolvedValue(1);
+    const retry = jest.fn().mockResolvedValue(undefined);
+    const queue = new ApplicantEvaluationQueue({
+      add,
+      remove,
+      getJob: jest.fn().mockResolvedValue({
+        getState: jest.fn().mockResolvedValue('completed'),
+        retry,
+      }),
+    } as unknown as Queue<ApplicantEvaluationJobDto>);
+
+    await queue.retry(request);
+
+    expect(retry).not.toHaveBeenCalled();
+    expect(remove).toHaveBeenCalledWith(request.evaluationPublicId);
+    expect(add).toHaveBeenCalledWith(
+      EventName.EvaluationApplicant,
+      request,
+      expect.objectContaining({ jobId: request.evaluationPublicId }),
+    );
   });
 });
